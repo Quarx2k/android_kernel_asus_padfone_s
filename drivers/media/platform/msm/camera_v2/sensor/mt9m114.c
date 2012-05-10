@@ -56,7 +56,7 @@ DEFINE_MSM_MUTEX(mt9m114_mut);
 #include <linux/of_gpio.h>
 
 #ifndef CAM_BOOT
-#define CAM_BOOT "/asusfw/camera/BOOT_A91.BIN"
+#define CAM_BOOT "/data/asusfw/camera/BOOT_A91.BIN"
 #endif
 //ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
 #if 0
