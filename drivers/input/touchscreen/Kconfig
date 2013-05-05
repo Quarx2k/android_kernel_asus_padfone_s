@@ -1073,4 +1073,9 @@ config TOUCHSCREEN_HIMAX_HX8528_D48
          module will be called NT11003.
 
 # --- ASUS_BSP : add for HIMAX touch
+config TOUCHSCREEN_DOUBLETAP2WAKE
+	tristate "DoubleTap2Wake for touchscreens"
+	select TOUCHSCREEN_PREVENT_SLEEP
+	default n
+
 endif

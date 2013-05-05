@@ -112,7 +112,7 @@ static int p_point_num = 0xFFFF;
 static int tpd_key = 0;
 static int tpd_key_old = 0xFF;
 
-static struct kobject *android_touch_kobj = NULL;		// Sys kobject variable
+struct kobject *android_touch_kobj;		// Sys kobject variable
 
 static int finger_count[10][2];
 static bool point_printed = 0;
@@ -126,6 +126,10 @@ static bool common_fw = false;
 #endif
 
 static struct delayed_work hx_resume_w;
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+extern int dt2w_switch;
+#endif
+
 static struct workqueue_struct *hx_attach_detach_wq;
 
 #if defined(CONFIG_EEPROM_NUVOTON)
@@ -300,7 +304,8 @@ static int himax_ic_package_check(struct himax_ts_data *ts_modify)
 		return -1;
 	}
 }
-
+static int himax_ts_poweron(struct himax_ts_data *ts_modify);
+static int himax_resume(void);
 int himax_ts_suspend(void)
 {
 	struct himax_ts_data *ts_modify;
@@ -381,6 +386,27 @@ int himax_ts_suspend(void)
 	}
 
 	ts_suspend = 1;
+	
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+	if (dt2w_switch > 0) {
+		wake_lock(&ts_modify->wake_lock);
+		printk("[Touch_H] %s dt2w enabled. Re-enabe touch! \n",__func__);
+		ts_suspend = true;
+		buf[0] = HX_CMD_SETDEEPSTB;
+		buf[1] = 0x00;
+		if(i2c_himax_master_write(ts_modify->client, buf, 2, DEFAULT_RETRY_CNT) < 0)
+		{
+			printk("[Touch_H][TOUCH_ERR] %s: I2C access failed addr = 0x%x\n", 
+				__func__, ts_modify->client->addr);
+		}
+		udelay(100);
+		wake_unlock(&ts_modify->wake_lock);
+		himax_ts_poweron(ts_modify);
+		hx_irq_enable(private_ts);
+
+		enable_irq_wake(ts_modify->client->irq);
+	}
+#endif
 
 	return 0;
 }
@@ -388,12 +414,21 @@ EXPORT_SYMBOL(himax_ts_suspend);
 
 int himax_ts_resume(void)
 {
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+	if (dt2w_switch > 0) {
+		printk("[Touch_H] %s Prevent suspend while dt2w enabled \n",__func__);
+		ts_suspend = false;
+		disable_irq_wake(private_ts->client->irq);
+		return 0;
+	} else
+#endif
+	{
 	if(delayed_work_pending(&hx_resume_w)) {
 		cancel_delayed_work_sync(&hx_resume_w);
 		printk("[Touch_H] cancel last resume_work\n");
 	}
 	queue_delayed_work(hx_attach_detach_wq, &hx_resume_w, msecs_to_jiffies(2));
-
+	}
 	return 0;
 }
 EXPORT_SYMBOL(himax_ts_resume);
@@ -404,6 +439,14 @@ static int himax_resume(void)
 	uint8_t buf[2] = { 0 };
 
 	ts_modify = private_ts;
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+	if (dt2w_switch > 0) {
+		printk("[Touch_H] %s dt2w enabled, skip resume \n",__func__);
+		ts_suspend = false;
+		return 0;
+	}
+#endif
+
 
 	if(!ts_suspend)
 	{
@@ -4392,7 +4435,12 @@ static void himax_ts_work_func(struct work_struct *work)
 	{
 		printk("[Touch_H][HIMAX TP MSG] checksum fail : check_sum_cal: 0x%02X\n",
 			check_sum_cal);
-
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+		if (dt2w_switch > 0) {
+			printk("[Touch_H][HIMAX TP MSG] Ignore checksum in dt2w\n");
+			goto bypass_checksum_failed_packet;
+		}
+#endif
 		//Mutexlock Protect Start
 		mutex_unlock(&ts->mutex_lock);
 		//Mutexlock Protect End
@@ -4563,14 +4611,14 @@ bypass_checksum_failed_packet:
 
 					if(touch_debug_mask & DEF_POINT_INFO){
 						if(!point_printed){
-							printk("[Touch_H] Touch Down !\n");
+							//printk("[Touch_H] Touch Down !\n");
 							point_printed = 1;
 						}
 					}
 					else if(touch_debug_mask & ALL_POINT_INFO){
 						if (finger_count[c][0] == 0)
-							printk("[Touch_H][%d][X,Y,W,P][%d,%d,%d,%d]\n"
-								, c, x, y, area, press);
+							//printk("[Touch_H][%d][X,Y,W,P][%d,%d,%d,%d]\n"
+							//	, c, x, y, area, press);
 					
 						finger_count[c][0]++;
 						finger_count[c][1] = true;
@@ -4578,8 +4626,8 @@ bypass_checksum_failed_packet:
 					}
 					else if(touch_debug_mask & DET_POINT_INFO){
 						if ((finger_count[c][0] % 100) == 0)
-							printk("[Touch_H][%d][X,Y,W,P][%d,%d,%d,%d]-[%d]\n"
-								, c, x, y, area, press, finger_count[c][0]);
+							//printk("[Touch_H][%d][X,Y,W,P][%d,%d,%d,%d]-[%d]\n"
+							//	, c, x, y, area, press, finger_count[c][0]);
 					
 						finger_count[c][0]++;
 						finger_count[c][1] = true;
@@ -4617,7 +4665,7 @@ bypass_checksum_failed_packet:
 				if(touch_debug_mask & (ALL_POINT_INFO|DET_POINT_INFO)){
 					if (finger_count[c][1] == true)
 					{
-						printk("[Touch_H][%d]-[%d] Touch Up !!\n", c, finger_count[c][0]);
+						//printk("[Touch_H][%d]-[%d] Touch Up !!\n", c, finger_count[c][0]);
 						
 						finger_count[c][0] = 0;
 						finger_count[c][1] = false;
@@ -4636,7 +4684,7 @@ bypass_checksum_failed_packet:
 		input_mt_sync(ts->input_dev);
 		input_sync(ts->input_dev);
 	
-		printk("[Touch_H] Press Button %d \n",tpd_keys_local[tpd_key - 1]);
+		//printk("[Touch_H] Press Button %d \n",tpd_keys_local[tpd_key - 1]);
 
 	}
 	else if (hx_point_num == 0 && tpd_key == 0xFF)
@@ -4647,7 +4695,7 @@ bypass_checksum_failed_packet:
 			input_mt_sync(ts->input_dev);
 			input_sync(ts->input_dev);
 			
-			printk("[Touch_H] Release Button %d \n",tpd_keys_local[tpd_key_old - 1]);
+			//printk("[Touch_H] Release Button %d \n",tpd_keys_local[tpd_key_old - 1]);
 			
 		}
 		else
@@ -4659,7 +4707,13 @@ bypass_checksum_failed_packet:
 
 			if(touch_debug_mask & DEF_POINT_INFO){
 				if(point_printed){
-					printk("[Touch_H] Touch Up!!\n");
+					//printk("[Touch_H] Touch Up!!\n");
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+							if (dt2w_switch > 0 && ts_suspend == true) {
+								input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, -1); //DoubleTap
+								input_mt_sync(ts->input_dev);
+							}
+#endif
 					point_printed = 0;
 				}
 			}
@@ -4668,7 +4722,7 @@ bypass_checksum_failed_packet:
 				{
 					if( finger_count[c][1] == true )
 					{
-						printk("[Touch_H][%d]-[%d] Touch Up!!\n", c, finger_count[c][0]);
+						//printk("[Touch_H][%d]-[%d] Touch Up!!\n", c, finger_count[c][0]);
 						finger_count[c][0] = 0;
 						finger_count[c][1] = false;
 						break;
@@ -4744,7 +4798,9 @@ static int himax_dds_touch_resume(const char *val, struct kernel_param *kp) {
 
 		if (dds_notify_enable == true) {
 			printk("[Touch_H] (%s) resume notyfy by dds++\n", __func__);
+#if defined(CONFIG_EEPROM_NUVOTON)
 			cancel_delayed_work_sync(&mp_detach_w);
+#endif
 			ts_inpad = false;
 			if(touch_debug_mask & ALL_POINT_INFO)
 				printk("[Touch_H] Pad detach resume!!!\n");
@@ -4758,6 +4814,11 @@ static int himax_dds_touch_resume(const char *val, struct kernel_param *kp) {
 	return 0;
 }
 /* ---jacob add for resume touch when dds finish after detach pad--- */
+
+static void ts_resume_work(struct work_struct *work)
+{
+	himax_resume();
+}
 
 //=============================================================================================================
 //
@@ -5354,11 +5415,6 @@ static void himax_cable_status(struct work_struct *work)
 			i2c_himax_write(private_ts->client, 0x90, &buf0[0], 1, DEFAULT_RETRY_CNT);
 		}
 	}
-}
-
-static void ts_resume_work(struct work_struct *work)
-{
-	himax_resume();
 }
 
 /*
