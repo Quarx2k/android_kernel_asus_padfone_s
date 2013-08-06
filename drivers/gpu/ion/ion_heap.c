@@ -293,16 +293,11 @@ static size_t _ion_heap_freelist_drain(struct ion_heap *heap, size_t size,
 		if (total_drained >= size)
 			break;
 		list_del(&buffer->list);
-// ASUS_BSP +++ Qualcomm "Fix use-after-free in ion_heap_freelist_drain"
-		//ion_buffer_destroy(buffer);
-// ASUS_BSP ---
 		heap->free_list_size -= buffer->size;
 		if (skip_pools)
 			buffer->flags |= ION_FLAG_FREED_FROM_SHRINKER;
 		total_drained += buffer->size;
-// ASUS_BSP +++ Qualcomm "Fix use-after-free in ion_heap_freelist_drain"
 		ion_buffer_destroy(buffer);
-// ASUS_BSP ---
 	}
 	rt_mutex_unlock(&heap->lock);
 
