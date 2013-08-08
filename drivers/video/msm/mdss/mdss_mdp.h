@@ -708,6 +708,3 @@ int mdss_mdp_pipe_program_pixel_extn(struct mdss_mdp_pipe *pipe);
 int  mdss_mdp_ctl_reset(struct mdss_mdp_ctl *ctl);
 #endif /* MDSS_MDP_H */
 
-//ASUS_BSP: Louis +++
-void mdss_set_mdp_max_clk(bool boostup);
-//ASUS_BSP: Louis ---

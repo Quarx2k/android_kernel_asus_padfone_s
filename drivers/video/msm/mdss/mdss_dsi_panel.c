@@ -33,7 +33,6 @@ extern struct mdss_panel_data *g_mdss_pdata;
 #ifdef CONFIG_A86_BACKLIGHT
 extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
 #endif
-extern void asus_mdss_mdp_clk_ctl(bool enable);
 extern void qpnp_wled_ctrl(bool enable);
 int A91_lcd_id = 0; // 0:sharp; 1:innolux
 static struct mutex cmd_mutex;
