@@ -1020,25 +1020,12 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	int len, ret = 0;
 	int domain = MDSS_IOMMU_DOMAIN_UNSECURE;
 	char *bp;
-	unsigned long size, addr;
-	//ASUS_BSP: Louis ++
-    bool addr_map_iommu = false;
-	#ifdef DSI_CMD_DEBUG
-	int i;	
-	#endif
-	//ASUS_BSP: Louis --
+
+	unsigned long size;
+	dma_addr_t addr;
+	bool addr_map_iommu = false;
 
 	bp = tp->data;
-	
-	//ASUS_BSP: Louis ++
-	#ifdef DSI_CMD_DEBUG
-	printk("%s: ", __func__);
-	for (i = 0; i < tp->len; i++)
-		printk("%x ", *bp++);
-	printk("\n");
-	#endif
-	//ASUS_BSP: Louis --
-
 	len = ALIGN(tp->len, 4);
 	size = ALIGN(tp->len, SZ_4K);
 
