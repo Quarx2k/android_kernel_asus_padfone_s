@@ -85,9 +85,8 @@
 		mdss_fb0: qcom,mdss_fb_primary {
 			cell-index = <0>;
 			compatible = "qcom,mdss-fb";
-			qcom,memory-reservation-type = "EBI1";
-			qcom,memory-reservation-size = <0x1000000>;  /* Louis: reserve 16 MB for FB */
 			qcom,memblock-reserve = <0x03200000 0x01E00000>;
+			linux,contiguous-region = <&fb_mem>;
 		};
 
 		mdss_fb1: qcom,mdss_fb_external {
