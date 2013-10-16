@@ -154,6 +154,7 @@ struct mdss_mdp_ctl {
 
 	u32 opmode;
 	u32 flush_bits;
+	u32 flush_reg_data;
 
 	bool split_flush_en;
 	bool is_video_mode;
