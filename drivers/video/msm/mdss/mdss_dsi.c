@@ -511,27 +511,10 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata)
 	/* disable DSI controller */
 	mdss_dsi_controller_cfg(0, pdata);
 
-	mdss_dsi_clk_ctrl(ctrl_pdata, 0);
-
-	ret = mdss_dsi_enable_bus_clocks(ctrl_pdata);
-	if (ret) {
-		pr_err("%s: failed to enable bus clocks. rc=%d\n", __func__,
-			ret);
-		//ASUS_BSP: Louis, for display porting +++
-		//mdss_dsi_panel_power_on(pdata, 0);
-		//#ifdef ASUS_A91_PROJECT
-		a90_mdss_dsi_panel_power_on(pdata, 0);
-		//#elif defined ASUS_ME771KL_PROJECT
-		//ret = me771_mdss_dsi_panel_power_on(pdata, 0);
-		//#endif
-		//ASUS_BSP: Louis, for display porting  ---
-		return ret;
-	}
-
 	/* disable DSI phy */
-	mdss_dsi_phy_enable(ctrl_pdata, 0);
+	mdss_dsi_phy_disable(ctrl_pdata);
 
-	mdss_dsi_disable_bus_clocks(ctrl_pdata);
+	mdss_dsi_clk_ctrl(ctrl_pdata, 0);
 
     //ASUS_BSP: Louis, for display porting +++
 	//ret = mdss_dsi_panel_power_on(pdata, 0);
