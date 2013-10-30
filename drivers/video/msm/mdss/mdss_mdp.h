@@ -145,12 +145,11 @@ enum mdss_mdp_wb_ctl_type {
 	MDSS_MDP_WB_CTL_TYPE_LINE
 };
 
-//ASUS_BSP: Louis +++
-struct mdss_mdp_bus_client_quota {
-    u64 bus_ab_quota;
-    u64 bus_ib_quota;
+struct mdss_mdp_perf_params {
+	u64 ib_quota;
+	u64 ab_quota;
+	u32 mdp_clk_rate;
 };
-//ASUS_BSP: Louis ---
 
 struct mdss_mdp_ctl {
 	u32 num;
@@ -180,6 +179,8 @@ struct mdss_mdp_ctl {
 	u32 clk_rate;
 	u32 perf_changed;
 	int force_screen_state;
+	struct mdss_mdp_perf_params cur_perf;
+	struct mdss_mdp_perf_params new_perf;
 
 	struct mdss_data_type *mdata;
 	struct msm_fb_data_type *mfd;
@@ -435,12 +436,6 @@ struct mdss_overlay_private {
 	struct mdss_mdp_vsync_handler vsync_retire_handler;
 	struct work_struct retire_work;
 	int retire_cnt;
-};
-
-struct mdss_mdp_perf_params {
-	u32 ib_quota;
-	u32 ab_quota;
-	u32 mdp_clk_rate;
 };
 
 /**
