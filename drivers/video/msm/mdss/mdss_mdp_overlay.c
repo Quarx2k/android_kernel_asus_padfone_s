@@ -2493,8 +2493,7 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 	}
 
 	if ((!mfd->panel_info->cont_splash_enabled &&
-		(mfd->panel_info->type != DTV_PANEL) &&
-		(mfd->panel_info->type != WRITEBACK_PANEL)) 
+		(mfd->panel_info->type != DTV_PANEL)
 //  ASUS_BSP: Louis +++
 #ifdef CONFIG_ASUS_HDMI 
     /* start mdp overlay when receivce pad mode uevent and try to open fb1   */
@@ -2503,7 +2502,7 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 //  ASUS_BSP: Louis ---
         ) {
 		rc = mdss_mdp_overlay_start(mfd);
-		if (!IS_ERR_VALUE(rc)
+		if (!IS_ERR_VALUE(rc) && (mfd->panel_info->type != WRITEBACK_PANEL)
 //  ASUS_BSP: Louis +++
 #ifdef CONFIG_ASUS_HDMI 
     /*  don't turn on hdmi pwr here    */
