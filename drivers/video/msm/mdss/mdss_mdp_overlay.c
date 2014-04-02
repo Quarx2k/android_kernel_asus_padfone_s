@@ -275,9 +275,22 @@ static int __mdp_pipe_tune_perf(struct mdss_mdp_pipe *pipe)
 		rc = mdss_mdp_perf_calc_pipe(pipe, &perf, NULL,
 			pipe->flags & MDP_SECURE_OVERLAY_SESSION);
 
-		if (!rc && (perf.mdp_clk_rate <= mdata->max_mdp_clk_rate) &&
-			!mdss_mdp_perf_bw_check_pipe(&perf, pipe))
-			break;
+		if (!rc && (perf.mdp_clk_rate <= mdata->max_mdp_clk_rate)) {
+			rc = mdss_mdp_perf_bw_check_pipe(&perf, pipe);
+			if (!rc) {
+				break;
+			} else if ((rc == -E2BIG) && !pipe->vert_deci) {
+				/*
+				 * if per pipe BW exceeds the limit and user
+				 * has not requested decimation then return
+				 * -E2BIG error back to user else try more
+				 * decimation.
+				 */
+				pr_debug("pipe%d exceeded per pipe BW\n",
+					pipe->num);
+				return rc;
+			}
+		}
 
 		/*
 		 * if decimation is available try to reduce minimum clock rate
