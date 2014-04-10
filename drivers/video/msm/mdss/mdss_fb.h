@@ -229,6 +229,8 @@ struct msm_fb_data_type {
 	struct ion_handle *fb_ion_handle;
 	struct dma_buf *fbmem_buf;
 
+	bool mdss_fb_split_stored;
+
 	u32 wait_for_kickoff;
 };
 
