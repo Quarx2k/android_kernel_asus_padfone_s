@@ -4531,14 +4531,14 @@ bypass_checksum_failed_packet:
 
 					if(touch_debug_mask & DEF_POINT_INFO){
 						if(!point_printed){
-							printk("[Touch_H] Touch Down !\n");
+							//printk("[Touch_H] Touch Down !\n");
 							point_printed = 1;
 						}
 					}
 					else if(touch_debug_mask & ALL_POINT_INFO){
 						if (finger_count[c][0] == 0)
-							printk("[Touch_H][%d][X,Y,W,P][%d,%d,%d,%d]\n"
-								, c, x, y, area, press);
+							//printk("[Touch_H][%d][X,Y,W,P][%d,%d,%d,%d]\n"
+							//	, c, x, y, area, press);
 					
 						finger_count[c][0]++;
 						finger_count[c][1] = true;
@@ -4546,8 +4546,8 @@ bypass_checksum_failed_packet:
 					}
 					else if(touch_debug_mask & DET_POINT_INFO){
 						if ((finger_count[c][0] % 100) == 0)
-							printk("[Touch_H][%d][X,Y,W,P][%d,%d,%d,%d]-[%d]\n"
-								, c, x, y, area, press, finger_count[c][0]);
+							//printk("[Touch_H][%d][X,Y,W,P][%d,%d,%d,%d]-[%d]\n"
+							//	, c, x, y, area, press, finger_count[c][0]);
 					
 						finger_count[c][0]++;
 						finger_count[c][1] = true;
@@ -4585,7 +4585,7 @@ bypass_checksum_failed_packet:
 				if(touch_debug_mask & (ALL_POINT_INFO|DET_POINT_INFO)){
 					if (finger_count[c][1] == true)
 					{
-						printk("[Touch_H][%d]-[%d] Touch Up !!\n", c, finger_count[c][0]);
+						//printk("[Touch_H][%d]-[%d] Touch Up !!\n", c, finger_count[c][0]);
 						
 						finger_count[c][0] = 0;
 						finger_count[c][1] = false;
@@ -4604,7 +4604,7 @@ bypass_checksum_failed_packet:
 		input_mt_sync(ts->input_dev);
 		input_sync(ts->input_dev);
 	
-		printk("[Touch_H] Press Button %d \n",tpd_keys_local[tpd_key - 1]);
+		//printk("[Touch_H] Press Button %d \n",tpd_keys_local[tpd_key - 1]);
 
 	}
 	else if (hx_point_num == 0 && tpd_key == 0xFF)
@@ -4615,7 +4615,7 @@ bypass_checksum_failed_packet:
 			input_mt_sync(ts->input_dev);
 			input_sync(ts->input_dev);
 			
-			printk("[Touch_H] Release Button %d \n",tpd_keys_local[tpd_key_old - 1]);
+			//printk("[Touch_H] Release Button %d \n",tpd_keys_local[tpd_key_old - 1]);
 			
 		}
 		else
@@ -4627,7 +4627,7 @@ bypass_checksum_failed_packet:
 
 			if(touch_debug_mask & DEF_POINT_INFO){
 				if(point_printed){
-					printk("[Touch_H] Touch Up!!\n");
+					//printk("[Touch_H] Touch Up!!\n");
 					point_printed = 0;
 				}
 			}
@@ -4636,7 +4636,7 @@ bypass_checksum_failed_packet:
 				{
 					if( finger_count[c][1] == true )
 					{
-						printk("[Touch_H][%d]-[%d] Touch Up!!\n", c, finger_count[c][0]);
+						//printk("[Touch_H][%d]-[%d] Touch Up!!\n", c, finger_count[c][0]);
 						finger_count[c][0] = 0;
 						finger_count[c][1] = false;
 						break;

@@ -408,11 +408,11 @@ int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
 
         if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
             cmdreq.cmds = &nvt_brightness_set;
-            printk("[BL] Set nvt brightness (%d)\n", a90_bl_val[1]);
+          //  printk("[BL] Set nvt brightness (%d)\n", a90_bl_val[1]);
         }
         else {
             cmdreq.cmds = &renesas_brightness_set;
-            printk("[BL] Set renesas brightness (%d)\n", (a86_bl_val[1]*256 + a86_bl_val[2]));
+           // printk("[BL] Set renesas brightness (%d)\n", (a86_bl_val[1]*256 + a86_bl_val[2]));
         }
 
         mdss_set_tx_power_mode(0, g_mdss_pdata);

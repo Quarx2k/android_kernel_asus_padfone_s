@@ -74,7 +74,7 @@ static int backlight_value = 90;
 #define DEBUG_RAW      8
 #define DEBUG_TRACE   10
 
-static int debug = DEBUG_INFO;
+static int debug = NO_DEBUG;
 
 module_param(debug, int, 0644);
 
