@@ -2674,27 +2674,14 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 		mdp5_data->ctl = ctl;
 	}
 
-	if ((!mfd->panel_info->cont_splash_enabled) &&
-		(mfd->panel_info->type != DTV_PANEL)
-//  ASUS_BSP: Louis +++
-#ifdef CONFIG_ASUS_HDMI 
-    /* start mdp overlay when receivce pad mode uevent and try to open fb1   */
-        || ((gpio_get_value(75) == 1) && (mfd->panel_info->type == DTV_PANEL)) //ASUS_BSP: joe1_++: prevent Android restart when connecting WFD on Pad mode
-#endif
-//  ASUS_BSP: Louis ---
-        ) {
+	if (!mfd->panel_info->cont_splash_enabled &&
+		(mfd->panel_info->type != DTV_PANEL)) {
 		rc = mdss_mdp_overlay_start(mfd);
-		if (!IS_ERR_VALUE(rc) && (mfd->panel_info->type != WRITEBACK_PANEL)
-//  ASUS_BSP: Louis +++
-#ifdef CONFIG_ASUS_HDMI 
-    /*  don't turn on hdmi pwr here    */
-            && !(gpio_get_value(75) == 1 && mfd->fbi->node == 1)
-#endif
-//  ASUS_BSP: Louis ---
-            ) {
-                printk("%s: kickoff fb%d\n", __func__, mfd->fbi->node);
-			    rc = mdss_mdp_overlay_kickoff(mfd, NULL);
-            }
+		if (!IS_ERR_VALUE(rc) &&
+			(mfd->panel_info->type != WRITEBACK_PANEL)) {
+			atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);
+			rc = mdss_mdp_overlay_kickoff(mfd, NULL);
+		}
 	} else {
 		rc = mdss_mdp_ctl_setup(mdp5_data->ctl);
 		if (rc)
