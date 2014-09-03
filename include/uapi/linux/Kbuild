@@ -19,6 +19,7 @@ header-y += netfilter_bridge/
 header-y += netfilter_ipv4/
 header-y += netfilter_ipv6/
 header-y += usb/
+header-y += nfc/
 header-y += wimax/
 header-y += mfd/
 
@@ -304,7 +305,6 @@ header-y += ncp_no.h
 header-y += neighbour.h
 header-y += net.h
 header-y += net_dropmon.h
-header-y += net_map.h
 header-y += net_tstamp.h
 header-y += netconf.h
 header-y += netdevice.h

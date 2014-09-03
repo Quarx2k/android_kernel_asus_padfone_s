@@ -4,9 +4,6 @@
 #include <linux/types.h>
 #include <linux/fb.h>
 
-/* let users know that we have the new struct formats */
-#define DUAL_DSI
-
 #define MSMFB_IOCTL_MAGIC 'm'
 #define MSMFB_GRP_DISP          _IOW(MSMFB_IOCTL_MAGIC, 1, unsigned int)
 #define MSMFB_BLIT              _IOW(MSMFB_IOCTL_MAGIC, 2, unsigned int)
@@ -391,6 +388,8 @@ struct msmfb_writeback_data {
 #define PP_LOCAT(var) ((var) & MDSS_PP_LOCATION_MASK)
 #define PP_BLOCK(var) ((var) & MDSS_PP_LOGICAL_MASK)
 
+/* let users know that we have the new struct formats */
+#define DUAL_DSI
 
 struct mdp_qseed_cfg {
 	uint32_t table_num;
