@@ -1,0 +1,251 @@
+/*
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&pm8941_lsid1 {
+	qcom,leds@d000 {
+		status = "okay";
+		qcom,rgb_0 {
+			label = "rgb";
+			linux,name = "red";
+			qcom,mode = "pwm";
+			qcom,pwm-channel = <6>;
+			qcom,pwm-us = <1000>;
+			qcom,max-current = <12>;
+			qcom,duty-ms = <20>;
+
+			qcom,blink-start-idx = <1>;
+			qcom,idx-len = <32>;
+			qcom,duty-pcts = [00 00 00 00 00 00 00 00 00 00
+					  00 00 00 00 00 00 00 00 00 00
+					  00 00 00 00 00 00 00 00 00 00 
+					  00 60 ];
+
+			qcom,breathe-start-idx = <1>;
+			qcom,breathe-len = <50>;
+			qcom,breathe-pcts = [00 00 00 00 01 02 03 04 05 06
+					     07 08 09 0A 0C 0E 10 12 14 18
+					     1C 20 25 2A 32 3C 32 2A 25 20
+					     1C 18 14 12 10 0E 0C 0A 09 08
+					     07 06 05 04 03 02 01 00 00 00];
+
+			qcom,lut-flags = <3>;
+			qcom,pause-lo = <0>;
+			qcom,pause-hi = <1>;
+			qcom,ramp-step-ms = <125>;
+			qcom,default-state = "off";
+			//qcom,turn-off-delay-ms = <3000>;
+			qcom,id = <3>;
+			linux,default-trigger =	"none";
+			qcom,use-blink;
+		};
+
+		qcom,rgb_1 {
+			label = "rgb";
+			linux,name = "green";
+			qcom,mode = "pwm";
+			qcom,pwm-channel = <5>;
+			qcom,pwm-us = <1000>;
+			qcom,max-current = <12>;
+			qcom,duty-ms = <20>;
+
+			qcom,blink-start-idx = <32>;
+			qcom,idx-len = <20>;
+			qcom,duty-pcts = [00 00 00 00 00 00 00 00 00 00
+					  00 00 00 00 00 00 00 00 00 60];
+
+			qcom,breathe-start-idx = <1>;
+			qcom,breathe-len = <50>;
+			qcom,breathe-pcts = [00 00 00 00 01 02 03 04 05 06
+					     07 08 09 0A 0C 0E 10 12 14 18
+					     1C 20 25 2A 32 3C 32 2A 25 20
+					     1C 18 14 12 10 0E 0C 0A 09 08
+					     07 06 05 04 03 02 01 00 00 00];
+
+			qcom,lut-flags = <3>;
+			qcom,pause-lo = <0>;
+			qcom,pause-hi = <1>;
+			qcom,ramp-step-ms = <125>;
+			qcom,default-state = "off";
+			qcom,id = <4>;
+			linux,default-trigger = "none";
+			qcom,use-blink;
+		};
+
+		qcom,rgb_2 {
+			label = "rgb";
+			linux,name = "blue";
+			qcom,mode = "pwm";
+			qcom,pwm-channel = <4>;
+			qcom,pwm-us = <1000>;
+			qcom,max-current = <12>;
+			qcom,duty-ms = <20>;
+			qcom,blink-start-idx = <60>;
+			qcom,idx-len = <2>;
+			qcom,duty-pcts = [00 00];
+			qcom,breathe-start-idx = <60>;
+			qcom,breathe-len = <2>;
+			qcom,breathe-pcts = [00 00];
+			qcom,lut-flags = <3>;
+			qcom,pause-lo = <0>;
+			qcom,pause-hi = <1>;
+			qcom,ramp-step-ms = <125>;
+			qcom,default-state = "off";
+			qcom,id = <5>;
+			linux,default-trigger = "none";
+			qcom,use-blink;
+		};
+
+// ASUS_BSP Deeo : add for new kobject +++
+		qcom,rgb_3 {
+			label = "rgb";
+			linux,name = "mix";
+			qcom,mode = "pwm";
+			qcom,max-current = <12>;
+			qcom,id = <9>;
+			qcom,default-state = "off";
+			linux,default-trigger = "none";
+			qcom,use-blink;
+		};
+// ASUS_BSP Deeo : add for new kobject ---
+	};
+
+	qcom,leds@d100 {
+		status = "disabled";
+	};
+
+	qcom,leds@d200 {
+		status = "disabled";
+	};
+
+	qcom,leds@d300 {
+		status = "okay";
+		pm8941_flash0: qcom,flash_0 {
+			qcom,max-current = <1000>;
+			qcom,default-state = "off";
+			qcom,headroom = <3>;
+			qcom,duration = <1280>;
+			qcom,clamp-curr = <200>;
+			qcom,startup-dly = <3>;
+			qcom,safety-timer;
+			label = "flash";
+			linux,default-trigger =
+				"flash0_trigger";
+			qcom,id = <1>;
+			linux,name = "led:flash_0";
+			qcom,current = <625>;
+		};
+
+		pm8941_flash1: qcom,flash_1 {
+			qcom,max-current = <1000>;
+			qcom,default-state = "off";
+			qcom,headroom = <3>;
+			qcom,duration = <1280>;
+			qcom,clamp-curr = <200>;
+			qcom,startup-dly = <3>;
+			qcom,safety-timer;
+			linux,default-trigger =
+				"flash1_trigger";
+			label = "flash";
+			qcom,id = <2>;
+			linux,name = "led:flash_1";
+			qcom,current = <625>;
+		};
+
+		pm8941_torch: qcom,flash_torch {
+			qcom,max-current = <200>;
+			qcom,default-state = "off";
+			qcom,headroom = <0>;
+			qcom,startup-dly = <1>;
+			linux,default-trigger =
+				"torch_trigger";
+			label = "flash";
+			qcom,id = <2>;
+			linux,name = "led:flash_torch";
+			qcom,current = <200>;
+			qcom,torch-enable;
+		};
+	};
+
+	qcom,leds@d400 {
+		status = "disabled";
+	};
+
+	qcom,leds@d500 {
+		status = "disabled";
+	};
+
+	qcom,leds@d600 {
+		status = "disabled";
+	};
+
+	qcom,leds@d700 {
+		status = "disabled";
+	};
+
+	qcom,leds@e200 {
+		status = "okay";
+		//status = "disabled";
+
+		qcom,kpdbl1 {
+			label = "kpdbl";
+			linux,name = "kpdbl-pwm-1";
+			qcom,mode = "pwm";
+			qcom,pwm-channel = <8>;
+			qcom,pwm-us = <1000>;
+			qcom,id = <7>;
+			qcom,max-current = <20>;
+			qcom,row-id = <0>;
+			qcom,row-src-en;
+			qcom,always-on;
+		};
+
+		qcom,kpdbl2 {
+			label = "kpdbl";
+			linux,name = "kpdbl-lut-2";
+			qcom,mode = "lpg";
+			qcom,pwm-channel = <9>;
+			qcom,pwm-us = <1000>;
+			qcom,start-idx = <1>;
+			qcom,duty-pcts = [00 00 00 00 64
+					64 00 00 00 00];
+			qcom,id = <7>;
+			qcom,max-current = <20>;
+			qcom,row-id = <1>;
+			qcom,row-src-en;
+		};
+
+		qcom,kpdbl3 {
+			label = "kpdbl";
+			linux,name = "kpdbl-pwm-3";
+			qcom,mode = "pwm";
+			qcom,pwm-channel = <10>;
+			qcom,pwm-us = <1000>;
+			qcom,id = <7>;
+			qcom,max-current = <20>;
+			qcom,row-id = <2>;
+			qcom,row-src-en;
+		};
+
+		qcom,kpdbl4 {
+			label = "kpdbl";
+			linux,name = "kpdbl-pwm-4";
+			qcom,mode = "pwm";
+			qcom,pwm-channel = <11>;
+			qcom,pwm-us = <1000>;
+			qcom,id = <7>;
+			qcom,max-current = <20>;
+			qcom,row-id = <3>;
+			qcom,row-src-en;
+		};
+	};
+};
