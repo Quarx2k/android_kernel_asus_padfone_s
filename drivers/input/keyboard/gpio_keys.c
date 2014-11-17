@@ -54,8 +54,6 @@ struct kobject *kobj;//ASUS_BSP + [thomas]Send uevent to userspace
 #include <linux/asusdebug.h>
 #include <linux/reboot.h>
 #include <asm/cacheflush.h>
-#include <linux/asus_global.h>
-extern struct _asus_global asus_global;
 
 //ASUS_BSP +++ Peter_lu "For fastboot mode  with slow log issue"
 #ifdef CONFIG_FASTBOOT
@@ -70,8 +68,6 @@ enum PWR_KEY_STATE
 };
 #endif //#ifdef CONFIG_FASTBOOT
 
-extern void resetdevice(void);
-extern void set_dload_mode(int on);
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. --
 //freddy +++ for key porting
 static struct wake_lock pwr_key_wake_lock;
@@ -202,12 +198,7 @@ void wait_for_power_key_6s_work(struct work_struct *work)
 			set_vib_enable(200);
 			msleep(200);
 
-			set_dload_mode(0);
-			asus_global.ramdump_enable_magic = 0;
-			printk(KERN_CRIT "asus_global.ramdump_enable_magic = 0x%x\n",asus_global.ramdump_enable_magic);
 			flush_cache_all();
-			printk("force reset device!!\n");
-			resetdevice();
 		}
 
 		power_key_6s_running = 0;
@@ -607,12 +598,8 @@ static struct attribute_group gpio_keys_attr_group = {
 };
 static unsigned int count_start = 0;  
 static unsigned int count = 0;  
-extern void set_dload_mode(int on);
-extern void resetdevice(void);
 #include <linux/reboot.h>
 #include <asm/cacheflush.h>
-#include <linux/asus_global.h>
-extern struct _asus_global asus_global;
 int volumedownkeystatus;//ASUS_BSP + [thomas] Add more check about volume down key
 
 int bootupcount = 0;
@@ -693,13 +680,7 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 			if (count == 10)
 			{
 				printk("Kernel alive...\r\n");
-				
-				set_dload_mode(0);
-				asus_global.ramdump_enable_magic = 0;
-				printk(KERN_CRIT "asus_global.ramdump_enable_magic = 0x%x\n",asus_global.ramdump_enable_magic);
 				flush_cache_all();	
-				//reset device	
-				resetdevice();				
 			}		
 		}
 	}
@@ -782,9 +763,8 @@ static void gpio_keys_gpio_work_func(struct work_struct *work)
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. --
     //added by jack for slow log
     schedule_work(&__wait_for_two_keys_work);
-    if (boot_after_60sec)
-		schedule_work(&__wait_for_slowlog_work);
-	gpio_keys_gpio_report_event(bdata);
+
+    gpio_keys_gpio_report_event(bdata);
 }
 
 static void gpio_keys_gpio_timer(unsigned long _data)

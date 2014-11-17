@@ -37,7 +37,6 @@
 #include "msm_watchdog.h"
 #include "timer.h"
 #include "wdog_debug.h"
-#include <linux/asus_global.h>
 
 #define WDT0_RST	0x38
 #define WDT0_EN		0x40
@@ -78,8 +77,6 @@ static int dload_set(const char *val, struct kernel_param *kp);
 static int download_mode = 1;
 module_param_call(download_mode, dload_set, param_get_int,
 			&download_mode, 0644);
-
-extern struct _asus_global asus_global;
 static int panic_prep_restart(struct notifier_block *this,
 			      unsigned long event, void *ptr)
 {
@@ -91,7 +88,7 @@ static struct notifier_block panic_blk = {
 	.notifier_call	= panic_prep_restart,
 };
 
-void set_dload_mode(int on)
+static void set_dload_mode(int on)
 {
 	if (dload_mode_addr) {
 		__raw_writel(on ? 0xE47B337D : 0, dload_mode_addr);
@@ -118,6 +115,7 @@ static void enable_emergency_dload_mode(void)
 		__raw_writel(EMERGENCY_DLOAD_MAGIC3,
 				emergency_dload_mode_addr +
 				(2 * sizeof(unsigned int)));
+
 		mb();
 	}
 }
@@ -202,18 +200,6 @@ static void __msm_power_off(int lower_pshold)
 
 static void msm_power_off(void)
 {
-	// Normal power off. Clean the printk buffer magic
-	unsigned int *last_shutdown_log_addr;
-	last_shutdown_log_addr = (unsigned int *)((unsigned int)PRINTK_BUFFER + (unsigned int)PRINTK_BUFFER_SLOT_SIZE);
-	*last_shutdown_log_addr = 0;
-		
-	printk(KERN_CRIT "Clean asus_global...\n");
-	memset(&asus_global,0,sizeof(asus_global));	
-	printk(KERN_CRIT "&asus_global = 0x%x\n",(unsigned int)&asus_global);
-	printk(KERN_CRIT "asus_global.asus_global_magic = 0x%x\n",asus_global.asus_global_magic);
-	printk(KERN_CRIT "asus_global.ramdump_enable_magic = 0x%x\n",asus_global.ramdump_enable_magic);
-	__raw_writel(0, MSM_IMEM_BASE + RESTART_REASON_ADDR);
-	flush_cache_all();	
 	/* MSM initiated power off, lower ps_hold */
 	__msm_power_off(1);
 }
@@ -261,8 +247,6 @@ static irqreturn_t resout_irq_handler(int irq, void *dev_id)
 
 static void msm_restart_prepare(const char *cmd)
 {
-	unsigned int *last_shutdown_log_addr;
-
 #ifdef CONFIG_MSM_DLOAD_MODE
 
 	/* This looks like a normal reboot at this point. */
@@ -286,20 +270,15 @@ static void msm_restart_prepare(const char *cmd)
 	if (get_dload_mode() || (cmd != NULL && cmd[0] != '\0'))
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
 	else
-		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);// +++ ASUS_BSP : add for force PON_POWER_OFF_WARM_RESET mode
-
-	if (!in_panic)
-	{
-		// Normal reboot. Clean the printk buffer magic     
-		last_shutdown_log_addr = (unsigned int *)((unsigned int)PRINTK_BUFFER + (unsigned int)PRINTK_BUFFER_SLOT_SIZE);
-		*last_shutdown_log_addr = 0;
-	}
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 
 	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
 			__raw_writel(0x77665500, restart_reason);
 		} else if (!strncmp(cmd, "recovery", 8)) {
 			__raw_writel(0x77665502, restart_reason);
+		} else if (!strcmp(cmd, "rtc")) {
+			__raw_writel(0x77665503, restart_reason);
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned long code;
 			code = simple_strtoul(cmd + 4, NULL, 16) & 0xff;
@@ -309,8 +288,7 @@ static void msm_restart_prepare(const char *cmd)
 		} else {
 			__raw_writel(0x77665501, restart_reason);
 		}
-	}else
-        __raw_writel(0x73727374, restart_reason);
+	}
 
 	flush_cache_all();
 	outer_flush_all();
@@ -321,7 +299,7 @@ void msm_restart(char mode, const char *cmd)
 	printk(KERN_NOTICE "Going down for restart now\n");
 
 	msm_restart_prepare(cmd);
-	flush_cache_all();
+
 	if (!use_restart_v2()) {
 		__raw_writel(0, msm_tmr0_base + WDT0_EN);
 		if (!(machine_is_msm8x60_fusion() ||
@@ -347,32 +325,7 @@ void msm_restart(char mode, const char *cmd)
 	mdelay(10000);
 	printk(KERN_ERR "Restarting has failed\n");
 }
-void resetdevice(void)
-{
-	if (!use_restart_v2()) {
-		__raw_writel(0, msm_tmr0_base + WDT0_EN);
-		if (!(machine_is_msm8x60_fusion() ||
-		      machine_is_msm8x60_fusn_ffa())) {
-			mb();
-			 /* Actually reset the chip */
-			__raw_writel(0, PSHOLD_CTL_SU);
-			mdelay(5000);
-			pr_notice("PS_HOLD didn't work, falling back to watchdog\n");
-		}
 
-		__raw_writel(1, msm_tmr0_base + WDT0_RST);
-		__raw_writel(5*0x31F3, msm_tmr0_base + WDT0_BARK_TIME);
-		__raw_writel(0x31F3, msm_tmr0_base + WDT0_BITE_TIME);
-		__raw_writel(1, msm_tmr0_base + WDT0_EN);
-	} else {
-		/* Needed for 8974: Reset GCC_WDOG_DEBUG register */
-		msm_disable_wdog_debug();
-		__raw_writel(0, MSM_MPM2_PSHOLD_BASE);
-	}
-
-	mdelay(10000);
-	printk(KERN_ERR "Restarting has failed\n");
-}
 static int __init msm_pmic_restart_init(void)
 {
 	int rc;
@@ -402,11 +355,7 @@ static int __init msm_restart_init(void)
 	dload_mode_addr = MSM_IMEM_BASE + DLOAD_MODE_ADDR;
 	emergency_dload_mode_addr = MSM_IMEM_BASE +
 		EMERGENCY_DLOAD_MODE_ADDR;
-#ifdef ASUS_SHIP_BUILD
-	set_dload_mode(0);
-#else
 	set_dload_mode(download_mode);
-#endif
 #endif
 	msm_tmr0_base = msm_timer_get_timer0_base();
 	restart_reason = MSM_IMEM_BASE + RESTART_REASON_ADDR;

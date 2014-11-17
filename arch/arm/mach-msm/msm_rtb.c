@@ -35,8 +35,6 @@
 
 #define RTB_COMPAT_STR	"qcom,msm-rtb"
 
-extern int g_saving_rtb_log;
-
 #if defined(CONFIG_MSM_RTB_SEPARATE_CPUS)
 DEFINE_PER_CPU(atomic_t, msm_rtb_idx_cpu);
 #else
@@ -45,7 +43,7 @@ static atomic_t msm_rtb_idx;
 
 struct msm_rtb_state msm_rtb = {
 	.filter = 1 << LOGK_LOGBUF,
-	.enabled = 0,
+	.enabled = 1,
 };
 
 module_param_named(filter, msm_rtb.filter, uint, 0644);
@@ -64,7 +62,7 @@ static struct notifier_block msm_rtb_panic_blk = {
 
 int notrace msm_rtb_event_should_log(enum logk_event_type log_type)
 {
-	return msm_rtb.initialized && msm_rtb.enabled && !g_saving_rtb_log &&
+	return msm_rtb.initialized && msm_rtb.enabled &&
 		((1 << (log_type & ~LOGTYPE_NOPC)) & msm_rtb.filter);
 }
 EXPORT_SYMBOL(msm_rtb_event_should_log);
@@ -229,7 +227,7 @@ int msm_rtb_probe(struct platform_device *pdev)
 	 * address of the buffer. This is necessary for cases where
 	 * the only way to access the buffer is a physical address.
 	 */
-	msm_rtb.phys = RTB_BUFFER;
+	msm_rtb.phys = allocate_contiguous_ebi_nomap(msm_rtb.size, SZ_4K);
 
 	if (!msm_rtb.phys)
 		return -ENOMEM;
@@ -246,9 +244,7 @@ int msm_rtb_probe(struct platform_device *pdev)
 	/* Round this down to a power of 2 */
 	msm_rtb.nentries = __rounddown_pow_of_two(msm_rtb.nentries);
 
-	// don't set the content to 0
-	// we need the last rtb log before reset
-	//~ memset(msm_rtb.rtb, 0, msm_rtb.size);
+	memset(msm_rtb.rtb, 0, msm_rtb.size);
 
 
 #if defined(CONFIG_MSM_RTB_SEPARATE_CPUS)
