@@ -76,8 +76,13 @@ endif
 #        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pm8941-mtp.dtb
 #        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pma8084-pm8941-mtp.dtb
 
-
+#ifdef ASUS_PF500KL_PROJECT
+	dtb-y += msm8974pro-ab-pm8941-pf500kl-er2_2.dtb
+	dtb-y += msm8974pro-ab-pm8941-pf500kl-er1.dtb
+	dtb-y += msm8974pro-ac-pm8941-pf500kl-er1.dtb
 	dtb-y += msm8974pro-ac-pm8941-pf500kl-er2_2.dtb
+#endif
+
 # APQ8084
    zreladdr-$(CONFIG_ARCH_APQ8084)	:= 0x00008000
         dtb-$(CONFIG_ARCH_APQ8084)	+= apq8084-sim.dtb
