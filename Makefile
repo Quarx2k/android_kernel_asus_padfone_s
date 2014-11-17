@@ -644,6 +644,9 @@ ifeq ($(shell $(CONFIG_SHELL) $(srctree)/scripts/gcc-goto.sh $(CC)), y)
 	KBUILD_CFLAGS += -DCC_HAVE_ASM_GOTO
 endif
 
+ASUS_BUILD_PROJECT := PF500KL
+TARGET_BUILD_VARIANT := user
+
 # ASUS_BSP : miniporting : jackson : add ASUS software version support +++
 ifneq ($(BUILD_NUMBER),)
         KBUILD_CPPFLAGS += -DASUS_SW_VER=\"$(BUILD_NUMBER)\"
