@@ -36,7 +36,6 @@
 #include "peripheral-loader.h"
 #include "scm-pas.h"
 
-
 #define PRONTO_PMU_COMMON_GDSCR				0x24
 #define PRONTO_PMU_COMMON_GDSCR_SW_COLLAPSE		BIT(0)
 #define CLK_DIS_WAIT					12
@@ -294,7 +293,6 @@ static void log_wcnss_sfr(void)
 	} else {
 		pr_err("wcnss subsystem failure reason: %.81s\n",
 				smem_reset_reason);
-		subsys_save_reason(smem_reset_reason); // ASUS_BSP+ "save SSR reason"
 		memset(smem_reset_reason, 0, smem_reset_size);
 		wmb();
 	}

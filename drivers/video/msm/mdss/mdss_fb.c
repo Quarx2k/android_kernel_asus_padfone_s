@@ -63,7 +63,6 @@
 #define MAX_FBI_LIST 32
 
 extern ktime_t wakeup_starttime;
-extern bool measure_phone_wakeup_time;
 static int phone_resume_time_mask = 0;
 module_param_named(debug_mask, phone_resume_time_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -2115,9 +2114,6 @@ buf_sync_err_1:
 static int mdss_fb_display_commit(struct fb_info *info,
 						unsigned long *argp)
 {
-	ktime_t rettime;
-	u64 usecs64;
-	int usecs;
 	int ret;
 	struct mdp_display_commit disp_commit;
 	ret = copy_from_user(&disp_commit, argp,
@@ -2127,26 +2123,6 @@ static int mdss_fb_display_commit(struct fb_info *info,
 		return ret;
 	}
 	ret = mdss_fb_pan_display_ex(info, &disp_commit);
-
-    //ASUS_BSP: Louis, for plug in/out debug +++
-	#ifdef CONFIG_ASUS_HDMI 
-    if (display_commit_cnt > 0) {
-        printk("fb%d dpc\n", info->node);
-        display_commit_cnt--;
-    }
-	#endif
-    //ASUS_BSP: Louis, for plug in/out debug ---
-//ASUS BSP++ Vincent
-	if(measure_phone_wakeup_time){
-		rettime = ktime_get();
-		usecs64 = ktime_to_ns(ktime_sub(rettime, wakeup_starttime));
-		do_div(usecs64, NSEC_PER_USEC);
-		usecs = usecs64;		
-		measure_phone_wakeup_time = false;
-		if(phone_resume_time_mask || (usecs / USEC_PER_MSEC) > 1000)
-			printk("[PM]Phone system-wakeup takes %ld ms\n", usecs / USEC_PER_MSEC);
-	}
-//ASUS BSP-- Vincent
 	
 	return ret;
 }

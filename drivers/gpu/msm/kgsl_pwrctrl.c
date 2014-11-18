@@ -904,8 +904,6 @@ static void kgsl_pwrctrl_busy_time(struct kgsl_device *device, bool on_time)
 	}
 }
 
-extern int asus_sb_enable;
-static int asus_sb_test = 0;
 static void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 					  int requested_state)
 {
@@ -914,20 +912,7 @@ static void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 
 	if (test_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->ctrl_flags))
 		return;
-    
-    if(asus_sb_enable == 1 && asus_sb_test == 0)
-    {
-        pwr->min_pwrlevel = 0;
-        asus_sb_test = 1;
-        printk("ASUS SB enable\n");
-    }
-    else if(asus_sb_enable == 0 && asus_sb_test == 1)
-    {
-        pwr->min_pwrlevel = pwr->num_pwrlevels - 2;
-        asus_sb_test = 0;
-        printk("ASUS SB disable\n");
-    }
-    
+
 	if (state == KGSL_PWRFLAGS_OFF) {
 		if (test_and_clear_bit(KGSL_PWRFLAGS_CLK_ON,
 			&pwr->power_flags)) {

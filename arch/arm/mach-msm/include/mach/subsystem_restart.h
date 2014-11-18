@@ -86,15 +86,8 @@ extern void subsys_default_online(struct subsys_device *dev);
 extern void subsys_set_crash_status(struct subsys_device *dev, bool crashed);
 extern bool subsys_get_crash_status(struct subsys_device *dev);
 
-extern void subsys_save_reason(char *reason); // ASUS_BSP+ "save SSR reason"
-
 #else
-// ASUS_BSP+++ "save SSR reason"
-static inline void subsys_save_reason(char *reason)
-{
-	return;
-}
-// ASUS_BSP--- "save SSR reason"
+
 static inline int subsys_get_restart_level(struct subsys_device *dev)
 {
 	return 0;

@@ -50,8 +50,6 @@ void mydp_dymSSC(const char *msg, int index){
 
 //ASUS BSP Wei ---
 
-extern ktime_t wakeup_starttime;
-extern bool measure_pad_wakeup_time;
 static int pad_resume_time_mask = 0;
 module_param_named(debug_mask, pad_resume_time_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -2060,7 +2058,8 @@ unchar sp_tx_lt_pre_config(void)
 		sp_write_reg(TX_P0, SP_TX_SYS_CTRL2_REG, c);
 		sp_read_reg(TX_P0, SP_TX_SYS_CTRL2_REG, &c);
 
-		if (c & CHA_STA) {			DEV_ERR("Stream clock not stable!\n");
+		if (c & CHA_STA) {
+			DEV_ERR("Stream clock not stable!\n");
 			return 1;
 		}
 
@@ -2068,7 +2067,8 @@ unchar sp_tx_lt_pre_config(void)
 		sp_write_reg(TX_P0, SP_TX_SYS_CTRL3_REG, c);
 		sp_read_reg(TX_P0, SP_TX_SYS_CTRL3_REG, &c);
 
-		if (!(c & STRM_VALID)) {			DEV_ERR("video stream not valid!\n");
+		if (!(c & STRM_VALID)) {
+			DEV_ERR("video stream not valid!\n");
 			return 1;
 		}
 
@@ -3630,20 +3630,7 @@ void sp_tx_set_sys_state(enum SP_TX_System_State ss)
 		break;
 	case STATE_PLAY_BACK:
 		sp_tx_system_state = STATE_PLAY_BACK;
-		DEV_NOTICE("STATE_PLAY_BACK");
-//ASUS BSP++ Vincent
-		if(measure_pad_wakeup_time){
-			rettime = ktime_get();
-			usecs64 = ktime_to_ns(ktime_sub(rettime, wakeup_starttime));
-			do_div(usecs64, NSEC_PER_USEC);
-			usecs = usecs64;					
-			measure_pad_wakeup_time = false;
-			if(pad_resume_time_mask || ((usecs / USEC_PER_MSEC) + 400 > 2500)){
-				printk("\n[PM]Pad MYDP ready after %ld ms\n", usecs / USEC_PER_MSEC);			
-				printk("[PM]Pad system-wakeup takes about %ld ms\n", (usecs / USEC_PER_MSEC) + 400);
-			}
-		}
-//ASUS BSP-- Vincent	
+		DEV_NOTICE("STATE_PLAY_BACK");	
 
 //ASUS BSP Wei +++
 #ifdef CONFIG_ASUS_HDMI

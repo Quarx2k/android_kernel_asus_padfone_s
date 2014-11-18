@@ -1659,7 +1659,6 @@ static int ssrestart_check(void)
 	DMUX_LOG_KERR("%s: modem timeout: BAM DMUX disabled for SSR\n",
 								__func__);
 	in_global_reset = 1;
-	subsys_save_reason("modem timeout: BAM DMUX disabled for SSR");
 	ret = subsystem_restart("modem");
 	if (ret == -ENODEV)
 		panic("modem subsystem restart failed\n");
