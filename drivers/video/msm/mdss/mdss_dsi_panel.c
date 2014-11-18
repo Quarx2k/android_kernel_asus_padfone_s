@@ -486,7 +486,11 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
     g_displayOn = true;
 
     //ASUS_BSP: Louis, enable wled after overlay or pan display case ++
+#ifdef CONFIG_SLIMPORT_ANX7808
     if ((g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) && g_padfone_state != 2) {
+#else
+    if ((g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1)) {
+#endif
         if (g_Recovery || g_Charger_mode)
             qpnp_wled_ctrl(1);
     }

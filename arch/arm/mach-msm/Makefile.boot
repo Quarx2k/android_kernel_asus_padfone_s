@@ -79,6 +79,7 @@ endif
 #ifdef ASUS_PF500KL_PROJECT
 	dtb-y += msm8974pro-ab-pm8941-pf500kl-er2_2.dtb
 	dtb-y += msm8974pro-ab-pm8941-pf500kl-er1.dtb
+	dtb-y += msm8974pro-ab-pm8941-pf500kl-pr.dtb
 	dtb-y += msm8974pro-ac-pm8941-pf500kl-er1.dtb
 	dtb-y += msm8974pro-ac-pm8941-pf500kl-er2_2.dtb
 #endif

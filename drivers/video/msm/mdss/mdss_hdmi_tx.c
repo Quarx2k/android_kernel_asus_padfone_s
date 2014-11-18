@@ -1488,7 +1488,9 @@ extern void qpnp_led_close_pad_led(void);
 static void hdmi_tx_microp_insert_work(struct work_struct * work){
          notify_microp_hdmi_insert();
 	 if (g_Pad_Bootup && !g_Android_Boot_Complete){ 
+#ifdef CONFIG_ASUS_HDMI
 	   	 wait_for_android_boot_complete();
+#endif
 		 qpnp_led_close_pad_led();
 	 }
 }
