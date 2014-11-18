@@ -158,6 +158,11 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	cmdreq.cmds = pcmds->cmds;
 	cmdreq.cmds_cnt = pcmds->cmd_cnt;
 	cmdreq.flags = CMD_REQ_COMMIT;
+
+	/*Panel ON/Off commands should be sent in DSI Low Power Mode*/
+	if (pcmds->link_state == DSI_LP_MODE)
+		cmdreq.flags  |= CMD_REQ_LP_MODE;
+
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
 
@@ -486,7 +491,11 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
     g_displayOn = true;
 
     //ASUS_BSP: Louis, enable wled after overlay or pan display case ++
+#ifdef CONFIG_ASUS_HDMI
     if ((g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) && g_padfone_state != 2) {
+#else
+    if ((g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1)) {
+#endif
         if (g_Recovery || g_Charger_mode)
             qpnp_wled_ctrl(1);
     }

@@ -174,10 +174,13 @@ static u32 igc_limited[IGC_LUT_ENTRIES] = {
 	GAMUT_T5_SIZE + GAMUT_T6_SIZE + GAMUT_T7_SIZE)
 
 #define MDSS_MDP_PA_SIZE		0xC
+#define MDSS_MDP_SIX_ZONE_SIZE		0xC
+#define MDSS_MDP_MEM_COL_SIZE		0x3C
 #define MDSS_MDP_GC_SIZE		0x28
 #define MDSS_MDP_PCC_SIZE		0xB8
 #define MDSS_MDP_GAMUT_SIZE		0x5C
-#define MDSS_MDP_IGC_DSPP_COLORS	0x3
+#define MDSS_MDP_IGC_DSPP_SIZE		0x28
+#define MDSS_MDP_IGC_SSPP_SIZE		0x88
 #define TOTAL_BLEND_STAGES		0x4
 
 #define PP_FLAGS_DIRTY_PA	0x1
@@ -399,7 +402,7 @@ static inline void pp_sts_set_split_bits(u32 *sts, u32 bits);
 
 static u32 last_sts, last_state;
 
-extern bool asus_padstation_exist_realtime(void); //ASUS_BSP: Louis+++
+//extern bool asus_padstation_exist_realtime(void); //ASUS_BSP: Louis+++
 
 int mdss_mdp_csc_setup_data(u32 block, u32 blk_idx, u32 tbl_idx,
 				   struct mdp_csc_cfg *data)
@@ -2266,11 +2269,11 @@ int mdss_mdp_limited_lut_igc_config(struct mdss_mdp_ctl *ctl)
 
 	config.len = IGC_LUT_ENTRIES;
 	//ASUS_BSP: Louis, "disable igc in pad mode for correct gamma curve 2.2" +++
-	if (asus_padstation_exist_realtime()) {
-		config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_DISABLE;
-	} else {
+	//if (asus_padstation_exist_realtime()) {
+	//	config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_DISABLE;
+	//} else {
 		config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
-	}
+	//}
 	//ASUS_BSP: Louis ---
 	config.block = (ctl->mfd->index) + MDP_LOGICAL_BLOCK_DISP_0;
 	config.c0_c1_data = igc_limited;
@@ -2383,7 +2386,7 @@ static void pp_update_gc_one_lut(char __iomem *addr,
 {
 	int i, start_idx, idx;
 
-	start_idx = (readl_relaxed(addr) >> 16) & 0xF;
+	start_idx = ((readl_relaxed(addr) >> 16) & 0xF) + 1;
 	for (i = start_idx; i < GC_LUT_SEGMENTS; i++) {
 		idx = min((uint8_t)i, (uint8_t)(num_stages-1));
 		writel_relaxed(lut_data[idx].x_start, addr);
@@ -2393,7 +2396,7 @@ static void pp_update_gc_one_lut(char __iomem *addr,
 		writel_relaxed(lut_data[idx].x_start, addr);
 	}
 	addr += 4;
-	start_idx = (readl_relaxed(addr) >> 16) & 0xF;
+	start_idx = ((readl_relaxed(addr) >> 16) & 0xF) + 1;
 	for (i = start_idx; i < GC_LUT_SEGMENTS; i++) {
 		idx = min((uint8_t)i, (uint8_t)(num_stages-1));
 		writel_relaxed(lut_data[idx].slope, addr);
@@ -2403,7 +2406,7 @@ static void pp_update_gc_one_lut(char __iomem *addr,
 		writel_relaxed(lut_data[idx].slope, addr);
 	}
 	addr += 4;
-	start_idx = (readl_relaxed(addr) >> 16) & 0xF;
+	start_idx = ((readl_relaxed(addr) >> 16) & 0xF) + 1;
 	for (i = start_idx; i < GC_LUT_SEGMENTS; i++) {
 		idx = min((uint8_t)i, (uint8_t)(num_stages-1));
 		writel_relaxed(lut_data[idx].offset, addr);
@@ -2554,15 +2557,17 @@ int mdss_mdp_argc_config(struct mdp_pgc_lut_data *config,
 		argc_addr = mdss_mdp_get_mixer_addr_off(dspp_num) +
 			MDSS_MDP_REG_LM_GC_LUT_BASE;
 		pgc_ptr = &mdss_pp_res->argc_disp_cfg[disp_num];
-		mdss_pp_res->pp_disp_flags[disp_num] |=
-			PP_FLAGS_DIRTY_ARGC;
+		if (config->flags & MDP_PP_OPS_WRITE)
+			mdss_pp_res->pp_disp_flags[disp_num] |=
+				PP_FLAGS_DIRTY_ARGC;
 		break;
 	case MDSS_PP_DSPP_CFG:
 		argc_addr = mdss_mdp_get_dspp_addr_off(dspp_num) +
 					MDSS_MDP_REG_DSPP_GC_BASE;
 		pgc_ptr = &mdss_pp_res->pgc_disp_cfg[disp_num];
-		mdss_pp_res->pp_disp_flags[disp_num] |=
-			PP_FLAGS_DIRTY_PGC;
+		if (config->flags & MDP_PP_OPS_WRITE)
+			mdss_pp_res->pp_disp_flags[disp_num] |=
+				PP_FLAGS_DIRTY_PGC;
 		break;
 	default:
 		goto argc_config_exit;
@@ -3823,7 +3828,6 @@ int mdss_mdp_ad_config(struct msm_fb_data_type *mfd,
 			struct mdss_ad_init_cfg *init_cfg)
 {
 	struct mdss_ad_info *ad;
-	struct mdss_mdp_ctl *ctl;
 	struct msm_fb_data_type *bl_mfd;
 	int lin_ret = -1, inv_ret = -1, ret = 0;
 	u32 ratio_temp, shift = 0, last_ops;
@@ -3851,10 +3855,12 @@ int mdss_mdp_ad_config(struct msm_fb_data_type *mfd,
 		if (init_cfg->params.init.bl_lin_len == AD_BL_LIN_LEN) {
 			lin_ret = copy_from_user(&ad->bl_lin,
 				init_cfg->params.init.bl_lin,
-				AD_BL_LIN_LEN * sizeof(uint32_t));
+				init_cfg->params.init.bl_lin_len *
+				sizeof(uint32_t));
 			inv_ret = copy_from_user(&ad->bl_lin_inv,
 				init_cfg->params.init.bl_lin_inv,
-				AD_BL_LIN_LEN * sizeof(uint32_t));
+				init_cfg->params.init.bl_lin_len *
+				sizeof(uint32_t));
 			if (lin_ret || inv_ret)
 				ret = -ENOMEM;
 			ratio_temp =  mfd->panel_info->bl_max / AD_BL_LIN_LEN;
@@ -3863,13 +3869,14 @@ int mdss_mdp_ad_config(struct msm_fb_data_type *mfd,
 				shift++;
 			}
 			ad->bl_bright_shift = shift;
-		} else if (init_cfg->params.init.bl_lin_len) {
+		} else {
 			ret = -EINVAL;
 		}
-		if (!lin_ret && !inv_ret)
+		if (ret) {
+			ad->state &= ~PP_AD_STATE_BL_LIN;
+			goto ad_config_exit;
+		} else
 			ad->state |= PP_AD_STATE_BL_LIN;
-		else
-			ad->state &= !PP_AD_STATE_BL_LIN;
 
 		ad->sts |= PP_AD_STS_DIRTY_INIT;
 	} else if (init_cfg->ops & MDP_PP_AD_CFG) {
@@ -3911,8 +3918,8 @@ int mdss_mdp_ad_config(struct msm_fb_data_type *mfd,
 		ad->mfd = mfd;
 		ad->bl_mfd = bl_mfd;
 	}
+ad_config_exit:
 	mutex_unlock(&ad->lock);
-	ctl = mfd_to_ctl(mfd);
 	return ret;
 }
 
@@ -4006,7 +4013,7 @@ error:
 			mutex_unlock(&ad->lock);
 		}
 		if (wait) {
-			ret = wait_for_completion_interruptible_timeout(
+			ret = wait_for_completion_timeout(
 					&ad->comp, HIST_WAIT_TIMEOUT(1));
 			if (ret == 0)
 				ret = -ETIMEDOUT;
@@ -4629,6 +4636,14 @@ static int is_valid_calib_dspp_addr(char __iomem *ptr)
 		} else if ((ptr == base + MDSS_MDP_REG_DSPP_DITHER_DEPTH)) {
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
+		/* Six zone and mem color */
+		} else if (mdss_res->mdp_rev >= MDSS_MDP_HW_REV_103 &&
+			(ptr >= base + MDSS_MDP_REG_DSPP_SIX_ZONE_BASE) &&
+			(ptr <= base + MDSS_MDP_REG_DSPP_SIX_ZONE_BASE +
+					MDSS_MDP_SIX_ZONE_SIZE +
+					MDSS_MDP_MEM_COL_SIZE)) {
+			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
+			break;
 		}
 	}
 
@@ -4669,10 +4684,11 @@ static int is_valid_calib_vig_addr(char __iomem *ptr)
 						MDSS_MDP_PA_SIZE)) {
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
-		/* IGC range */
-		} else if ((ptr >= base + MDSS_MDP_REG_IGC_VIG_BASE) &&
-				(ptr <= base + MDSS_MDP_REG_IGC_VIG_BASE +
-						MDSS_MDP_GC_SIZE)) {
+		/* Mem color range */
+		} else if (mdss_res->mdp_rev >= MDSS_MDP_HW_REV_103 &&
+			(ptr >= base + MDSS_MDP_REG_VIG_MEM_COL_BASE) &&
+				(ptr <= base + MDSS_MDP_REG_VIG_MEM_COL_BASE +
+						MDSS_MDP_MEM_COL_SIZE)) {
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
 		}
@@ -4703,12 +4719,6 @@ static int is_valid_calib_rgb_addr(char __iomem *ptr)
 		} else if (ptr == base + MDSS_MDP_REG_SSPP_SRC_OP_MODE) {
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
-		/* IGC range */
-		} else if ((ptr >= base + MDSS_MDP_REG_IGC_RGB_BASE) &&
-				(ptr <= base + MDSS_MDP_REG_IGC_RGB_BASE +
-						MDSS_MDP_GC_SIZE)) {
-			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
-			break;
 		}
 	}
 
@@ -4735,12 +4745,6 @@ static int is_valid_calib_dma_addr(char __iomem *ptr)
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
 		} else if (ptr == base + MDSS_MDP_REG_SSPP_SRC_OP_MODE) {
-			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
-			break;
-		/* IGC range */
-		} else if ((ptr >= base + MDSS_MDP_REG_IGC_DMA_BASE) &&
-				(ptr <= base + MDSS_MDP_REG_IGC_DMA_BASE +
-						MDSS_MDP_GC_SIZE)) {
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
 		}
@@ -4809,9 +4813,15 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 	} else if (ptr == (mdss_res->mdp_base + MDSS_MDP_REG_HW_VERSION) ||
 	    ptr == (mdss_res->mdp_base + MDSS_MDP_REG_DISP_INTF_SEL)) {
 		ret = MDP_PP_OPS_READ;
+	/* IGC DSPP range */
 	} else if (ptr >= (mdss_res->mdp_base + MDSS_MDP_REG_IGC_DSPP_BASE) &&
-		    ptr < (mdss_res->mdp_base + MDSS_MDP_REG_IGC_DSPP_BASE +
-						MDSS_MDP_IGC_DSPP_COLORS)) {
+		    ptr <= (mdss_res->mdp_base + MDSS_MDP_REG_IGC_DSPP_BASE +
+						MDSS_MDP_IGC_DSPP_SIZE)) {
+		ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
+	/* IGC SSPP range */
+	} else if (ptr >= (mdss_res->mdp_base + MDSS_MDP_REG_IGC_VIG_BASE) &&
+		    ptr <= (mdss_res->mdp_base + MDSS_MDP_REG_IGC_VIG_BASE +
+						MDSS_MDP_IGC_SSPP_SIZE)) {
 		ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 	} else if (ptr >= dspp_base && ptr < (dspp_base +
 		(mdss_res->nmixers_intf * MDSS_MDP_DSPP_ADDRESS_OFFSET))) {

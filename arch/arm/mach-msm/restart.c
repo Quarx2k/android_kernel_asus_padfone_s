@@ -116,6 +116,9 @@ static void enable_emergency_dload_mode(void)
 				emergency_dload_mode_addr +
 				(2 * sizeof(unsigned int)));
 
+		/* Need disable the pmic wdt, then the emergency dload mode
+		 * will not auto reset. */
+		qpnp_pon_wd_config(0);
 		mb();
 	}
 }

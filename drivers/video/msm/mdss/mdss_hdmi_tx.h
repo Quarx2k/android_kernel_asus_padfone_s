@@ -16,17 +16,6 @@
 #include <linux/switch.h>
 #include "mdss_hdmi_util.h"
 
-//ASUS_BSP: joe1_++: for Pad detection
-#define ASUS_FORCE_HDMI_P06_LOW     0
-#define ASUS_FORCE_HDMI_P06_HIGH    0
-#define ASUS_P06_STATUS_GPIO        75
-enum {
-    ASUS_P06_NONE = 0,
-    ASUS_P06_LOW,
-    ASUS_P06_HIGH,
-    ASUS_HDMI_DEBUG
-};
-//ASUS_BSP: joe1_--: for Pad detection
 enum hdmi_tx_io_type {
 	HDMI_TX_CORE_IO,
 	HDMI_TX_PHY_IO,
@@ -38,9 +27,8 @@ enum hdmi_tx_power_module_type {
 	HDMI_TX_HPD_PM,
 	HDMI_TX_DDC_PM,
 	HDMI_TX_CORE_PM,
-//	HDMI_TX_CEC_PM, //+++ ASUS BSP Bernard
-	HDMI_TX_MAX_PM,
-	HDMI_TX_CEC_PM //+++ ASUS BSP Bernard
+	HDMI_TX_CEC_PM,
+	HDMI_TX_MAX_PM
 };
 
 /* Data filled from device tree */
@@ -66,13 +54,11 @@ struct hdmi_tx_ctrl {
 	struct hdmi_audio audio_data;
 
 	struct mutex mutex;
-	struct mutex power_mutex;
 	struct mutex lut_lock;
 	struct kobject *kobj;
 	struct switch_dev sdev;
 	struct switch_dev audio_sdev;
 	struct workqueue_struct *workq;
-	struct workqueue_struct *micropWorkq;
 	spinlock_t hpd_state_lock;
 
 	uint32_t video_resolution;
@@ -85,7 +71,6 @@ struct hdmi_tx_ctrl {
 	u32 hpd_feature_on;
 	u32 hpd_initialized;
 	u32 vote_hdmi_core_on;
-	struct wake_lock hpd_wake_lock;  //ASUS BSP Wei+++
 	u8  timing_gen_on;
 	u32 mhl_max_pclk;
 	u8  mhl_hpd_on;
@@ -93,9 +78,7 @@ struct hdmi_tx_ctrl {
 	struct work_struct hpd_int_work;
 
 	struct work_struct power_off_work;
-	struct work_struct hpd_recheck_work;  //ASUS BSP wei +++
-	struct work_struct microp_hdmi_work;  //ASUS BSP wei +++
-	int ddc_power ; //ASUS BSP wei +++
+
 	bool hdcp_feature_on;
 	u32 present_hdcp;
 

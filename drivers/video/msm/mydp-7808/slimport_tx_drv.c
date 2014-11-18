@@ -3590,9 +3590,11 @@ extern int g_isMyDP_poweron; //ASUS BSP wei +++
 
 void sp_tx_set_sys_state(enum SP_TX_System_State ss)
 {
+#ifdef CONFIG_ASUS_HDMI
 	ktime_t rettime;
 	u64 usecs64;
 	int usecs;
+#endif
 	DEV_NOTICE("SP_TX To System State: ");
 
 	switch (ss) {

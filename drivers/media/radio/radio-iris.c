@@ -3821,11 +3821,6 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 						   " %d\n", retval);
 					radio->mode = FM_RECV;
 					goto END;
-				} else {
-					printk("Disable FM OK\n");
-					//+++Alpha:"create proc mode file to monitor FM enable/disable status"+++
-					FMStatus = 0;
-					//---Alpha:"create proc mode file to monitor FM enable/disable status"---
 				}
 				break;
 			case FM_TRANS:

@@ -713,7 +713,9 @@ static int anx7808_suspend(struct i2c_client *client, pm_message_t mesg)
 			ASUS_DEV_WARN("resume_trigger = 1 \n");
 			resume_trigger=1;
 	}
+#ifdef CONFIG_ASUS_HDMI
 	measure_pad_plugin_time=0;
+#endif
 	ASUS_DEV_WARN("anx7808_suspend (not implement) ---\n");	
 	
 	return 0;
@@ -1010,7 +1012,7 @@ extern bool g_Android_Boot_Complete;
 //Mickey---
 #endif
 extern void MyDP_notify_vibrator_padInsert(void);
-extern int pad_insert;
+//extern int pad_insert;
 extern  void set_vib_enable(int value);
 static void slimport_cable_plug_proc(struct anx7808_data *anx7808)
 {
@@ -1681,10 +1683,10 @@ static irqreturn_t anx7808_cbl_det_isr(int irq, void *data)
        		wake_lock(&anx7808->slimport_lock);
 		DEV_NOTICE("%s : detect cable insertion\n", __func__);
 			queue_delayed_work(anx7808->workqueue, &anx7808->work, 0);
-		if(pad_insert){
-			schedule_work(&anx7808->vibratorWork);
-			pad_insert=0;
-		}
+		//if(pad_insert){
+		//	schedule_work(&anx7808->vibratorWork);
+		//	pad_insert=0;
+		//}
 	
 	} else {
 		DEV_NOTICE("%s : detect cable removal\n", __func__);
