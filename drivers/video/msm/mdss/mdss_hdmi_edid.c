@@ -149,6 +149,10 @@ static struct hdmi_edid_video_mode_property_type
 	/* All 1024 H Active */
 	{HDMI_VFRMT_1024x768p60_4_3, 1024, 768, false, 1344, 320, 806, 38,
 	 48363, 60004, 65000, 60000, false},
+//ASUS_BSP: joe1_++: support resolution 1920X1200
+	 {HDMI_VFRMT_1920x1200p60_16_10, 1920, 1200, false, 2000, 80, 1235, 35,
+	 74000, 60000, 148500, 60000, false},
+//ASUS_BSP: joe1_--: support resolution 1920X1200
 
 	/* All 1440 H Active */
 	{HDMI_VFRMT_1440x576i50_4_3, 1440, 576, true,  1728, 288, 625, 24,
@@ -404,10 +408,16 @@ static struct attribute *hdmi_edid_fs_attrs[] = {
 static struct attribute_group hdmi_edid_fs_attrs_group = {
 	.attrs = hdmi_edid_fs_attrs,
 };
-
+#ifdef CONFIG_SLIMPORT_ANX7808
+extern int slimport_read_edid_block(int block,uint8_t *edit_buf); //ASUS_BSP: joe1_++: read EDID via myDP
+#endif
 static int hdmi_edid_read_block(struct hdmi_edid_ctrl *edid_ctrl, int block,
 	u8 *edid_buf)
 {
+//ASUS_BSP: joe1_++: read EDID via myDP
+#ifdef CONFIG_SLIMPORT_ANX7808
+	int  status;
+#else
 	const u8 *b = NULL;
 	u32 ndx, check_sum, print_len;
 	int block_size;
@@ -415,12 +425,18 @@ static int hdmi_edid_read_block(struct hdmi_edid_ctrl *edid_ctrl, int block,
 	int retry_cnt = 0;
 	struct hdmi_tx_ddc_data ddc_data;
 	b = edid_buf;
+#endif
+//ASUS_BSP: joe1_--: read EDID via myDP
 
 	if (!edid_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
 		return -EINVAL;
 	}
-
+//ASUS_BSP: joe1_++: read EDID via myDP
+#ifdef CONFIG_SLIMPORT_ANX7808
+	status=slimport_read_edid_block(block,edid_buf);
+#else
+//ASUS_BSP: joe1_--: read EDID via myDP
 read_retry:
 	block_size = 0x80;
 	status = 0;
@@ -484,6 +500,7 @@ read_retry:
 			b[ndx+0], b[ndx+1], b[ndx+2], b[ndx+3]);
 
 error:
+#endif //ASUS_BSP: joe1_++: read EDID via myDP
 	return status;
 } /* hdmi_edid_read_block */
 
@@ -880,6 +897,62 @@ static void hdmi_edid_detail_desc(const u8 *data_buf, u32 *disp_mode)
 		DEV_INFO("%s: *no mode* found\n", __func__);
 } /* hdmi_edid_detail_desc */
 
+//+++ ASUS BSP Bernard, for selecting BW
+#ifdef CONFIG_SLIMPORT_ANX7808
+extern bool myDP_VGA_Cable;
+extern unchar sp_get_link_bw(void);
+
+void limit_supported_video_format(u32 *video_format)
+{
+	unchar link_bw=0;
+	if (myDP_VGA_Cable) {
+		if(*video_format != HDMI_VFRMT_640x480p60_4_3)
+			*video_format = HDMI_VFRMT_640x480p60_4_3;
+	}
+	else {
+		link_bw = sp_get_link_bw();
+//		printk("%s: slimport link bandwidth= %.2x\n", __func__, link_bw);
+		switch(link_bw) {
+		case 0x0a:
+			if ((*video_format == HDMI_VFRMT_1920x1080p60_16_9) ||
+				(*video_format == HDMI_VFRMT_2880x480p60_4_3)||
+				(*video_format == HDMI_VFRMT_2880x480p60_16_9) ||
+				(*video_format == HDMI_VFRMT_1280x720p120_16_9))
+
+				*video_format = HDMI_VFRMT_1280x720p60_16_9;
+			else if((*video_format == HDMI_VFRMT_1920x1080p50_16_9) ||
+				(*video_format == HDMI_VFRMT_2880x576p50_4_3)||
+				(*video_format == HDMI_VFRMT_2880x576p50_16_9) ||
+				(*video_format == HDMI_VFRMT_1280x720p100_16_9))
+
+				*video_format = HDMI_VFRMT_1280x720p50_16_9;
+			else if (*video_format == HDMI_VFRMT_1920x1080i100_16_9)
+				*video_format = HDMI_VFRMT_1920x1080i50_16_9;
+
+			else if (*video_format == HDMI_VFRMT_1920x1080i120_16_9)
+				*video_format = HDMI_VFRMT_1920x1080i60_16_9;
+			break;
+		case 0x06:
+			if(*video_format != HDMI_VFRMT_640x480p60_4_3)
+				*video_format = HDMI_VFRMT_640x480p60_4_3;
+			break;
+		case 0x14:
+		default:
+			if ((*video_format == HDMI_VFRMT_3840x2160p30_16_9) ||
+				(*video_format == HDMI_VFRMT_3840x2160p25_16_9)||
+				(*video_format == HDMI_VFRMT_3840x2160p24_16_9) ||
+				(*video_format == HDMI_VFRMT_4096x2160p24_16_9)||
+				(*video_format == HDMI_VFRMT_2560x1600p60_16_9))
+
+				*video_format = HDMI_VFRMT_1920x1080p60_16_9;
+			//*video_format = HDMI_VFRMT_1280x720p60_16_9;
+			break;
+		}
+	}
+}
+#endif
+//--- ASUS BSP Bernard, for selecting BW
+
 static void hdmi_edid_add_sink_3d_format(struct hdmi_edid_sink_data *sink_data,
 	u32 video_format, u32 video_3d_format)
 {
@@ -914,7 +987,14 @@ static void hdmi_edid_add_sink_video_format(
 			msm_hdmi_mode_2string(video_format));
 		return;
 	}
-
+//+++ ASUS BSP Bernard, for selecting BW & format
+	#ifdef CONFIG_SLIMPORT_ANX7808
+		if(supported){
+			limit_supported_video_format(&video_format);
+		}
+	#endif
+//--- ASUS BSP Bernard, for selecting BW & format
+	
 	DEV_DBG("%s: EDID: format: %d [%s], %s\n", __func__,
 		video_format, msm_hdmi_mode_2string(video_format),
 		supported ? "Supported" : "Not-Supported");
@@ -1174,7 +1254,8 @@ static void hdmi_edid_get_display_mode(struct hdmi_edid_ctrl *edid_ctrl,
 
 			if (video_format <= HDMI_VFRMT_1920x1080p60_16_9 ||
 				video_format == HDMI_VFRMT_2880x480p60_4_3 ||
-				video_format == HDMI_VFRMT_2880x480p60_16_9)
+				video_format == HDMI_VFRMT_2880x480p60_16_9 ||
+				video_format == HDMI_VFRMT_1920x1200p60_16_10) //ASUS_BSP: joe1_++: support resolution 1920X1200
 				has60hz_mode = true;
 
 			if ((video_format >= HDMI_VFRMT_720x576p50_4_3 &&
@@ -1394,6 +1475,10 @@ static void hdmi_edid_get_display_mode(struct hdmi_edid_ctrl *edid_ctrl,
 			HDMI_VFRMT_640x480p60_4_3);
 } /* hdmi_edid_get_display_mode */
 
+//ASUS_BSP: joe1_++: don't read edid in pad mode
+extern bool asus_padstation_exist(void);
+//ASUS_BSP: joe1_--: don't read edid in pad mode
+
 int hdmi_edid_read(void *input)
 {
 	/* EDID_BLOCK_SIZE[0x80] Each page size in the EDID ROM */
@@ -1410,7 +1495,14 @@ int hdmi_edid_read(void *input)
 		DEV_ERR("%s: invalid input\n", __func__);
 		return -EINVAL;
 	}
+//ASUS_BSP: joe1_++: don't read edid in pad mode
+	if ( asus_padstation_exist() )
+	{
+		DEV_INFO("%s: It's pad mode. Do not read edid.\n", __func__);
 
+		goto error;
+	}
+//ASUS_BSP: joe1_--: don't read edid in pad mode
 	edid_buf = edid_ctrl->edid_buf;
 
 	edid_ctrl->pt_scan_info = 0;
@@ -1529,7 +1621,8 @@ int hdmi_edid_read(void *input)
 
 error:
 	edid_ctrl->sink_data.num_of_elements = 1;
-	edid_ctrl->sink_data.disp_mode_list[0] = edid_ctrl->video_resolution;
+	edid_ctrl->sink_data.disp_mode_list[0] = HDMI_VFRMT_1920x1200p60_16_10; //edid_ctrl->video_resolution; //ASUS_BSP: joe1_++: clear edid while hdmi plug out
+	edid_ctrl->sink_mode = true; //ASUS_BSP: joe1_++: It's always not DVI mode in Pad mode
 
 	return status;
 } /* hdmi_edid_read */

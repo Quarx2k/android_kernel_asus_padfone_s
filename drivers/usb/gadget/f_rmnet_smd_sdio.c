@@ -1775,7 +1775,9 @@ static void rmnet_mux_debugfs_init(struct rmnet_mux_dev *dev)
 
 static void rmnet_mux_debugfs_remove(void)
 {
+#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(dent_rmnet_mux);
+#endif
 }
 #else
 static inline void rmnet_mux_debugfs_init(struct rmnet_mux_dev *dev) {}

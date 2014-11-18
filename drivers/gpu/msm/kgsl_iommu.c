@@ -72,6 +72,11 @@ static struct kgsl_iommu_register_list kgsl_iommuv1_reg[KGSL_IOMMU_REG_MAX] = {
 
 static struct iommu_access_ops *iommu_access_ops;
 
+static int kgsl_iommu_default_setstate(struct kgsl_mmu *mmu,
+		uint32_t flags);
+static phys_addr_t
+kgsl_iommu_get_current_ptbase(struct kgsl_mmu *mmu);
+
 static void _iommu_lock(struct kgsl_iommu const *iommu)
 {
 	if (iommu_access_ops && iommu_access_ops->iommu_lock_acquire)
@@ -634,16 +639,17 @@ static int kgsl_iommu_pt_equal(struct kgsl_mmu *mmu,
 				phys_addr_t pt_base)
 {
 	struct kgsl_iommu_pt *iommu_pt = pt ? pt->priv : NULL;
-	phys_addr_t domain_ptbase = iommu_pt ?
-				iommu_get_pt_base_addr(iommu_pt->domain) : 0;
+	phys_addr_t domain_ptbase;
 
-	/* Only compare the valid address bits of the pt_base */
-	domain_ptbase &= KGSL_IOMMU_CTX_TTBR0_ADDR_MASK;
+	if (iommu_pt == NULL)
+        return 0;
+
+    domain_ptbase = iommu_get_pt_base_addr(iommu_pt->domain)
+        & KGSL_IOMMU_CTX_TTBR0_ADDR_MASK;
 
 	pt_base &= KGSL_IOMMU_CTX_TTBR0_ADDR_MASK;
 
-	return domain_ptbase && pt_base &&
-		(domain_ptbase == pt_base);
+	return (domain_ptbase == pt_base);
 }
 
 /*
@@ -1734,12 +1740,40 @@ done:
 	return status;
 }
 
+static void kgsl_iommu_flush_tlb_pt_current(struct kgsl_pagetable *pt)
+{
+	int lock_taken = 0;
+	struct kgsl_device *device = pt->mmu->device;
+	struct kgsl_iommu *iommu = pt->mmu->priv;
+
+	/*
+	 * Check to see if the current thread already holds the device mutex.
+	 * If it does not, then take the device mutex which is required for
+	 * flushing the tlb
+	 */
+	if (kgsl_mutex_lock(&device->mutex, &device->mutex_owner))
+		lock_taken = 1;
+
+	/*
+	 * Flush the tlb only if the iommu device is attached and the pagetable
+	 * hasn't been switched yet
+	 */
+	if (kgsl_mmu_is_perprocess(pt->mmu) &&
+		iommu->iommu_units[0].dev[KGSL_IOMMU_CONTEXT_USER].attached &&
+		kgsl_iommu_pt_equal(pt->mmu, pt,
+		kgsl_iommu_get_current_ptbase(pt->mmu)))
+		kgsl_iommu_default_setstate(pt->mmu, KGSL_MMUFLAGS_TLBFLUSH);
+
+	if (lock_taken)
+		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+}
+
 static int
 kgsl_iommu_unmap(struct kgsl_pagetable *pt,
 		struct kgsl_memdesc *memdesc,
 		unsigned int *tlb_flags)
 {
-	int ret;
+	int ret = 0;
 	unsigned int range = memdesc->size;
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
 
@@ -1756,18 +1790,15 @@ kgsl_iommu_unmap(struct kgsl_pagetable *pt,
 		range += PAGE_SIZE;
 
 	ret = iommu_unmap_range(iommu_pt->domain, gpuaddr, range);
-	if (ret)
+	if (ret) {
 		KGSL_CORE_ERR("iommu_unmap_range(%p, %x, %d) failed "
 			"with err: %d\n", iommu_pt->domain, gpuaddr,
 			range, ret);
+		return ret;
+	}
 
-	/*
-	 * Flushing only required if per process pagetables are used. With
-	 * global case, flushing will happen inside iommu_map function
-	 */
-	if (!ret && kgsl_mmu_is_perprocess(pt->mmu))
-		*tlb_flags = UINT_MAX;
-	return 0;
+	kgsl_iommu_flush_tlb_pt_current(pt);
+	return ret;
 }
 
 static int
@@ -1807,6 +1838,25 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 					  size);
 		}
 	}
+
+	/*
+	 *  IOMMU BFBs pre-fetch data beyond what is being used by the core.
+	 *  This can include both allocated pages and un-allocated pages.
+	 *  If an un-allocated page is cached, and later used (if it has been
+	 *  newly dynamically allocated by SW) the SMMU HW should automatically
+	 *  re-fetch the pages from memory (rather than using the cached
+	 *  un-allocated page). This logic is known as the re-fetch logic.
+	 *  In current chips we suspect this re-fetch logic is broken,
+	 *  it can result in bad translations which can either cause downstream
+	 *  bus errors, or upstream cores being hung (because of garbage data
+	 *  being read) -> causing TLB sync stuck issues. As a result SW must
+	 *  implement the invalidate+map.
+	 *
+	 *  FUTURE TODO: This invalidate on map requirement will be removed
+	 *  in future chips. Check and remove.
+	 */
+	kgsl_iommu_flush_tlb_pt_current(pt);
+
 	return ret;
 }
 

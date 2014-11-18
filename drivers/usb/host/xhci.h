@@ -1223,7 +1223,10 @@ union xhci_trb {
  * since the command ring is 64-byte aligned.
  * It must also be greater than 16.
  */
-#define TRBS_PER_SEGMENT	64
+ //ASUS_BSP+++ BennyCheng "fix ring expansion failure when transferring with iso"
+//#define TRBS_PER_SEGMENT	64
+#define TRBS_PER_SEGMENT	256
+//ASUS_BSP--- BennyCheng "fix ring expansion failure when transferring with iso"
 /* Allow two commands + a link TRB, along with any reserved command TRBs */
 #define MAX_RSVD_CMD_TRBS	(TRBS_PER_SEGMENT - 3)
 #define SEGMENT_SIZE		(TRBS_PER_SEGMENT*16)

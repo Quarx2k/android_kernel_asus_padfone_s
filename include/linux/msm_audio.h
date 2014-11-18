@@ -67,6 +67,27 @@
 
 #define AUDIO_SET_SRS_TRUMEDIA_PARAM _IOW(AUDIO_IOCTL_MAGIC, 43, unsigned)
 
+//Bruno++
+#define AUDIO_SET_SKYPE_STATE       _IOW(AUDIO_IOCTL_MAGIC, 72, unsigned)
+#define AUDIO_GET_SKYPE_STATE       _IOR(AUDIO_IOCTL_MAGIC, 73, unsigned)
+#define AUDIO_SET_RINGBACKTONE_STATE       _IOW(AUDIO_IOCTL_MAGIC, 66, unsigned)
+#define AUDIO_GET_RINGBACKTONE_STATE       _IOR(AUDIO_IOCTL_MAGIC, 67, unsigned)
+
+//ASUS Tim++
+#define AUDIO_SET_change_device     _IOW(AUDIO_IOCTL_MAGIC, 68, unsigned)
+#define AUDIO_GET_change_device     _IOR(AUDIO_IOCTL_MAGIC, 69, unsigned)
+#define AUDIO_SET_Garmin_STATE      _IOW(AUDIO_IOCTL_MAGIC, 70, unsigned)
+#define AUDIO_GET_Garmin_STATE      _IOR(AUDIO_IOCTL_MAGIC, 71, unsigned)
+#define AUDIO_SET_HAC_mode          _IOW(AUDIO_IOCTL_MAGIC, 74, unsigned)
+#define AUDIO_GET_HAC_mode          _IOR(AUDIO_IOCTL_MAGIC, 75, unsigned)
+//ASUS Tim--
+
+#define AUDIO_SET_RINGTONE_STATE    _IOW(AUDIO_IOCTL_MAGIC, 76, unsigned)
+#define AUDIO_GET_RINGTONE_STATE    _IOR(AUDIO_IOCTL_MAGIC, 77, unsigned)
+#define AUDIO_SET_VR_STATE          _IOR(AUDIO_IOCTL_MAGIC, 78, unsigned)
+#define AUDIO_GET_VR_STATE          _IOR(AUDIO_IOCTL_MAGIC, 79, unsigned)
+//Bruno++
+
 /* Qualcomm extensions */
 #define AUDIO_SET_STREAM_CONFIG   _IOW(AUDIO_IOCTL_MAGIC, 80, \
 				struct msm_audio_stream_config)
@@ -96,6 +117,9 @@
 
 #define AUDIO_REGISTER_ION _IOW(AUDIO_IOCTL_MAGIC, 97, unsigned)
 #define AUDIO_DEREGISTER_ION _IOW(AUDIO_IOCTL_MAGIC, 98, unsigned)
+//Bruno++
+#define AUDIO_SET_INCALL_STATE      _IOW(AUDIO_IOCTL_MAGIC, 99, unsigned)
+//Bruno++
 
 #define	AUDIO_MAX_COMMON_IOCTL_NUM	100
 

@@ -64,6 +64,7 @@
 #include <linux/compiler.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
+#include <media/asus_cam_intf_type.h> //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 
 /*
  * Common stuff for both V4L1 and V4L2
@@ -680,6 +681,7 @@ struct v4l2_buffer {
 	__u32			length;
 	__u32			input;
 	__u32			reserved;
+	struct exif_cfg JpegExif;   //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 };
 
 /*  Flags for 'flags' field */
@@ -1906,6 +1908,8 @@ enum v4l2_mpeg_vidc_video_decoder_multi_stream {
 
 #define V4L2_CID_MPEG_VIDC_VIDEO_VP8_MIN_QP (V4L2_CID_MPEG_MSM_VIDC_BASE + 36)
 #define V4L2_CID_MPEG_VIDC_VIDEO_VP8_MAX_QP (V4L2_CID_MPEG_MSM_VIDC_BASE + 37)
+#define V4L2_CID_MPEG_VIDC_VIDEO_CONCEAL_COLOR \
+		(V4L2_CID_MPEG_MSM_VIDC_BASE + 38)
 
 /*  Camera class control IDs */
 #define V4L2_CID_CAMERA_CLASS_BASE 	(V4L2_CTRL_CLASS_CAMERA | 0x900)

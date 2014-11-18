@@ -891,7 +891,9 @@ static int msm_ispif_init(struct ispif_device *ispif,
 	if (ispif->ispif_state == ISPIF_POWER_UP) {
 		pr_err("%s: ispif already initted state = %d\n", __func__,
 			ispif->ispif_state);
-		rc = -EPERM;
+//ASUS_BSP+++ CR_365143 Randy_Change@asus.com.tw [2014/2/21] Modify Begin
+//		rc = -EPERM;
+//ASUS_BSP--- CR_365143 Randy_Change@asus.com.tw [2014/2/21] Modify End
 		return rc;
 	}
 
@@ -959,6 +961,9 @@ error_irq:
 	iounmap(ispif->base);
 
 end:
+//ASUS_BSP+++ CR_165143 Randy_Change@asus.com.tw [2014/2/21] Modify Begin
+	pr_err("%s: rc = %d\n", __func__,rc);
+//ASUS_BSP--- CR_165143 Randy_Change@asus.com.tw [2014/2/21] Modify End
 	return rc;
 }
 
@@ -984,6 +989,9 @@ static void msm_ispif_release(struct ispif_device *ispif)
 	iounmap(ispif->clk_mux_base);
 
 	ispif->ispif_state = ISPIF_POWER_DOWN;
+//ASUS_BSP+++ CR_365143 Randy_Change@asus.com.tw [2014/2/21] Modify Begin
+	pr_err("%s\n", __func__);
+//ASUS_BSP--- CR_365143 Randy_Change@asus.com.tw [2014/2/21] Modify End
 }
 
 static long msm_ispif_cmd(struct v4l2_subdev *sd, void *arg)

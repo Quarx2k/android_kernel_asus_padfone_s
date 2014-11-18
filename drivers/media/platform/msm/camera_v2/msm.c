@@ -29,6 +29,8 @@
 #include "msm.h"
 #include "msm_vb2.h"
 #include "msm_sd.h"
+#include <media/msmb_generic_buf_mgr.h>
+
 
 static struct v4l2_device *msm_v4l2_dev;
 static struct list_head    ordered_sd_list;
@@ -487,6 +489,7 @@ static void msm_remove_session_cmd_ack_q(struct msm_session *session)
 int msm_destroy_session(unsigned int session_id)
 {
 	struct msm_session *session;
+	struct v4l2_subdev *buf_mgr_subdev;
 
 	session = msm_queue_find(msm_session_q, struct msm_session,
 		list, __msm_queue_find_session, &session_id);
@@ -498,6 +501,12 @@ int msm_destroy_session(unsigned int session_id)
 	mutex_destroy(&session->lock);
 	msm_delete_entry(msm_session_q, struct msm_session,
 		list, session);
+	buf_mgr_subdev = msm_buf_mngr_get_subdev();
+	if (buf_mgr_subdev) {
+		v4l2_subdev_call(buf_mgr_subdev, core, ioctl,
+			MSM_SD_SHUTDOWN, NULL);
+	} else
+		pr_err("%s: Buff manger device node is NULL\n", __func__);
 
 	return 0;
 }
@@ -555,30 +564,36 @@ static long msm_private_ioctl(struct file *file, void *fh,
 	case MSM_CAM_V4L2_IOCTL_CMD_ACK: {
 		struct msm_command_ack *cmd_ack;
 		struct msm_command *ret_cmd;
+//ASUS_BSP +++ YM
+		struct msm_video_device *pvdev = video_drvdata(file);
+		if (atomic_read(&pvdev->opened) == 0) {
+			pr_err("[YM]%s: MSM_CAM_V4L2_IOCTL_CMD_ACK but camera closed\n",__func__);
+		} else {
+        		ret_cmd = kzalloc(sizeof(*ret_cmd), GFP_KERNEL);
+        		if (!ret_cmd) {
+        			rc = -ENOMEM;
+        			break;
+        		}
 
-		ret_cmd = kzalloc(sizeof(*ret_cmd), GFP_KERNEL);
-		if (!ret_cmd) {
-			rc = -ENOMEM;
-			break;
-		}
+        		cmd_ack = msm_queue_find(&session->command_ack_q,
+        			struct msm_command_ack, list,
+        			__msm_queue_find_command_ack_q,
+        			&stream_id);
+        		if (WARN_ON(!cmd_ack)) {
+        			kzfree(ret_cmd);
+        			rc = -EFAULT;
+        			break;
+        		}
 
-		cmd_ack = msm_queue_find(&session->command_ack_q,
-			struct msm_command_ack, list,
-			__msm_queue_find_command_ack_q,
-			&stream_id);
-		if (WARN_ON(!cmd_ack)) {
-			kzfree(ret_cmd);
-			rc = -EFAULT;
-			break;
-		}
-
-		spin_lock_irqsave(&(session->command_ack_q.lock),
-		   spin_flags);
-		ret_cmd->event = *(struct v4l2_event *)arg;
-		msm_enqueue(&cmd_ack->command_q, &ret_cmd->list);
-		wake_up(&cmd_ack->wait);
-		spin_unlock_irqrestore(&(session->command_ack_q.lock),
-		   spin_flags);
+        		spin_lock_irqsave(&(session->command_ack_q.lock),
+        		   spin_flags);
+        		ret_cmd->event = *(struct v4l2_event *)arg;
+        		msm_enqueue(&cmd_ack->command_q, &ret_cmd->list);
+        		wake_up(&cmd_ack->wait);
+        		spin_unlock_irqrestore(&(session->command_ack_q.lock),
+        		   spin_flags);
+        		}			
+//ASUS_BSP --- YM
 	}
 		break;
 
@@ -690,7 +705,7 @@ int msm_post_event(struct v4l2_event *event, int timeout)
 
 	if (list_empty_careful(&cmd_ack->command_q.list)) {
 		if (!rc) {
-			pr_err("%s: Timed out\n", __func__);
+			pr_err("%s: Timed out,event id=%d,event command=%d\n", __func__,event->id,event->u.data[0]);////ASUS_BSP PJ "[A91][Camera][NA][Fix] add msm_post_event timed out debug"
 			rc = -ETIMEDOUT;
 		}
 		if (rc < 0) {

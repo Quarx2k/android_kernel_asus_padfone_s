@@ -43,6 +43,8 @@ ssize_t led_trigger_store(struct device *dev, struct device_attribute *attr,
 	strncpy(trigger_name, buf, sizeof(trigger_name) - 1);
 	len = strlen(trigger_name);
 
+	printk("[LED] trigger_name : %s",trigger_name);
+
 	if (len && trigger_name[len - 1] == '\n')
 		trigger_name[len - 1] = '\0';
 

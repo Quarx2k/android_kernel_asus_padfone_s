@@ -35,6 +35,16 @@ static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
 	 */
 	xhci->quirks |= XHCI_BROKEN_MSI;
 
+        /*
+         * In some xhci controllers which follows xhci 1.0 spec gives a spurious
+         * success event after a short transfer. This quirk will ignore such
+         * spurious event. Hit this issue in synopsis xhci controllers with
+         * hci_version > 0.96
+         */
+
+        if (xhci->hci_version > 0x96)
+                xhci->quirks |= XHCI_SPURIOUS_SUCCESS;
+
 	if (!pdata)
 		return;
 

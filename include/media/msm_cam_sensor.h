@@ -93,6 +93,15 @@ enum msm_sensor_power_seq_gpio_t {
 	SENSOR_GPIO_VANA,
 	SENSOR_GPIO_VDIG,
 	SENSOR_GPIO_VAF,
+//ASUS_BSP +++ LiJen"[A86][Camera][NA][Others]Camera mini porting"	
+	SENSOR_GPIO_ISP_1P2,
+	SENSOR_GPIO_ISP_1P8,
+	SENSOR_GPIO_ISP_INT,
+	SENSOR_GPIO_ISP_SUSPEND,
+	SENSOR_GPIO_ISP_RESET,	
+	SENSOR_GPIO_VGA_MCLK,
+	SENSOR_GPIO_LED_ENT,
+//ASUS_BSP --- LiJen"[A86][Camera][NA][Others]Camera mini porting"
 	SENSOR_GPIO_MAX,
 };
 
@@ -104,6 +113,8 @@ enum msm_camera_vreg_name_t {
 	CAM_VREG_MAX,
 };
 
+//ASUS_BSP +++ Stimber "Add all sensor resolution modes"
+#if 0
 enum msm_sensor_resolution_t {
 	MSM_SENSOR_RES_FULL,
 	MSM_SENSOR_RES_QTR,
@@ -115,6 +126,23 @@ enum msm_sensor_resolution_t {
 	MSM_SENSOR_RES_7,
 	MSM_SENSOR_INVALID_RES,
 };
+#endif
+
+enum msm_sensor_resolution_t {
+  	MSM_SENSOR_RES_QTR,                     //MODE_1
+  	MSM_SENSOR_RES_4BIN,                    //MODE_2         //ASUS_BSP Stimber "Implement 4x4 binning resolution"
+	MSM_SENSOR_RES_FULL_HD,                 //MODE_3         //ASUS_BSP Stimber "Implement Full HD resolution"
+	MSM_SENSOR_RES_FULL,                    //MODE_4
+	MSM_SENSOR_RES_10M,                     //MODE_5         //ASUS_BSP Stimber "Implement 10M ZSL resolution"
+	MSM_SENSOR_RES_HYBRID,                  //MODE_6      	 //ASUS_BSP Stimber "Implement 6.35M Hybrid resolution"
+	MSM_SENSOR_RES_FULL_SINGLE_CAPTURE,     //MODE_7      	 //ASUS_BSP Stimber "Implement Full Single Capture mode"
+	MSM_SENSOR_RES_FULL_BURST_CAPTURE,	    //MODE_8    	 //ASUS_BSP Stimber "Implement Full Burst Capture mode"
+	MSM_SENSOR_RES_10M_BURST_CAPTURE,       //MODE_10   	 //ASUS_BSP Stimber "Implement 10M Burst Capture mode"
+	MSM_SENSOR_RES_3M_BURST_CAPTURE,        //MODE_11   	 //ASUS_BSP Stimber "Implement 3M Burst Capture mode"
+	MSM_SENSOR_INVALID_RES,
+};
+//ASUS_BSP --- Stimber "Add all sensor resolution modes"
+
 
 enum sensor_sub_module_t {
 	SUB_MODULE_SENSOR,
@@ -204,10 +232,14 @@ enum camera_vreg_type {
 	REG_GPIO,
 };
 
+//ASUS_BSP +++ LiJen"[A86][Camera][NA][Others]Camera mini porting"
 enum sensor_af_t {
+        SENSOR_AF_SCANNING,
 	SENSOR_AF_FOCUSSED,
 	SENSOR_AF_NOT_FOCUSSED,
+        SENSOR_AF_CANCEL
 };
+//ASUS_BSP --- LiJen"[A86][Camera][NA][Others]Camera mini porting"
 
 struct msm_sensor_power_setting {
 	enum msm_sensor_power_seq_type_t seq_type;
@@ -434,6 +466,9 @@ enum msm_sensor_cfg_type_t {
 	CFG_SET_WHITE_BALANCE,
 	CFG_SET_AUTOFOCUS,
 	CFG_CANCEL_AUTOFOCUS,
+//ASUS_BSP +++ LiJen"[A86][Camera][NA][Others]Camera mini porting"
+       CFG_SET_ASUS_ISP_SETTING, //ASUS_BSP Stimber "Add for hal-kernel ISP settings"
+//ASUS_BSP --- LiJen"[A86][Camera][NA][Others]Camera mini porting"
 };
 
 enum msm_actuator_cfg_type_t {
@@ -482,6 +517,7 @@ struct msm_actuator_move_params_t {
 	int8_t sign_dir;
 	int16_t dest_step_pos;
 	int32_t num_steps;
+	uint16_t curr_lens_pos;
 	struct damping_params_t *ringing_params;
 };
 

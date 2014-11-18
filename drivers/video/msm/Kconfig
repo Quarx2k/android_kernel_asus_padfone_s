@@ -1,6 +1,10 @@
 
 source "drivers/video/msm/vidc/Kconfig"
 
+#+++ ASUS BSP Bernard for mydp 7808
+source "drivers/video/msm/mydp-7808/Kconfig"
+#--- ASUS BSP Bernard for mydp 7808
+
 config FB_MSM
 	tristate "MSM Framebuffer support"
 	depends on FB && ARCH_MSM

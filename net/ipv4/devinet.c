@@ -66,6 +66,17 @@
 
 #include "fib_lookup.h"
 
+//ASUS_BSP+++ turn off firewall when tethering on and turn on firewall when tethering off
+extern struct completion listen_event;
+int if_ip_forward_on;
+int if_ip_forward_off;
+//ASUS_BSP ---
+
+//ASUS_BSP +++ Johnny "avoid stop SYN when booting"
+static int syn_ip_forward;
+module_param(syn_ip_forward, int, S_IRUGO | S_IWUSR);
+//ASUS_BSP ---
+
 static struct ipv4_devconf ipv4_devconf = {
 	.data = {
 		[IPV4_DEVCONF_ACCEPT_REDIRECTS - 1] = 1,
@@ -1548,6 +1559,19 @@ static int devinet_sysctl_forward(ctl_table *ctl, int write,
 			rt_cache_flush(net, 0);
 		}
 	}
+
+        //ASUS_BSP+++ turn off firewall when tethering on and turn on firewall when tethering off
+        if(write==1&&*(char *)buffer=='1'&&syn_ip_forward==1)
+                {
+                if_ip_forward_on=1;
+                complete(&listen_event);
+                }
+        if(write==1&&*(char *)buffer=='0'&&syn_ip_forward==0)
+                {
+                if_ip_forward_off=1;
+                complete(&listen_event);
+                }
+        //ASUS_BSP ---
 
 	return ret;
 }

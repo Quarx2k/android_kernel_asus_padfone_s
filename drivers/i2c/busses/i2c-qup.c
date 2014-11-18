@@ -85,11 +85,13 @@ enum {
 	QUP_MX_INPUT_DONE       = 1U << 11,
 };
 
-/* I2C mini core related values */
+/* QUP_CONFIG values and flags */
 enum {
 	I2C_MINI_CORE           = 2U << 8,
 	I2C_N_VAL               = 0xF,
-
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+	I2C_CORE_CLK_ON_EN      = BIT(13),
+// ASUS_BSP ---
 };
 
 /* Packing Unpacking words in FIFOs , and IO modes*/
@@ -129,6 +131,14 @@ enum {
 	I2C_CLK_FORCED_LOW_STATE	= 5,
 };
 
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+enum msm_i2c_state {
+	MSM_I2C_PM_ACTIVE,
+	MSM_I2C_PM_SUSPENDED,
+	MSM_I2C_SYS_SUSPENDING,
+	MSM_I2C_SYS_SUSPENDED,
+};
+// ASUS_BSP ---
 #define QUP_MAX_CLK_STATE_RETRIES	300
 #define DEFAULT_CLK_RATE		(19200000)
 #define I2C_STATUS_CLK_STATE		13
@@ -142,6 +152,19 @@ static struct gpiomux_setting recovery_config = {
 	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
+
+// ASUS_BSP +++ Peter_Lu "For I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+#include <linux/microp_api.h>
+#endif
+#define I2C_BLSP1_QUP5_BUS3			3
+#define I2C_BLSP1_QUP5_BUS6			6
+#define QUP_I2C_BUS_ARB_LOST			1U << 4
+// Force Pad I2C bus without suspend when long time without used
+#ifdef CONFIG_EEPROM_NUVOTON
+static bool I2C_BUS6_SUSPENDING = false;
+#endif
+// ASUS_BSP ---
 
 /**
  * qup_i2c_clk_path_vote: data to use bus scaling driver for clock path vote
@@ -184,8 +207,11 @@ struct qup_i2c_dev {
 	int                          in_blk_sz;
 	int                          wr_sz;
 	struct msm_i2c_platform_data *pdata;
-	int                          suspended;
-	int                          pwr_state;
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+	//int                          suspended;
+	//int                          pwr_state;
+	enum msm_i2c_state           pwr_state;
+// ASUS_BSP ---
 	struct mutex                 mlock;
 	void                         *complete;
 	int                          i2c_gpios[ARRAY_SIZE(i2c_rsrcs)];
@@ -223,8 +249,9 @@ qup_i2c_interrupt(int irq, void *devid)
 	uint32_t op_flgs = 0;
 	int err = 0;
 
-	if (pm_runtime_suspended(dev->dev))
+	if (pm_runtime_suspended(dev->dev)){
 		return IRQ_NONE;
+        }
 
 	status = readl_relaxed(dev->base + QUP_I2C_STATUS);
 	status1 = readl_relaxed(dev->base + QUP_ERROR_FLAGS);
@@ -269,8 +296,9 @@ qup_i2c_interrupt(int irq, void *devid)
 	}
 
 	if ((dev->num_irqs == 3) && (dev->msg->flags == I2C_M_RD)
-		&& (irq == dev->out_irq))
+		&& (irq == dev->out_irq)){
 		return IRQ_HANDLED;
+        }
 	if (op_flgs & QUP_OUT_SVC_FLAG) {
 		writel_relaxed(QUP_OUT_SVC_FLAG, dev->base + QUP_OPERATIONAL);
 		/* Ensure that service flag is acknowledged before ISR exits */
@@ -285,8 +313,9 @@ qup_i2c_interrupt(int irq, void *devid)
 			 * exits
 			 */
 			mb();
-		} else
+		} else{
 			return IRQ_HANDLED;
+                }
 	}
 
 intr_done:
@@ -339,21 +368,9 @@ qup_update_state(struct qup_i2c_dev *dev, uint32_t state)
 	return 0;
 }
 
-/*
- * Before calling qup_config_core_on_en(), please make
- * sure that QuPE core is in RESET state.
- */
-static void
-qup_config_core_on_en(struct qup_i2c_dev *dev)
-{
-	uint32_t status;
-
-	status = readl_relaxed(dev->base + QUP_CONFIG);
-	status |= BIT(13);
-	writel_relaxed(status, dev->base + QUP_CONFIG);
-	/* making sure that write has really gone through */
-	mb();
-}
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+// -qup_config_core_on_en(struct qup_i2c_dev *dev)
+// ASUS_BSP ---
 
 #define MSM_I2C_CLK_PATH_SUSPEND (0)
 #define MSM_I2C_CLK_PATH_RESUME  (1)
@@ -500,28 +517,114 @@ static void i2c_qup_clk_path_postponed_register(struct qup_i2c_dev *dev)
 	}
 }
 
-static void
-qup_i2c_pwr_mgmt(struct qup_i2c_dev *dev, unsigned int state)
+// ASUS_BSP +++ Peter_Lu "For Pad I2C error check gpio status issue"
+static inline void qup_i2c_check_gpios(struct qup_i2c_dev *dev)
 {
-	dev->pwr_state = state;
-	if (state != 0) {
-		i2c_qup_clk_path_postponed_register(dev);
-		if (!dev->pdata->active_only)
-			i2c_qup_clk_path_vote(dev);
+	int i;
 
-		clk_prepare_enable(dev->clk);
-		if (!dev->pdata->keep_ahb_clk_on)
-			clk_prepare_enable(dev->pclk);
-	} else {
-		qup_update_state(dev, QUP_RESET_STATE);
-		clk_disable_unprepare(dev->clk);
-		qup_config_core_on_en(dev);
-		if (!dev->pdata->keep_ahb_clk_on)
-			clk_disable_unprepare(dev->pclk);
-		if (!dev->pdata->active_only)
-			i2c_qup_clk_path_unvote(dev);
+	for (i = 0; i < ARRAY_SIZE(i2c_rsrcs); ++i) {
+		if (dev->i2c_gpios[i] >= 0)	{
+			dev_err(dev->dev, "[i2c] I2C_bus6 %s gpio value : %d\r\n",
+				i2c_rsrcs[i], gpio_get_value(dev->i2c_gpios[i]));
+		}
 	}
 }
+// ASUS_BSP ---
+
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+static int i2c_qup_gpio_request(struct qup_i2c_dev *dev)
+ {
+	int i;
+	int result = 0;
+ 
+	for (i = 0; i < ARRAY_SIZE(i2c_rsrcs); ++i) {
+		if (dev->i2c_gpios[i] >= 0) {
+			result = gpio_request(dev->i2c_gpios[i], i2c_rsrcs[i]);
+			if (result) {
+				dev_err(dev->dev,
+					"[i2c] gpio_request for pin %d failed with error %d\n",
+					dev->i2c_gpios[i], result);
+				goto error;
+			}
+		}
+ 	}
+	return 0;
+
+error:
+	for (; --i >= 0;) {
+		if (dev->i2c_gpios[i] >= 0)
+			gpio_free(dev->i2c_gpios[i]);
+	}
+	return result;
+}
+
+static void i2c_qup_gpio_free(struct qup_i2c_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(i2c_rsrcs); ++i) {
+		if (dev->i2c_gpios[i] >= 0)
+			gpio_free(dev->i2c_gpios[i]);
+	}
+}
+
+static void i2c_qup_pm_suspend_clk(struct qup_i2c_dev *dev)
+{
+	uint32_t status;
+
+	/* reset core and enable conditional dynamic clock gating */
+	qup_update_state(dev, QUP_RESET_STATE);
+	status = readl_relaxed(dev->base + QUP_CONFIG);
+	status |= I2C_CORE_CLK_ON_EN;
+	writel_relaxed(status, dev->base + QUP_CONFIG);
+	/* ensure that write has really gone through */
+	mb();
+
+	clk_disable_unprepare(dev->clk);
+	if (!dev->pdata->keep_ahb_clk_on)
+		clk_disable_unprepare(dev->pclk);
+}
+
+static void i2c_qup_pm_resume_clk(struct qup_i2c_dev *dev)
+{
+	clk_prepare_enable(dev->clk);
+	if (!dev->pdata->keep_ahb_clk_on)
+		clk_prepare_enable(dev->pclk);
+}
+
+static void i2c_qup_pm_suspend(struct qup_i2c_dev *dev)
+{
+	if (dev->pwr_state == MSM_I2C_PM_SUSPENDED) {
+		dev_err(dev->dev, "attempt to suspend when suspended\n");
+		return;
+	}
+
+	if (!dev->pdata->clk_ctl_xfer)
+		i2c_qup_pm_suspend_clk(dev);
+
+	if (!dev->pdata->active_only)
+		i2c_qup_clk_path_unvote(dev);
+
+	i2c_qup_gpio_free(dev);
+	dev->pwr_state = MSM_I2C_PM_SUSPENDED;
+}
+
+static void i2c_qup_pm_resume(struct qup_i2c_dev *dev)
+{
+	if (dev->pwr_state == MSM_I2C_PM_ACTIVE)
+		return;
+
+	i2c_qup_gpio_request(dev);
+
+	i2c_qup_clk_path_postponed_register(dev);
+	if (!dev->pdata->active_only)
+		i2c_qup_clk_path_vote(dev);
+
+	if (!dev->pdata->clk_ctl_xfer)
+		i2c_qup_pm_resume_clk(dev);
+	dev->pwr_state = MSM_I2C_PM_ACTIVE;
+ }
+// ASUS_BSP ---
 
 static int
 qup_i2c_poll_writeready(struct qup_i2c_dev *dev, int rem)
@@ -593,43 +696,6 @@ static int qup_i2c_poll_clock_ready(struct qup_i2c_dev *dev)
 	dev_err(dev->dev, "Error waiting for clk ready clk_state: 0x%x op_flgs: 0x%x\n",
 		clk_state, op_flgs);
 	return -ETIMEDOUT;
-}
-
-static inline int qup_i2c_request_gpios(struct qup_i2c_dev *dev)
-{
-	int i;
-	int result = 0;
-
-	for (i = 0; i < ARRAY_SIZE(i2c_rsrcs); ++i) {
-		if (dev->i2c_gpios[i] >= 0) {
-			result = gpio_request(dev->i2c_gpios[i], i2c_rsrcs[i]);
-			if (result) {
-				dev_err(dev->dev,
-					"gpio_request for pin %d failed\
-					with error %d\n", dev->i2c_gpios[i],
-					result);
-				goto error;
-			}
-		}
-	}
-	return 0;
-
-error:
-	for (; --i >= 0;) {
-		if (dev->i2c_gpios[i] >= 0)
-			gpio_free(dev->i2c_gpios[i]);
-	}
-	return result;
-}
-
-static inline void qup_i2c_free_gpios(struct qup_i2c_dev *dev)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(i2c_rsrcs); ++i) {
-		if (dev->i2c_gpios[i] >= 0)
-			gpio_free(dev->i2c_gpios[i]);
-	}
 }
 
 #ifdef DEBUG
@@ -948,20 +1014,45 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	long timeout;
 	int err;
 
-	/* Alternate if runtime power management is disabled */
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+	/*
+	 * If all slaves of this controller behave as expected, they will
+	 * implement suspend and won't call any transaction if they are
+	 * suspended. Since controller is its parent, controller's suspend
+	 * will be called only AFTER alls slaves are suspended.
+	 * However reality is differe and some slave don't implement suspend
+	 * If a slave tries to initiate transfer when we are suspended,
+	 * pm_runtime_enabled is set to false by system-pm.
+	 * Make sure we return error when transaction is initiated while
+	 * we are in suspended state
+	 */
+	mutex_lock(&dev->mlock);
+	if (dev->pwr_state >= MSM_I2C_SYS_SUSPENDING) {
+		dev_err(dev->dev,
+			"[i2c] xfer not allowed when ctrl is suspended addr:0x%x\n",
+			msgs->addr);
+		mutex_unlock(&dev->mlock);
+		return -EIO;
+	}
 	if (!pm_runtime_enabled(dev->dev)) {
-		dev_dbg(dev->dev, "Runtime PM is disabled\n");
-		i2c_qup_pm_resume_runtime(dev->dev);
+		dev_dbg(dev->dev, "Runtime PM FEATURE is disabled\n");
+		i2c_qup_pm_resume(dev);
+		//i2c_qup_pm_resume_runtime(dev->dev);
 	} else {
 		pm_runtime_get_sync(dev->dev);
 	}
+/*
 	mutex_lock(&dev->mlock);
 
 	if (dev->suspended) {
 		mutex_unlock(&dev->mlock);
 		return -EIO;
 	}
-
+*/
+	if (dev->pdata->clk_ctl_xfer)
+		i2c_qup_pm_resume_clk(dev);
+// ASUS_BSP ---
+	
 	/* Initialize QUP registers during first transfer */
 	if (dev->clk_ctl == 0) {
 		int fs_div;
@@ -1258,11 +1349,23 @@ timeout_err:
 		disable_irq(dev->in_irq);
 		disable_irq(dev->out_irq);
 	}
+// ASUS_BSP +++ Peter_Lu "For Pad I2C error reset issue"
+	if( (adap->nr == I2C_BLSP1_QUP5_BUS6) && (ret == -ETIMEDOUT ||(dev->err & -QUP_I2C_BUS_ARB_LOST)))	{
+		qup_i2c_check_gpios(dev);
+		i2c_qup_gpio_free(dev);
+		i2c_qup_gpio_request(dev);
+		dev_dbg(dev->dev, "[i2c] I2C_bus6 try to reset!\r\n");
+	}
+// ASUS_BSP --- 
 	dev->complete = NULL;
 	dev->msg = NULL;
 	dev->pos = 0;
 	dev->err = 0;
 	dev->cnt = 0;
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+	if (dev->pdata->clk_ctl_xfer)
+		i2c_qup_pm_suspend_clk(dev);
+// ASUS_BSP ---
 	mutex_unlock(&dev->mlock);
 	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
@@ -1296,14 +1399,17 @@ int __devinit msm_i2c_rsrcs_dt_to_pdata_map(struct platform_device *pdev,
 	struct device_node *node = pdev->dev.of_node;
 	struct msm_i2c_dt_to_pdata_map *itr;
 	struct msm_i2c_dt_to_pdata_map  map[] = {
-	{"qcom,i2c-bus-freq", &pdata->clk_freq    , DT_REQUIRED , DT_U32 ,  0},
-	{"cell-index"       , &pdev->id           , DT_REQUIRED , DT_U32 , -1},
-	{"qcom,i2c-src-freq", &pdata->src_clk_rate, DT_SUGGESTED, DT_U32,   0},
-	{"qcom,master-id"   , &pdata->master_id   , DT_SUGGESTED, DT_U32,   0},
-	{"qcom,scl-gpio"    , gpios               , DT_OPTIONAL , DT_GPIO, -1},
-	{"qcom,sda-gpio"    , gpios + 1           , DT_OPTIONAL , DT_GPIO, -1},
-	{"qcom,active-only" , &pdata->active_only , DT_OPTIONAL , DT_BOOL,  0},
-	{NULL               , NULL                , 0           , 0      ,  0},
+	{"qcom,i2c-bus-freq",	&pdata->clk_freq,	DT_REQUIRED,	DT_U32,		0},
+	{"cell-index",			&pdev->id,			DT_REQUIRED,	DT_U32,		-1},
+	{"qcom,i2c-src-freq",	&pdata->src_clk_rate,	DT_SUGGESTED,	DT_U32,		0},
+	{"qcom,master-id",	&pdata->master_id,	DT_SUGGESTED,	DT_U32,		0},
+	{"qcom,scl-gpio",		gpios,				DT_OPTIONAL,	DT_GPIO,	-1},
+	{"qcom,sda-gpio",		gpios + 1,			DT_OPTIONAL,	DT_GPIO,	-1},
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+	{"qcom,clk-ctl-xfer",	&pdata->clk_ctl_xfer,	DT_OPTIONAL,	DT_BOOL,	-1},
+// ASUS_BSP ---
+	{"qcom,active-only",	&pdata->active_only,	DT_OPTIONAL,	DT_BOOL,	0},
+	{NULL,				NULL,				0,				0,			0},
 	};
 
 	for (itr = map; itr->dt_name ; ++itr) {
@@ -1605,13 +1711,17 @@ blsp_core_init:
 	strlcpy(dev->adapter.name,
 		"QUP I2C adapter",
 		sizeof(dev->adapter.name));
-	dev->adapter.nr = pdev->id;
+ 
+	dev->adapter.nr = pdev->id; 	
 	dev->adapter.dev.parent = &pdev->dev;
 	if (pdata->msm_i2c_config_gpio)
 		pdata->msm_i2c_config_gpio(dev->adapter.nr, 1);
 
 	mutex_init(&dev->mlock);
-	dev->pwr_state = 0;
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+	//dev->pwr_state = 0;
+	dev->pwr_state = MSM_I2C_PM_SUSPENDED;
+// ASUS_BSP ---
 	/* If the same AHB clock is used on Modem side
 	 * switch it on here itself and don't switch it
 	 * on and off during suspend and resume.
@@ -1681,17 +1791,26 @@ static void qup_i2c_mem_release(struct platform_device *pdev, const char *name)
 static int __devexit
 qup_i2c_remove(struct platform_device *pdev)
 {
-	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
+	struct qup_i2c_dev	*dev = platform_get_drvdata(pdev);
 
 	/* Grab mutex to ensure ongoing transaction is over */
 	mutex_lock(&dev->mlock);
-	dev->suspended = 1;
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks" 
+	//dev->suspended = 1;
+	dev->pwr_state = MSM_I2C_SYS_SUSPENDING;
+// ASUS_BSP ---
 	mutex_unlock(&dev->mlock);
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+	i2c_qup_pm_suspend(dev);
+	dev->pwr_state = MSM_I2C_SYS_SUSPENDED;
+// ASUS_BSP ---
 	mutex_destroy(&dev->mlock);
+/*
 	if (dev->pwr_state != 0) {
 		qup_i2c_pwr_mgmt(dev, 0);
 		qup_i2c_free_gpios(dev);
 	}
+*/
 	platform_set_drvdata(pdev, NULL);
 	if (dev->num_irqs == 3) {
 		free_irq(dev->out_irq, dev);
@@ -1731,15 +1850,28 @@ static int i2c_qup_pm_suspend_runtime(struct device *device)
 {
 	struct platform_device *pdev = to_platform_device(device);
 	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
-	dev_dbg(device, "pm_runtime: suspending...\n");
-	/* Grab mutex to ensure ongoing transaction is over */
-	mutex_lock(&dev->mlock);
-	dev->suspended = 1;
-	mutex_unlock(&dev->mlock);
-	if (dev->pwr_state != 0) {
-		qup_i2c_pwr_mgmt(dev, 0);
-		qup_i2c_free_gpios(dev);
+
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+	if( (dev->adapter.nr == I2C_BLSP1_QUP5_BUS6) && !I2C_BUS6_SUSPENDING && AX_MicroP_IsP01Connected() )
+	{
+		printk("[i2c] Device not suspend, Without turn off Bus6!\r\n");
+		return -EAGAIN;
+	}else	{
+#endif
+// ASUS_BSP ---
+
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+		printk("[i2c] i2c_qup_pm_suspend_runtime; Suspend bus : %d\r\n", dev->adapter.nr);
+		i2c_qup_pm_suspend(dev);
+// ASUS_BSP ---
+
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
 	}
+#endif
+// ASUS_BSP ---
+
 	return 0;
 }
 
@@ -1747,49 +1879,143 @@ static int i2c_qup_pm_resume_runtime(struct device *device)
 {
 	struct platform_device *pdev = to_platform_device(device);
 	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
-	int ret = 0;
-	dev_dbg(device, "pm_runtime: resuming...\n");
-	if (dev->pwr_state == 0) {
-		ret = qup_i2c_request_gpios(dev);
-		if (ret != 0)
-			return ret;
-		qup_i2c_pwr_mgmt(dev, 1);
-	}
-	dev->suspended = 0;
+	printk("[i2c] i2c_qup_pm_resume_runtime; Resume bus : %d\r\n", dev->adapter.nr);
+	//dev_dbg(device, "pm_runtime: resuming...\n");
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+	i2c_qup_pm_resume(dev);
+// ASUS_BSP ---
 	return 0;
 }
 
+// ASUS_BSP +++ Qualcomm "Improve implementation of PM callbacks"
+static int i2c_qup_pm_suspend_sys(struct device *device)
+{
+	struct platform_device *pdev = to_platform_device(device);
+	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
+	/* Acquire mutex to ensure current transaction is over */
+	mutex_lock(&dev->mlock);
+	dev->pwr_state = MSM_I2C_SYS_SUSPENDING;
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+	if( dev->adapter.nr == I2C_BLSP1_QUP5_BUS6 )	{
+		printk("[i2c] pad i2c suspending...\r\n");
+		I2C_BUS6_SUSPENDING = true;
+		AX_MicroP_Bus_Suspending(1);
+	}
+#endif
+// ASUS_BSP ---	
+	mutex_unlock(&dev->mlock);
+ 	if (!pm_runtime_enabled(device) || !pm_runtime_suspended(device)) {
+		dev_dbg(device, "system suspend\n");
+		i2c_qup_pm_suspend(dev);
+ 		/*
+ 		 * set the device's runtime PM status to 'suspended'
+ 		 */
+		pm_runtime_disable(device);
+ 		pm_runtime_set_suspended(device);
+ 		pm_runtime_enable(device);
+ 	}
+	dev->pwr_state = MSM_I2C_SYS_SUSPENDED;
+ 	return 0;
+ }
+/*
 static int qup_i2c_suspend(struct device *device)
 {
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+	struct platform_device *pdev = to_platform_device(device);
+	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
+	mutex_lock(&dev->mlock);
+	if( dev->adapter.nr == I2C_BLSP1_QUP5_BUS6 )	{
+		printk("[i2c]pad i2c suspending...\r\n");
+		I2C_BUS6_SUSPENDING = true;
+		AX_MicroP_Bus_Suspending(1);
+	}
+	mutex_unlock(&dev->mlock);
+#endif
+// ASUS_BSP ---
+	dev_dbg(device, "[i2c] i2c suspending...\r\n");
 	if (!pm_runtime_enabled(device) || !pm_runtime_suspended(device)) {
 		dev_dbg(device, "system suspend");
 		i2c_qup_pm_suspend_runtime(device);
-		/*
+		//
 		 * set the device's runtime PM status to 'suspended'
-		 */
+		 //
 		pm_runtime_disable(device);
 		pm_runtime_set_suspended(device);
 		pm_runtime_enable(device);
 	}
 	return 0;
 }
+*/
 
+static int i2c_qup_pm_resume_sys(struct device *device)
+ {
+	struct platform_device *pdev = to_platform_device(device);
+	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
+ 	/*
+ 	 * Rely on runtime-PM to call resume in case it is enabled
+ 	 * Even if it's not enabled, rely on 1st client transaction to do
+ 	 * clock ON and gpio configuration
+ 	 */
+	dev_dbg(device, "[i2c] system resume\n");
+	dev->pwr_state = MSM_I2C_PM_SUSPENDED;
+
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+	if( dev->adapter.nr == I2C_BLSP1_QUP5_BUS6 )	{
+		printk("[i2c] pad i2c resuming...\r\n");
+		I2C_BUS6_SUSPENDING = false;
+		AX_MicroP_Bus_Suspending(0);
+	}
+#endif
+// ASUS_BSP ---
+	
+ 	return 0;
+ }
+/*
 static int qup_i2c_resume(struct device *device)
 {
-	/*
-	 * Rely on runtime-PM to call resume in case it is enabled
-	 * Even if it's not enabled, rely on 1st client transaction to do
-	 * clock ON and gpio configuration
-	 */
-	dev_dbg(device, "system resume");
-	return 0;
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+	struct platform_device *pdev = to_platform_device(device);
+	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
+#endif
+// ASUS_BSP ---
+	int ret = 0;
+	dev_dbg(device, "[i2c] qup_i2c_resume+++\r\n");
+	if (!pm_runtime_enabled(device) || !pm_runtime_suspended(device)) {
+		//dev_dbg(device, "system resume");
+		ret = i2c_qup_pm_resume_runtime(device);
+		if (ret < 0) {
+			dev_err(device, "[i2c] qup_i2c_resume runtime fail!(%d)\r\n", ret);
+			pm_runtime_mark_last_busy(device);
+			pm_request_autosuspend(device);
+		}
+		//return ret;	// ASUS_BSP +++ Peter_Lu "For Pad I2C can not resume issue"
+	}
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+	if( dev->adapter.nr == I2C_BLSP1_QUP5_BUS6 )	{
+		printk("pad i2c resuming...\r\n");
+		I2C_BUS6_SUSPENDING = false;
+		AX_MicroP_Bus_Suspending(0);
+	}
+#endif
+// ASUS_BSP ---
+	dev_dbg(device, "[i2c] qup_i2c_resume---\r\n");
+	return ret;
 }
+*/
+// ASUS_BSP ---
 #endif /* CONFIG_PM */
 
 static const struct dev_pm_ops i2c_qup_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(
-		qup_i2c_suspend,
-		qup_i2c_resume
+		//qup_i2c_suspend,
+		//qup_i2c_resume
+		i2c_qup_pm_suspend_sys,
+		i2c_qup_pm_resume_sys
 	)
 	SET_RUNTIME_PM_OPS(
 		i2c_qup_pm_suspend_runtime,

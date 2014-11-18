@@ -145,6 +145,13 @@ enum mdss_mdp_wb_ctl_type {
 	MDSS_MDP_WB_CTL_TYPE_LINE
 };
 
+//ASUS_BSP: Louis +++
+struct mdss_mdp_bus_client_quota {
+    u64 bus_ab_quota;
+    u64 bus_ib_quota;
+};
+//ASUS_BSP: Louis ---
+
 struct mdss_mdp_ctl {
 	u32 num;
 	char __iomem *base;
@@ -669,3 +676,7 @@ int mdss_mdp_pipe_program_pixel_extn(struct mdss_mdp_pipe *pipe);
 
 int  mdss_mdp_ctl_reset(struct mdss_mdp_ctl *ctl);
 #endif /* MDSS_MDP_H */
+
+//ASUS_BSP: Louis +++
+void mdss_set_mdp_max_clk(bool boostup);
+//ASUS_BSP: Louis ---

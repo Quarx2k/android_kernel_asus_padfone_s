@@ -80,9 +80,21 @@
 						unsigned int)
 #define MSMFB_ASYNC_BLIT              _IOW(MSMFB_IOCTL_MAGIC, 168, unsigned int)
 
+//ASUS_BSP: Louis +++
+#define MSMFB_PADFONE_STATE    _IOR(MSMFB_IOCTL_MAGIC, 174, int)
+#define MSMFB_CAMERA_STS       _IOR(MSMFB_IOCTL_MAGIC, 175, bool)
+//ASUS_BSP: Louis ---
+
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
+
+//ASUS_BSP: Louis +++
+#define MSMFB_CE_SET    _IOW(MSMFB_IOCTL_MAGIC, 170, int)
+#define MSMFB_PHONE_HUE_SET   _IOW(MSMFB_IOCTL_MAGIC, 171, int)
+#define MSMFB_PAD_HSIC_SET _IOW(MSMFB_IOCTL_MAGIC, 172, int)
+#define MSMFB_BL_CTRL  _IOW(MSMFB_IOCTL_MAGIC, 173, int)
+//ASUS_BSP: Louis ---
 
 enum {
 	NOTIFY_UPDATE_START,
@@ -1069,6 +1081,7 @@ int msm_fb_writeback_dequeue_buffer(struct fb_info *info,
 int msm_fb_writeback_stop(struct fb_info *info);
 int msm_fb_writeback_terminate(struct fb_info *info);
 int msm_fb_writeback_set_secure(struct fb_info *info, int enable);
+int msm_fb_writeback_iommu_ref(struct fb_info *info, int enable);
 #endif
 
 #endif /*_MSM_MDP_H_*/

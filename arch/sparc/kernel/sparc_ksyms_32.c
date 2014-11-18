@@ -44,3 +44,6 @@ EXPORT_SYMBOL(BTFIXUP_CALL(pgprot_noncached));
 
 /* Exporting a symbol from /init/main.c */
 EXPORT_SYMBOL(saved_command_line);
+//+++ ASUS_BSP : Add for parse cmdline info to proc/bootinfo
+EXPORT_SYMBOL(bootimage_command_line);
+//--- ASUS_BSP : Add for parse cmdline info to proc/bootinfo

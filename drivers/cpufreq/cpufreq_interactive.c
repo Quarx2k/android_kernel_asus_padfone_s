@@ -982,6 +982,7 @@ static ssize_t store_timer_rate(struct kobject *kobj,
 	if (ret < 0)
 		return ret;
 	timer_rate = val;
+	printk("[CPUFREQ] timer_rate=%lu",timer_rate);
 	return count;
 }
 

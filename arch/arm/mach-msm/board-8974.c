@@ -84,6 +84,143 @@ static void __init msm8974_early_memory(void)
 	of_scan_flat_dt(dt_scan_for_memory_hole, msm8974_reserve_table);
 }
 
+//ASUS BSP Eason_Chang : A86 porting +++
+
+#ifdef CONFIG_BATTERY_ASUS
+static struct resource a86_asus_bat_resources[] = {
+	{
+		.name = "bat_low_gpio",
+		.start = 46,
+		.end = 46,
+		.flags = IORESOURCE_IO,
+	},
+};
+static struct platform_device a86_asus_bat_device = {
+	.name = "asus_bat",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(a86_asus_bat_resources),
+	.resource = a86_asus_bat_resources,	
+};	
+
+//ASUS BSP Eason_Chang : A86 porting ---
+//ASUS BSP Hank_Chen : A86 1032 porting+++
+static struct platform_device *msm_a86_bat_devices[] = {
+	&a86_asus_bat_device,
+};
+#endif  //CONFIG_BATTERY_ASUS 
+
+//ASUS BSP Hank_Chen : A86 1032 porting---
+
+// +++ ASUS_BSP : add novatek virtual key map Deeo
+#define MAX_LEN		200 //ASUS_BSP Deeo : add for creating virtual_key_maps ++
+
+static ssize_t novaTP_virtual_keys_register(struct kobject *kobj,
+		     struct kobj_attribute *attr, char *buf)
+{
+	char *virtual_keys = 	__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":270:1960:30:30" "\n" \
+						__stringify(EV_KEY) ":" __stringify(KEY_HOME) ":540:1960:30:30" "\n" \
+						__stringify(EV_KEY) ":" __stringify(KEY_MENU)   ":810:1960:30:30" "\n" ;
+
+	return snprintf(buf, strnlen(virtual_keys, MAX_LEN) + 1 , "%s",	virtual_keys);
+}
+
+static struct kobj_attribute novaTP_virtual_keys_attr = {
+	.attr = {
+		.name = "virtualkeys.elan-touchscreen",
+		.mode = S_IRUGO,
+	},
+	.show = &novaTP_virtual_keys_register,
+};
+
+static struct attribute *virtual_key_properties_attrs[] = {
+	&novaTP_virtual_keys_attr.attr,
+	NULL
+};
+
+static struct attribute_group virtual_key_properties_attr_group = {
+	.attrs = virtual_key_properties_attrs,
+};
+
+//struct kobject *nova_virtual_key_properties_kobj;
+static void nv_init_vkeys_8974(void)
+{
+	int ret = 0;
+	static struct kobject *nova_virtual_key_properties_kobj;
+
+	nova_virtual_key_properties_kobj = kobject_create_and_add("board_properties", NULL);
+	if (nova_virtual_key_properties_kobj)
+		ret = sysfs_create_group(nova_virtual_key_properties_kobj, &virtual_key_properties_attr_group);
+	if (!nova_virtual_key_properties_kobj || ret)
+		pr_err("[Touch_N] failed to create novaTP virtual key map!\n");
+
+	return;
+}
+// --- ASUS_BSP : add novatek virtual key map Deeo
+
+// ASUS_BSP +++ Victor_Fu "proximity driver"
+#include <linux/ProximityBasic.h>
+static proximity_resource a91_proximity_resources[] = {
+    {
+        .index = 0,
+        .type = PROXIMITY_FILE_SOURCE,
+        .algo_type = PROXIMITY_BODYSAR_NOTIFY_ALGO_TYPE,
+        .initEventState = PROXIMITY_EVNET_FAR,
+        .name = "proximity_test1",
+    },
+    {
+        .index = 1,
+        .type = PROXIMITY_FILE_SOURCE,
+        .algo_type = PROXIMITY_BODYSAR_NOTIFY_ALGO_TYPE,
+        .initEventState = PROXIMITY_EVNET_FAR,
+        .name = "proximity_test2",
+    },    
+    {
+        .index = 2,
+        .type = PROXIMITY_CAP1106_SOURCE,
+        .algo_type = PROXIMITY_BODYSAR_NOTIFY_ALGO_TYPE,
+        .initEventState = PROXIMITY_EVNET_FAR,
+        .name = "cap_test",
+    }, 
+};
+static proximity_platform_data  a91_proximity_data = {
+    .resource        = a91_proximity_resources,
+    .nResource       = ARRAY_SIZE(a91_proximity_resources),
+};
+
+static struct platform_device a91_proximity_device = {
+    .name = "proximity-core-sensor",
+    .id = 0,
+    .dev            = {
+        .platform_data  = &a91_proximity_data,
+    },
+};	
+
+static struct platform_device *msm_a91_proximity_devices[] = {
+	&a91_proximity_device,
+};
+// ASUS_BSP --- Victor_Fu "proximity driver"
+
+
+// ASUS_BSP +++ Peter_Lu "Lightsensor"
+static struct platform_device cm36283_device = {
+	.name = "cm36283",
+	.id = 0,
+};
+
+static struct platform_device cm3628_device = {
+	.name = "cm3628",
+	.id = 0,
+};
+
+static struct platform_device *msm_a90_sensor_devices[] = {
+	&cm36283_device,
+};
+
+static struct platform_device *msm_a91_sensor_devices[] = {
+	&cm3628_device,
+};
+// ASUS_BSP ---
+
 /*
  * Used to satisfy dependencies for devices that need to be
  * run early or in a particular order. Most likely your device doesn't fall
@@ -106,6 +243,25 @@ void __init msm8974_add_drivers(void)
 		msm_clock_init(&msm8974_clock_init_data);
 	tsens_tm_init_driver();
 	msm_thermal_device_init();
+	nv_init_vkeys_8974(); // +++ ASUS_BSP : add novatek virtual key map Deeo
+
+	// ASUS_BSP +++ Victor_Fu "proximity driver"
+	platform_add_devices(msm_a91_proximity_devices, ARRAY_SIZE(msm_a91_proximity_devices));
+	// ASUS_BSP --- Victor_Fu "proximity driver"
+
+	//ASUS BSP Hank_Chen : A86 1032 porting+++
+	platform_add_devices(msm_a86_bat_devices, ARRAY_SIZE(msm_a86_bat_devices));
+	//ASUS BSP Hank_Chen : A86 1032 porting---
+
+	// ASUS_BSP +++ Peter_Lu "cm3628 & cm36283 Lightsensor"
+	if ( g_ASUS_hwID == A90_EVB0 )	{
+		printk("Add_CM36283_sensor +++\n");
+		platform_add_devices(msm_a90_sensor_devices, ARRAY_SIZE(msm_a90_sensor_devices));
+	}else if( g_ASUS_hwID >= A91_SR1 && g_ASUS_hwID < A91_SR5 ) {
+		printk("Add_CM3628_sensor +++\n");
+		platform_add_devices(msm_a91_sensor_devices, ARRAY_SIZE(msm_a91_sensor_devices));
+	}
+	// ASUS_BSP ---
 }
 
 static struct of_dev_auxdata msm_hsic_host_adata[] = {
@@ -163,6 +319,28 @@ static void __init msm8974_map_io(void)
 	msm_map_8974_io();
 }
 
+//++ASUS_BSP : add for miniporting
+#include <linux/init.h>
+#include <linux/ioport.h>
+#include <mach/board.h>
+#include <mach/gpio.h>
+#include <mach/gpiomux.h>
+extern int __init device_gpio_init(void);
+void __init device_gpiomux_init(void)
+{
+	int rc;
+
+	rc = msm_gpiomux_init_dt();
+	if (rc) {
+		pr_err("%s failed %d\n", __func__, rc);
+		return;
+	}
+
+	device_gpio_init();
+
+}
+//--ASUS_BSP : add for miniporting
+
 void __init msm8974_init(void)
 {
 	struct of_dev_auxdata *adata = msm8974_auxdata_lookup;
@@ -170,7 +348,11 @@ void __init msm8974_init(void)
 	if (socinfo_init() < 0)
 		pr_err("%s: socinfo_init() failed\n", __func__);
 
-	msm_8974_init_gpiomux();
+//+++ASUS_BSP : add for miniporting
+//	msm_8974_init_gpiomux();
+	device_gpiomux_init();
+//---ASUS_BSP : add for miniporting
+
 	regulator_has_full_constraints();
 	board_dt_populate(adata);
 	msm8974_add_drivers();

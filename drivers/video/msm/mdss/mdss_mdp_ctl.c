@@ -43,6 +43,13 @@ enum {
 #define MDSS_MDP_PERF_UPDATE_BUS BIT(1)
 #define MDSS_MDP_PERF_UPDATE_ALL -1
 
+//ASUS_BSP: Louis +++
+#ifdef CONFIG_ASUS_HDMI
+extern struct mdss_mdp_bus_client_quota mdp_bus_quota;
+extern int g_boost_bus_bw;
+#endif
+//ASUS_BSP: Louis ---
+
 static DEFINE_MUTEX(mdss_mdp_ctl_lock);
 
 static int mdss_mdp_mixer_free(struct mdss_mdp_mixer *mixer);
@@ -159,6 +166,19 @@ static int mdss_mdp_ctl_perf_commit(struct mdss_data_type *mdata, u32 flags)
 		__mdss_mdp_ctrl_perf_ovrd(mdata, &bus_ab_quota, &bus_ib_quota);
 		bus_ib_quota <<= MDSS_MDP_BUS_FACTOR_SHIFT;
 		bus_ab_quota <<= MDSS_MDP_BUS_FACTOR_SHIFT;
+
+        //ASUS_BSP: Louis +++
+#ifdef CONFIG_ASUS_HDMI
+        mdp_bus_quota.bus_ib_quota = bus_ib_quota;
+        mdp_bus_quota.bus_ab_quota = bus_ab_quota;
+        if (g_boost_bus_bw) {
+            bus_ab_quota = 6000000000UL;  //bus_ab_quota * 3 / 2;
+            bus_ib_quota = 6000000000UL;  //bus_ib_quota * 3 / 2;
+        }
+#endif
+        pr_debug("update bus_ab_quota(%llu), bus_ib_quota(%llu)\n", bus_ab_quota, bus_ib_quota);
+        //ASUS_BSP: Louis ---
+
 		mdss_mdp_bus_scale_set_quota(bus_ab_quota, bus_ib_quota);
 	}
 	if (flags & MDSS_MDP_PERF_UPDATE_CLK) {
@@ -1259,13 +1279,23 @@ void mdss_mdp_set_roi(struct mdss_mdp_ctl *ctl,
 	 * 1) dual DSI panels
 	 * 2) non-cmd mode panels
 	*/
-	if (!temp_roi.w || !temp_roi.h || ctl->mixer_right ||
-			(ctl->panel_data->panel_info.type != MIPI_CMD_PANEL) ||
-			!ctl->panel_data->panel_info.partial_update_enabled) {
-		temp_roi = (struct mdss_mdp_img_rect)
-				{0, 0, ctl->mixer_left->width,
-					ctl->mixer_left->height};
+	//Mickey+++, double check if panel data is null while system shuting-down
+	if (ctl->panel_data != NULL) {
+        if (!temp_roi.w || !temp_roi.h || ctl->mixer_right ||
+                (ctl->panel_data->panel_info.type != MIPI_CMD_PANEL) ||
+                !ctl->panel_data->panel_info.partial_update_enabled) {
+            temp_roi = (struct mdss_mdp_img_rect)
+                    {0, 0, ctl->mixer_left->width,
+                        ctl->mixer_left->height};
+        }
+	} else {
+	    if (!temp_roi.w || !temp_roi.h || ctl->mixer_right) {
+            temp_roi = (struct mdss_mdp_img_rect)
+                    {0, 0, ctl->mixer_left->width,
+                        ctl->mixer_left->height};
+	    }
 	}
+	//Mickey---
 
 	ctl->roi_changed = 0;
 	if (((temp_roi.x != ctl->roi.x) ||

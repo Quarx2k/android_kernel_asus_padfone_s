@@ -986,6 +986,7 @@ end:
 }
 
 #define DMA_TX_TIMEOUT 200
+//#define DSI_CMD_DEBUG 1	//ASUS_BSP: Louis +++
 
 static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 					struct dsi_buf *tp)
@@ -994,8 +995,23 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	int domain = MDSS_IOMMU_DOMAIN_UNSECURE;
 	char *bp;
 	unsigned long size, addr;
+	//ASUS_BSP: Louis ++
+    bool addr_map_iommu = false;
+	#ifdef DSI_CMD_DEBUG
+	int i;	
+	#endif
+	//ASUS_BSP: Louis --
 
 	bp = tp->data;
+	
+	//ASUS_BSP: Louis ++
+	#ifdef DSI_CMD_DEBUG
+	printk("%s: ", __func__);
+	for (i = 0; i < tp->len; i++)
+		printk("%x ", *bp++);
+	printk("\n");
+	#endif
+	//ASUS_BSP: Louis --
 
 	len = ALIGN(tp->len, 4);
 	size = ALIGN(tp->len, SZ_4K);
@@ -1005,6 +1021,9 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 		int ret = msm_iommu_map_contig_buffer(tp->dmap,
 					mdss_get_iommu_domain(domain), 0,
 					size, SZ_4K, 0, &(addr));
+
+        addr_map_iommu = true;   //ASUS_BSP: Louis +++
+
 		if (IS_ERR_VALUE(ret)) {
 			pr_err("unable to map dma memory to iommu(%d)\n", ret);
 			return -ENOMEM;
@@ -1037,14 +1056,21 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	ret = wait_for_completion_timeout(&ctrl->dma_comp,
 				msecs_to_jiffies(DMA_TX_TIMEOUT));
-	if (ret == 0)
+	if (ret == 0) {
+        printk("[Display] %s: DCS command timeout\n", __func__); //ASUS_BSP: Louis +++
 		ret = -ETIMEDOUT;
+    }
 	else
 		ret = tp->len;
 
-	if (is_mdss_iommu_attached())
+	if (is_mdss_iommu_attached() && addr_map_iommu) //ASUS_BSP:  Louis +++
 		msm_iommu_unmap_contig_buffer(addr,
 			mdss_get_iommu_domain(domain), 0, size);
+    //ASUS_BSP: Louis +++
+    else if (!is_mdss_iommu_attached() && addr_map_iommu) {
+        printk("%s: not unmap buffer due to iommu not attached\n", __func__);
+    }
+    //ASUS_BSP: Louis ---
 
 	return ret;
 }

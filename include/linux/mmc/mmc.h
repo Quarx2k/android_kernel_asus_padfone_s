@@ -337,7 +337,15 @@ struct _mmc_csd {
 #define EXT_CSD_MAX_PACKED_READS	501	/* RO */
 #define EXT_CSD_BKOPS_SUPPORT		502	/* RO */
 #define EXT_CSD_HPI_FEATURES		503	/* RO */
-
+//ASUS_BSP +++ Gavin_Chang "Sandisk's eMMC health status feature"
+#define EXT_CSD_SANDISK_SLC_HEALTH		87
+#define EXT_CSD_SANDISK_MLC_LP_HEALTH	88
+#define EXT_CSD_SANDISK_MLC_HEALTH		94
+//ASUS_BSP --- Gavin_Chang "Sandisk's eMMC health status feature"
+//ASUS_BSP +++ Gavin_Chang "Add eMMC 5.0 feature Device Life Time"
+#define EXT_CSD_DEVICE_LIFE_TIME_EST_TYP_A	268 /* 268 */
+#define EXT_CSD_DEVICE_LIFE_TIME_EST_TYP_B	269 /* 268 */
+//ASUS_BSP --- Gavin_Chang "Add eMMC 5.0 feature Device Life Time"
 /*
  * EXT_CSD field definitions
  */

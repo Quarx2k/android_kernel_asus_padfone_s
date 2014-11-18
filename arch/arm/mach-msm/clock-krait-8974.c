@@ -579,12 +579,14 @@ static void krait_update_uv(int *uv, int num, int boost_uv)
 			uv[i] = max(1150000, uv[i]);
 	};
 
+	enable_boost = 1;
 	if (enable_boost) {
 		for (i = 0; i < num; i++)
 			uv[i] += boost_uv;
 	}
 }
 
+char g_dbg_table_name[] = "qcom,speedXX-pvsXX-bin-vXX"; 
 static int clock_krait_8974_driver_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -676,6 +678,10 @@ static int clock_krait_8974_driver_probe(struct platform_device *pdev)
 	get_krait_bin_format_b(pdev, &speed, &pvs, &ver);
 	snprintf(prop_name, ARRAY_SIZE(prop_name),
 			"qcom,speed%d-pvs%d-bin-v%d", speed, pvs, ver);
+
+	snprintf(g_dbg_table_name, ARRAY_SIZE(prop_name), 
+			"qcom,speed%d-pvs%d-bin-v%d", speed, pvs, ver); 
+
 
 	rows = parse_tbl(dev, prop_name, 3,
 			(u32 **) &freq, (u32 **) &uv, (u32 **) &ua);

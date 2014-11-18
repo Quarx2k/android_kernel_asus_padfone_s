@@ -255,6 +255,7 @@ static void msm_vfe40_init_vbif_parms(struct vfe_device *vfe_dev)
 static int msm_vfe40_init_hardware(struct vfe_device *vfe_dev)
 {
 	int rc = -1;
+	CDBG("[YM]%s E\n", __func__);	///ASUS_BSP +++ for debug only, disabled by default
 	rc = msm_isp_init_bandwidth_mgr(ISP_VFE0 + vfe_dev->pdev->id);
 	if (rc < 0) {
 		pr_err("%s: Bandwidth registration Failed!\n", __func__);
@@ -304,8 +305,13 @@ static int msm_vfe40_init_hardware(struct vfe_device *vfe_dev)
 		IRQF_TRIGGER_RISING, "vfe", vfe_dev);
 	if (rc < 0) {
 		pr_err("%s: irq request failed\n", __func__);
-		goto irq_req_failed;
+//ASUS_BSP +++ YM To avoid camera fail for ever
+		pr_err("%s: [YM] WARNING......IGNORE it\n", __func__); // Should have already requested, ignore it
+		rc = 0;  //[YM] ignore the error, because it doesnot release irq when reset vfe error last time..
+		if (rc!=0) goto irq_req_failed;
+//ASUS_BSP --- YM  To avoid camera fail for ever
 	}
+	CDBG("[YM]%s(%d) X\n", __func__, rc);	//ASUS_BSP +++ for debug only, disabled by default
 	return rc;
 irq_req_failed:
 	iounmap(vfe_dev->tcsr_base);
@@ -326,6 +332,7 @@ bus_scale_register_failed:
 
 static void msm_vfe40_release_hardware(struct vfe_device *vfe_dev)
 {
+	CDBG("[YM]%s E\n", __func__); //ASUS_BSP +++ for debug only, disabled by default
 	free_irq(vfe_dev->vfe_irq->start, vfe_dev);
 	tasklet_kill(&vfe_dev->vfe_tasklet);
 	iounmap(vfe_dev->tcsr_base);
@@ -335,6 +342,7 @@ static void msm_vfe40_release_hardware(struct vfe_device *vfe_dev)
 		vfe_dev->vfe_clk, ARRAY_SIZE(msm_vfe40_clk_info), 0);
 	regulator_disable(vfe_dev->fs_vfe);
 	msm_isp_deinit_bandwidth_mgr(ISP_VFE0 + vfe_dev->pdev->id);
+	CDBG("[YM]%s X\n", __func__); //ASUS_BSP +++ for debug only, disabled by default
 }
 
 static void msm_vfe40_init_hardware_reg(struct vfe_device *vfe_dev)
@@ -355,8 +363,12 @@ static void msm_vfe40_init_hardware_reg(struct vfe_device *vfe_dev)
 static void msm_vfe40_process_reset_irq(struct vfe_device *vfe_dev,
 	uint32_t irq_status0, uint32_t irq_status1)
 {
-	if (irq_status0 & (1 << 31))
+//ASUS_BSP +++  for debug "msm_vfe40_reset_hardware" only, disabled by default
+	if (irq_status0 & (1 << 31)) {
+              CDBG("[YM] msm_vfe40_process_reset_irq[0x%x]\n", irq_status0);
 		complete(&vfe_dev->reset_complete);
+	}
+//ASUS_BSP ---  for debug "msm_vfe40_reset_hardware" only, disabled by default
 }
 
 static void msm_vfe40_process_halt_irq(struct vfe_device *vfe_dev,
@@ -461,54 +473,62 @@ static void msm_vfe40_process_error_status(struct vfe_device *vfe_dev)
 {
 	uint32_t error_status1 = vfe_dev->error_info.error_mask1;
 	if (error_status1 & (1 << 0))
-		pr_err("%s: camif error status: 0x%x\n",
+		pr_err_ratelimited("%s: camif error status: 0x%x\n",
 			__func__, vfe_dev->error_info.camif_status);
 	if (error_status1 & (1 << 1))
-		pr_err("%s: stats bhist overwrite\n", __func__);
+		pr_err_ratelimited("%s: stats bhist overwrite\n", __func__);
 	if (error_status1 & (1 << 2))
-		pr_err("%s: stats cs overwrite\n", __func__);
+		pr_err_ratelimited("%s: stats cs overwrite\n", __func__);
 	if (error_status1 & (1 << 3))
-		pr_err("%s: stats ihist overwrite\n", __func__);
+		pr_err_ratelimited("%s: stats ihist overwrite\n", __func__);
 	if (error_status1 & (1 << 4))
-		pr_err("%s: realign buf y overflow\n", __func__);
+		pr_err_ratelimited("%s: realign buf y overflow\n", __func__);
 	if (error_status1 & (1 << 5))
-		pr_err("%s: realign buf cb overflow\n", __func__);
+		pr_err_ratelimited("%s: realign buf cb overflow\n", __func__);
 	if (error_status1 & (1 << 6))
-		pr_err("%s: realign buf cr overflow\n", __func__);
+		pr_err_ratelimited("%s: realign buf cr overflow\n", __func__);
 	if (error_status1 & (1 << 7)) {
-		pr_err("%s: violation\n", __func__);
+		pr_err_ratelimited("%s: violation\n", __func__);
 		msm_vfe40_process_violation_status(vfe_dev);
 	}
 	if (error_status1 & (1 << 9))
-		pr_err("%s: image master 0 bus overflow\n", __func__);
+		pr_err_ratelimited("%s: image master 0 bus overflow\n",
+			__func__);
 	if (error_status1 & (1 << 10))
-		pr_err("%s: image master 1 bus overflow\n", __func__);
+		pr_err_ratelimited("%s: image master 1 bus overflow\n",
+			__func__);
 	if (error_status1 & (1 << 11))
-		pr_err("%s: image master 2 bus overflow\n", __func__);
+		pr_err_ratelimited("%s: image master 2 bus overflow\n",
+			__func__);
 	if (error_status1 & (1 << 12))
-		pr_err("%s: image master 3 bus overflow\n", __func__);
+		pr_err_ratelimited("%s: image master 3 bus overflow\n",
+			__func__);
 	if (error_status1 & (1 << 13))
-		pr_err("%s: image master 4 bus overflow\n", __func__);
+		pr_err_ratelimited("%s: image master 4 bus overflow\n",
+			__func__);
 	if (error_status1 & (1 << 14))
-		pr_err("%s: image master 5 bus overflow\n", __func__);
+		pr_err_ratelimited("%s: image master 5 bus overflow\n",
+			__func__);
 	if (error_status1 & (1 << 15))
-		pr_err("%s: image master 6 bus overflow\n", __func__);
+		pr_err_ratelimited("%s: image master 6 bus overflow\n",
+			__func__);
 	if (error_status1 & (1 << 16))
-		pr_err("%s: status be bus overflow\n", __func__);
+		pr_err_ratelimited("%s: status be bus overflow\n", __func__);
 	if (error_status1 & (1 << 17))
-		pr_err("%s: status bg bus overflow\n", __func__);
+		pr_err_ratelimited("%s: status bg bus overflow\n", __func__);
 	if (error_status1 & (1 << 18))
-		pr_err("%s: status bf bus overflow\n", __func__);
+		pr_err_ratelimited("%s: status bf bus overflow\n", __func__);
 	if (error_status1 & (1 << 19))
-		pr_err("%s: status awb bus overflow\n", __func__);
+		pr_err_ratelimited("%s: status awb bus overflow\n", __func__);
 	if (error_status1 & (1 << 20))
-		pr_err("%s: status rs bus overflow\n", __func__);
+		pr_err_ratelimited("%s: status rs bus overflow\n", __func__);
 	if (error_status1 & (1 << 21))
-		pr_err("%s: status cs bus overflow\n", __func__);
+		pr_err_ratelimited("%s: status cs bus overflow\n", __func__);
 	if (error_status1 & (1 << 22))
-		pr_err("%s: status ihist bus overflow\n", __func__);
+		pr_err_ratelimited("%s: status ihist bus overflow\n", __func__);
 	if (error_status1 & (1 << 23))
-		pr_err("%s: status skin bhist bus overflow\n", __func__);
+		pr_err_ratelimited("%s: status skin bhist bus overflow\n",
+			__func__);
 }
 
 static void msm_vfe40_read_irq_status(struct vfe_device *vfe_dev,
@@ -575,10 +595,24 @@ static void msm_vfe40_reg_update(struct vfe_device *vfe_dev)
 
 static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev)
 {
+       long l_rc=0; //ASUS_BSP YM 50ms -> 80ms; Add retry, when reset fail
 	init_completion(&vfe_dev->reset_complete);
 	msm_camera_io_w_mb(0x1FF, vfe_dev->vfe_base + 0xC);
-	return wait_for_completion_interruptible_timeout(
-		&vfe_dev->reset_complete, msecs_to_jiffies(50));
+//ASUS_BSP +++ YM 50ms -> 80ms; Add retry, when reset fail
+       pr_info("[YM] %s E\n", __func__);
+	if (wait_for_completion_interruptible_timeout(
+		&vfe_dev->reset_complete, msecs_to_jiffies(80))<=0) {
+		pr_info("[YM] %s timeout try again\n", __func__);
+		msm_camera_io_w_mb(0x1FF, vfe_dev->vfe_base + 0xC);
+		l_rc = wait_for_completion_interruptible_timeout(
+			&vfe_dev->reset_complete, msecs_to_jiffies(80));
+	       pr_info("[YM] %s retry result(%d) X\n", __func__, (int)l_rc);
+		return l_rc;
+	} else {
+	       pr_info("[YM] %s success X\n", __func__);
+		return 1; //success
+	}
+//ASUS_BSP --- YM 50ms -> 80ms; Add retry, when reset fail
 }
 
 static void msm_vfe40_axi_reload_wm(

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -251,7 +251,7 @@ static int sendcmd(struct adreno_device *adreno_dev,
 
 	dispatcher->inflight++;
 
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 
 	if (dispatcher->inflight == 1 &&
 			!test_bit(ADRENO_DISPATCHER_POWER, &dispatcher->priv)) {
@@ -259,7 +259,7 @@ static int sendcmd(struct adreno_device *adreno_dev,
 		ret = kgsl_active_count_get(device);
 		if (ret) {
 			dispatcher->inflight--;
-			mutex_unlock(&device->mutex);
+			kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 			return ret;
 		}
 
@@ -282,7 +282,7 @@ static int sendcmd(struct adreno_device *adreno_dev,
 		}
 	}
 
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 
 	if (ret) {
 		dispatcher->inflight--;
@@ -397,7 +397,7 @@ static int dispatcher_context_sendcmds(struct adreno_device *adreno_dev,
 	 */
 
 	if (count)
-		wake_up_interruptible_all(&drawctxt->wq);
+		wake_up_all(&drawctxt->wq);
 
 	/*
 	 * Return positive if the context submitted commands or if we figured
@@ -834,10 +834,10 @@ static void remove_invalidated_cmdbatches(struct kgsl_device *device,
 			drawctxt->state == ADRENO_CONTEXT_STATE_INVALID) {
 			replay[i] = NULL;
 
-			mutex_lock(&device->mutex);
+			kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 			kgsl_cancel_events_timestamp(device, cmd->context,
 				cmd->timestamp);
-			mutex_unlock(&device->mutex);
+			kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 
 			kgsl_cmdbatch_destroy(cmd);
 		}
@@ -936,7 +936,7 @@ static int dispatcher_do_fault(struct kgsl_device *device)
 	del_timer_sync(&dispatcher->timer);
 	del_timer_sync(&dispatcher->fault_timer);
 
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 
 	cmdbatch = dispatcher->cmdqueue[dispatcher->head];
 
@@ -972,7 +972,7 @@ static int dispatcher_do_fault(struct kgsl_device *device)
 		kgsl_device_snapshot(device, 1);
 	}
 
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 
 	/* Allocate memory to store the inflight commands */
 	replay = kzalloc(sizeof(*replay) * dispatcher->inflight, GFP_KERNEL);
@@ -1135,10 +1135,10 @@ replay:
 	dispatcher->head = dispatcher->tail = 0;
 
 	/* Reset the GPU */
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 
 	ret = adreno_reset(device);
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 	/* if any other fault got in until reset then ignore */
 	fault = atomic_xchg(&dispatcher->fault, 0);
 
@@ -1374,9 +1374,9 @@ static void adreno_dispatcher_work(struct work_struct *work)
 	 * stragglers
 	 */
 	if (dispatcher->inflight == 0 && count) {
-		mutex_lock(&device->mutex);
+		kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 		queue_work(device->work_queue, &device->ts_expired_ws);
-		mutex_unlock(&device->mutex);
+		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 	}
 
 	/* Dispatch new commands if we have the room */
@@ -1393,12 +1393,12 @@ done:
 		mod_timer(&dispatcher->timer, cmdbatch->expires);
 
 		/* There are still things in flight - update the idle counts */
-		mutex_lock(&device->mutex);
+		kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 		kgsl_pwrscale_idle(device);
-		mutex_unlock(&device->mutex);
+		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 	} else {
 		/* There is nothing left in the pipeline.  Shut 'er down boys */
-		mutex_lock(&device->mutex);
+		kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 		/*
 		 * Stop the fault timer before decrementing the active count to
 		 * avoid reading the hardware registers while we are trying to
@@ -1411,13 +1411,13 @@ done:
 			clear_bit(ADRENO_DISPATCHER_POWER, &dispatcher->priv);
 		}
 
-		mutex_unlock(&device->mutex);
+		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 	}
 
 	/* Before leaving update the pwrscale information */
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 	kgsl_pwrscale_idle(device);
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 
 	mutex_unlock(&dispatcher->mutex);
 }
@@ -1519,8 +1519,8 @@ void adreno_dispatcher_start(struct kgsl_device *device)
 
 	complete_all(&device->cmdbatch_gate);
 
-	/* a305c GPU is slower than a330 and needs a larger timer */
-	if (adreno_is_a305c(adreno_dev))
+	/* a305b & a305c GPUs are slower than a330 and needs a larger timer */
+	if (adreno_is_a305b(adreno_dev) || adreno_is_a305c(adreno_dev))
 		_fault_timer_interval = 200;
 
 	/* Schedule the work loop to get things going */

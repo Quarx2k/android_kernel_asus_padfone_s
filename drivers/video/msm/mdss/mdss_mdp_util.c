@@ -229,11 +229,23 @@ hist_isr_done:
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_ASUS_CAMERA_STS
+bool get_camera_status(void);//Mickey+++, add for camera rotate used
+#endif
+
 struct mdss_mdp_format_params *mdss_mdp_get_format_params(u32 format)
 {
 	if (format < MDP_IMGTYPE_LIMIT) {
 		struct mdss_mdp_format_params *fmt = NULL;
 		int i;
+	
+		//Mickey+++, camera needs a special format for GH2V2
+#ifdef CONFIG_ASUS_CAMERA_STS   
+		if (MDP_Y_CR_CB_GH2V2 == format && get_camera_status())
+		    return &camera_yv12_format;
+#endif
+		//Mickey---
+
 		for (i = 0; i < ARRAY_SIZE(mdss_mdp_format_map); i++) {
 			fmt = &mdss_mdp_format_map[i];
 			if (format == fmt->format)
@@ -481,9 +493,17 @@ int mdss_mdp_put_img(struct mdss_mdp_img_data *data)
 				msm_ion_unsecure_buffer(iclient,
 					data->srcp_ihdl);
 			}
+		//Mickey+++, add debug info while unmap iommu failed
+		} else {
+			pr_err("try to unmap iommu, but mdss iommu dettached\n");
 		}
+		//Mickey---
 
-		ion_free(iclient, data->srcp_ihdl);
+        //Mickey+++, double check if the handle is null
+        if (!IS_ERR_OR_NULL(data->srcp_ihdl)){
+            ion_free(iclient, data->srcp_ihdl);
+        }
+        //Mickey---
 		data->srcp_ihdl = NULL;
 	} else {
 		return -ENOMEM;

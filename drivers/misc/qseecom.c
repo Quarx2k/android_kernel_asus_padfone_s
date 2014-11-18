@@ -71,6 +71,13 @@
 
 #define RPMB_SERVICE			0x2000
 
+//ASUS_BSP+++
+extern int g_A90_cpuID;
+
+static char *tzapps = NULL;
+module_param(tzapps, charp, S_IRUGO | S_IWUSR);
+//ASUS_BSP---
+
 enum qseecom_clk_definitions {
 	CLK_DFAB = 0,
 	CLK_SFPB,
@@ -3633,6 +3640,22 @@ static struct platform_driver qseecom_plat_driver = {
 
 static int __devinit qseecom_init(void)
 {
+//ASUS_BSP+++
+	tzapps = (char *)kmalloc(32, GFP_KERNEL);
+	if (tzapps == NULL) {
+		pr_info("[tzapps]: malloc(32) fail.\n");
+	}
+	memset(tzapps, 0, 32);
+
+	pr_info("[tzapps]: g_A90_cpuID=0x%X.\n", g_A90_cpuID);
+
+	if ((g_A90_cpuID == 0x7b8) || (g_A90_cpuID == 0x7bc) || (g_A90_cpuID == 0x7b4)) {
+		sprintf((char *)(tzapps), "%X", g_A90_cpuID);
+	} else {
+		pr_info("[tzapps]: unknown cpuID\n");
+	}
+	pr_info("[tzapps]: %s\n", tzapps);
+//ASUS_BSP---
 	return platform_driver_register(&qseecom_plat_driver);
 }
 

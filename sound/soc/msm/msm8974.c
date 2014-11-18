@@ -33,6 +33,7 @@
 #include "qdsp6v2/q6core.h"
 #include "../codecs/wcd9xxx-common.h"
 #include "../codecs/wcd9320.h"
+#include <linux/kernel.h> // ASUS_BSP Paul +++
 
 #define DRV_NAME "msm8974-asoc-taiko"
 
@@ -76,6 +77,22 @@ static int msm8974_auxpcm_rate = 8000;
 #define EXT_CLASS_AB_DELAY_DELTA 1000
 
 #define NUM_OF_AUXPCM_GPIOS 4
+
+//Bruno++ for P01
+#ifdef CONFIG_EEPROM_NUVOTON
+#include <linux/microp_api.h>
+#include <linux/microp_pin_def.h>
+#endif
+//Bruno++ for P01
+
+// ASUS_BSP Paul +++
+#include <linux/mfd/pm8xxx/gpio.h>
+#include <linux/switch.h>
+#include <linux/jiffies.h>
+
+struct wcd9320_hs_struct wcd9320_hs_data;
+EXPORT_SYMBOL(wcd9320_hs_data);
+//ASUS_BSP Paul ---
 
 static void *adsp_state_notifier;
 
@@ -227,7 +244,8 @@ static int msm8974_liquid_ext_spk_power_amp_init(void)
 			return -EINVAL;
 		}
 		gpio_direction_output(ext_spk_amp_gpio, 0);
-
+//Bruno++
+#if 0
 		if (ext_spk_amp_regulator == NULL) {
 			ext_spk_amp_regulator = regulator_get(&spdev->dev,
 									"qcom,ext-spk-amp");
@@ -240,6 +258,8 @@ static int msm8974_liquid_ext_spk_power_amp_init(void)
 				return PTR_ERR(ext_spk_amp_regulator);
 			}
 		}
+#endif
+//Bruno++
 	}
 
 	ext_ult_spk_amp_gpio = of_get_named_gpio(spdev->dev.of_node,
@@ -284,24 +304,77 @@ static void msm8974_liquid_ext_ult_spk_power_amp_enable(u32 on)
 static void msm8974_liquid_ext_spk_power_amp_enable(u32 on)
 {
 	if (on) {
+		//Bruno++
+		/*
 		if (regulator_enable(ext_spk_amp_regulator))
 			pr_err("%s: enable failed ext_spk_amp_reg\n",
-				__func__);
+				__func__);*/
+		//Bruno++
 		gpio_direction_output(ext_spk_amp_gpio, on);
 		/*time takes enable the external power amplifier*/
 		usleep_range(EXT_CLASS_D_EN_DELAY,
 			     EXT_CLASS_D_EN_DELAY + EXT_CLASS_D_DELAY_DELTA);
 	} else {
 		gpio_direction_output(ext_spk_amp_gpio, on);
-		regulator_disable(ext_spk_amp_regulator);
+		//regulator_disable(ext_spk_amp_regulator);	 //Bruno++
 		/*time takes disable the external power amplifier*/
 		usleep_range(EXT_CLASS_D_DIS_DELAY,
 			     EXT_CLASS_D_DIS_DELAY + EXT_CLASS_D_DELAY_DELTA);
 	}
 
-	pr_debug("%s: %s external speaker PAs.\n", __func__,
+	printk("%s: %s external speaker PAs.\n", __func__,
 			on ? "Enable" : "Disable");
 }
+
+#ifdef CONFIG_EEPROM_NUVOTON
+int P03_pamp_on = 0; //Rice
+//extern int P05_mic_inuse;
+static void asus_pad_spk_power_amp(u32 on)
+{
+    if (on) {
+        //int iRetryCount = 5;
+
+        if (P03_pamp_on)
+        {
+            printk("%s: P03_pamp_on is already on\n", __func__);\
+            return;
+        }
+        printk("%s: enable P03 spkr amp\n", __func__);
+#if 0
+        msleep(25);
+        while (iRetryCount)
+        {
+            if((AX_MicroP_setGPIOOutputPin(OUT_uP_AUD_PWR_EN, 1)) == 0) {
+                break;
+            }
+            iRetryCount--;
+            msleep(100);
+        }
+#endif
+        AX_MicroP_setGPIOOutputPin(OUT_uP_SPK_EN, 1);
+        P03_pamp_on = 1;
+        ApplyA68SPKGain();
+    } else {
+        if (!P03_pamp_on)
+        {
+            printk("%s: P03_pamp_on is already off\n", __func__);
+            return;
+        }
+        printk("%s: disable P03 spkr amp\n", __func__);
+        AX_MicroP_setGPIOOutputPin(OUT_uP_SPK_EN, 0);
+        P03_pamp_on = 0;
+#if 0
+        if (P05_mic_inuse == 0) {
+            AX_MicroP_setGPIOOutputPin(OUT_uP_AUD_PWR_EN, 0);
+        }
+        msleep(10);
+#endif
+    }
+
+    printk("%s: %s external speaker PAs.\n", __func__,
+            on ? "Enable" : "Disable");
+}
+#endif
 
 static void msm8974_liquid_docking_irq_work(struct work_struct *work)
 {
@@ -399,6 +472,7 @@ static int msm8974_liquid_init_docking(struct snd_soc_dapm_context *dapm)
 	return 0;
 }
 
+#if 0 //Bruno++
 static int msm8974_liquid_ext_spk_power_amp_on(u32 spk)
 {
 	int rc;
@@ -414,8 +488,10 @@ static int msm8974_liquid_ext_spk_power_amp_on(u32 spk)
 		    (msm8974_ext_spk_pamp & LO_4_SPK_AMP))
 			if (ext_spk_amp_gpio >= 0 &&
 			    msm8974_liquid_dock_dev &&
-			    msm8974_liquid_dock_dev->dock_plug_det == 0)
+			    msm8974_liquid_dock_dev->dock_plug_det == 0) {
 				msm8974_liquid_ext_spk_power_amp_enable(1);
+				ApplyA68SPKGain();
+			}
 		rc = 0;
 	} else  {
 		pr_err("%s: Invalid external speaker ampl. spk = 0x%x\n",
@@ -488,6 +564,7 @@ static void msm8974_liquid_ext_spk_power_amp_off(u32 spk)
 				msm8974_liquid_dock_dev != NULL &&
 				msm8974_liquid_dock_dev->dock_plug_det == 0)
 				msm8974_liquid_ext_spk_power_amp_enable(0);
+			msm8974_ext_spk_pamp = 0;
 		}
 
 	} else  {
@@ -505,6 +582,7 @@ static void msm8974_ext_spk_power_amp_off(u32 spk)
 	else if (gpio_is_valid(ext_ult_lo_amp_gpio))
 		msm8974_fluid_ext_us_amp_off(spk);
 }
+#endif //Bruno++
 
 static void msm8974_ext_control(struct snd_soc_codec *codec)
 {
@@ -558,28 +636,24 @@ static int msm_ext_spkramp_event(struct snd_soc_dapm_widget *w,
 	pr_debug("%s()\n", __func__);
 
 	if (SND_SOC_DAPM_EVENT_ON(event)) {
+#ifdef CONFIG_EEPROM_NUVOTON
 		if (!strncmp(w->name, "Lineout_1 amp", 14))
-			msm8974_ext_spk_power_amp_on(LO_1_SPK_AMP);
-		else if (!strncmp(w->name, "Lineout_3 amp", 14))
-			msm8974_ext_spk_power_amp_on(LO_3_SPK_AMP);
+			pr_debug("%s() Lineout_1 amp -> do nothing.\n", __func__);
 		else if (!strncmp(w->name, "Lineout_2 amp", 14))
-			msm8974_ext_spk_power_amp_on(LO_2_SPK_AMP);
-		else if  (!strncmp(w->name, "Lineout_4 amp", 14))
-			msm8974_ext_spk_power_amp_on(LO_4_SPK_AMP);
+			asus_pad_spk_power_amp(1);
+#endif
 		else {
 			pr_err("%s() Invalid Speaker Widget = %s\n",
 					__func__, w->name);
 			return -EINVAL;
 		}
 	} else {
+#ifdef CONFIG_EEPROM_NUVOTON
 		if (!strncmp(w->name, "Lineout_1 amp", 14))
-			msm8974_ext_spk_power_amp_off(LO_1_SPK_AMP);
-		else if (!strncmp(w->name, "Lineout_3 amp", 14))
-			msm8974_ext_spk_power_amp_off(LO_3_SPK_AMP);
+			pr_debug("%s() Lineout_1 amp -> do nothing.\n", __func__);
 		else if (!strncmp(w->name, "Lineout_2 amp", 14))
-			msm8974_ext_spk_power_amp_off(LO_2_SPK_AMP);
-		else if  (!strncmp(w->name, "Lineout_4 amp", 14))
-			msm8974_ext_spk_power_amp_off(LO_4_SPK_AMP);
+			asus_pad_spk_power_amp(0);
+#endif
 		else {
 			pr_err("%s() Invalid Speaker Widget = %s\n",
 					__func__, w->name);
@@ -865,10 +939,10 @@ static int msm_btsco_rate_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
 	switch (ucontrol->value.integer.value[0]) {
-	case 8000:
+	case 0://Bruno++
 		msm_btsco_rate = BTSCO_RATE_8KHZ;
 		break;
-	case 16000:
+	case 1://Bruno++
 		msm_btsco_rate = BTSCO_RATE_16KHZ;
 		break;
 	default:
@@ -1625,6 +1699,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			return err;
 		}
 	}
+#if 0 // ASUS_BSP Paul +++
 	/* start mbhc */
 	mbhc_cfg.calibration = def_taiko_mbhc_cal();
 	if (mbhc_cfg.calibration) {
@@ -1635,6 +1710,8 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		err = -ENOMEM;
 		goto out;
 	}
+#endif // ASUS_BSP Paul +++
+
 	adsp_state_notifier =
 	    subsys_notif_register_notifier("adsp",
 					   &adsp_state_notifier_block);
@@ -2708,11 +2785,21 @@ static __devinit int msm8974_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = &snd_soc_card_msm8974;
 	struct msm8974_asoc_mach_data *pdata;
+	//ASUS_BSP Paul +++
+	struct device *dev = &pdev->dev;
+	struct device_node *node, *pp;
+	//ASUS_BSP Paul ---
 	int ret;
 	const char *auxpcm_pri_gpio_set = NULL;
 	const char *prop_name_ult_lo_gpio = "qcom,ext-ult-lo-amp-gpio";
 	struct resource	*pri_muxsel;
 	struct resource	*sec_muxsel;
+
+	//ASUS_BSP Paul +++
+	node = dev->of_node;
+	if (node == NULL)
+		return -ENODEV;
+	//ASUS_BSP Paul ---
 
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev, "No platform supplied from device tree\n");
@@ -2765,6 +2852,30 @@ static __devinit int msm8974_asoc_machine_probe(struct platform_device *pdev)
 		ret = -ENODEV;
 		goto err;
 	}
+
+	// ASUS_BSP Paul +++
+	wcd9320_hs_data.hsmic_bias = of_get_named_gpio(pdev->dev.of_node, "qcom,hsmic_bias", 0);
+
+	pp = NULL;
+	pp = of_get_next_child(node, pp);
+	if (!of_find_property(pp, "gpios", NULL)) {
+		printk("Found headset button without gpios \n");
+	}
+
+	wcd9320_hs_data.button_gpio = of_get_gpio(pp, 0);
+	wcd9320_hs_data.button_irq = irq_of_parse_and_map(pp, 0);
+
+	pp = of_get_next_child(node, pp);
+	if (!of_find_property(pp, "gpios", NULL)) {
+		printk("Found jack in detect without gpios \n");
+	}
+
+	wcd9320_hs_data.jack_gpio = of_get_gpio(pp, 0);
+	wcd9320_hs_data.jack_irq = irq_of_parse_and_map(pp, 0);
+
+	pp = of_get_next_child(node, pp);
+	wcd9320_hs_data.hs_path_en = of_get_gpio(pp, 0);
+	// ASUS_BSP Paul ---
 
 	ret = msm8974_prepare_codec_mclk(card);
 	if (ret)

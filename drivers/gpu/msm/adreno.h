@@ -62,7 +62,9 @@
 #define ADRENO_DEFAULT_PWRSCALE_POLICY  NULL
 #endif
 
+#ifdef CONFIG_DEBUG_FS
 void adreno_debugfs_init(struct kgsl_device *device);
+#endif
 
 #define ADRENO_ISTORE_START 0x5000 /* Istore offset */
 

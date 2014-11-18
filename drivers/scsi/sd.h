@@ -52,6 +52,11 @@ struct scsi_disk {
 	struct scsi_device *device;
 	struct device	dev;
 	struct gendisk	*disk;
+	//ASUS_BSP+++ BennyCheng "add card reader hotplug support"
+	struct task_struct	*sd_thread;
+	struct completion	sd_thread_done;
+	wait_queue_head_t sd_thread_wait_queue;
+	//ASUS_BSP--- BennyCheng "add card reader hotplug support"
 	atomic_t	openers;
 	sector_t	capacity;	/* size in 512-byte sectors */
 	u32		max_ws_blocks;
@@ -77,6 +82,10 @@ struct scsi_disk {
 	unsigned	lbpws : 1;
 	unsigned	lbpws10 : 1;
 	unsigned	lbpvpd : 1;
+	//ASUS_BSP+++ BennyCheng "add card reader hotplug support"
+	int	sd_thread_stop;
+	int	old_media_present;
+	//ASUS_BSP--- BennyCheng "add card reader hotplug support"
 };
 #define to_scsi_disk(obj) container_of(obj,struct scsi_disk,dev)
 

@@ -32,6 +32,12 @@
 
 #include <trace/events/power.h>
 
+//ASUS Joy_Lin +++
+#include <asm/uaccess.h>
+#include <linux/proc_fs.h>
+#define ASUS_SB_FILE "ASUS_SB"
+//ASUS Joy_Lin ---
+
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
  * level driver of CPUFreq support, and its spinlock. This lock
@@ -1726,7 +1732,8 @@ static int __cpufreq_set_policy(struct cpufreq_policy *data,
 	memcpy(&policy->cpuinfo, &data->cpuinfo,
 				sizeof(struct cpufreq_cpuinfo));
 
-	if (policy->min > data->max || policy->max < data->min) {
+	if (policy->min > data->user_policy.max
+		|| policy->max < data->user_policy.min) {
 		ret = -EINVAL;
 		goto error_out;
 	}
@@ -2007,7 +2014,7 @@ static int __init cpufreq_core_init(void)
 	cpufreq_global_kobject = kobject_create_and_add("cpufreq", &cpu_subsys.dev_root->kobj);
 	BUG_ON(!cpufreq_global_kobject);
 	register_syscore_ops(&cpufreq_syscore_ops);
-
+    
 	return 0;
 }
 core_initcall(cpufreq_core_init);

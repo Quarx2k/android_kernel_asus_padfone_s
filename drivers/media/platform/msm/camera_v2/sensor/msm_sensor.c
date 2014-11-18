@@ -20,6 +20,11 @@
 #include <mach/rpm-regulator-smd.h>
 #include <linux/regulator/consumer.h>
 
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#include "iCatch7002a.h"
+extern unsigned char g_camera_status; //LiJen: add camera status for ATD
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
+
 #undef CDBG
 #ifdef CONFIG_MSMB_CAMERA_DEBUG
 #define CDBG(fmt, args...) pr_err(fmt, ##args)
@@ -536,6 +541,8 @@ int32_t msm_sensor_init_gpio_pin_tbl(struct device_node *of_node,
 		return rc;
 	}
 
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#if 0 //LiJen: remove qualcomm defaul gpio pin
 	if (of_property_read_bool(of_node, "qcom,gpio-reset") == true) {
 		rc = of_property_read_u32(of_node, "qcom,gpio-reset", &val);
 		if (rc < 0) {
@@ -569,7 +576,133 @@ int32_t msm_sensor_init_gpio_pin_tbl(struct device_node *of_node,
 		CDBG("%s qcom,gpio-reset %d\n", __func__,
 			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_STANDBY]);
 	}
+#endif
+       // isp_1p2_en
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_1p2_en") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_1p2_en", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_1p2_en failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_1p2_en invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_1P2] =
+			gpio_array[val];
+		CDBG("%s qcom,gpio-isp_1p2_en %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_1P2]);
+	}
+    
+       //isp_1p8_en
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_1p8_en") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_1p8_en", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_1p8_en failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_1p8_en invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_1P8] =
+			gpio_array[val];
+		CDBG("%s qcom,gpio-isp_1p8_en %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_1P8]);
+	}
+    
+       //isp_int
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_int") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_int", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_int failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_int invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_INT] =
+			gpio_array[val];
+		CDBG("%s qcom,gpio-isp_int %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_INT]);
+	}
 
+       //isp_suspend
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_suspend") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_suspend", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_suspend failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_suspend invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_SUSPEND] =
+			gpio_array[val];
+		CDBG("%s qcom,gpio-isp_suspend %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_SUSPEND]);
+	}
+
+       //vga_mclk_en
+	if (of_property_read_bool(of_node, "qcom,gpio-vga_mclk_en") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-vga_mclk_en", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-reset failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-vga_mclk_en invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_VGA_MCLK] =
+			gpio_array[val];
+		CDBG("%s qcom,gpio-vga_mclk_en %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_VGA_MCLK]);
+	}
+
+       //fled_driver_ent
+	if (of_property_read_bool(of_node, "qcom,gpio-fled_driver_ent") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-fled_driver_ent", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-fled_driver_ent failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-fled_driver_ent invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_LED_ENT] =
+			gpio_array[val];
+		CDBG("%s qcom,gpio-fled_driver_ent %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_LED_ENT]);
+	}
+
+       //isp_reset
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_reset") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_reset", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_reset failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_reset invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_RESET] =
+			gpio_array[val];
+		CDBG("%s qcom,gpio-isp_reset %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_RESET]);
+	}    
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"    
 	rc = of_property_read_u32(of_node, "qcom,gpio-vio", &val);
 	if (!rc) {
 		if (val >= gpio_array_size) {
@@ -668,6 +801,8 @@ static int32_t msm_sensor_get_dt_actuator_data(struct device_node *of_node,
 	int32_t rc = 0;
 	uint32_t val = 0;
 
+       return rc; //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"  
+       
 	rc = of_property_read_u32(of_node, "qcom,actuator-cam-name", &val);
 	CDBG("%s qcom,actuator-cam-name %d, rc %d\n", __func__, val, rc);
 	if (rc < 0)
@@ -947,6 +1082,8 @@ int32_t msm_sensor_free_sensor_data(struct msm_sensor_ctrl_t *s_ctrl)
 	return 0;
 }
 
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"  
+#if 0
 static struct msm_cam_clk_info cam_8960_clk_info[] = {
 	[SENSOR_CAM_MCLK] = {"cam_clk", 24000000},
 };
@@ -955,9 +1092,14 @@ static struct msm_cam_clk_info cam_8610_clk_info[] = {
 	[SENSOR_CAM_MCLK] = {"cam_src_clk", 24000000},
 	[SENSOR_CAM_CLK] = {"cam_clk", 0},
 };
+#endif
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"  
 
 static struct msm_cam_clk_info cam_8974_clk_info[] = {
-	[SENSOR_CAM_MCLK] = {"cam_src_clk", 24000000},
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"  
+	//[SENSOR_CAM_MCLK] = {"cam_src_clk", 19200000},
+	[SENSOR_CAM_MCLK] = {"core_clk", 12000000},
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"  
 	[SENSOR_CAM_CLK] = {"cam_clk", 0},
 };
 
@@ -1213,16 +1355,18 @@ int32_t msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
 			s_ctrl->sensor_i2c_client,
 			s_ctrl->sensordata->slave_info->sensor_id_reg_addr,
-			&chipid, MSM_CAMERA_I2C_WORD_DATA);
+			&chipid, MSM_CAMERA_I2C_BYTE_DATA); //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 	if (rc < 0) {
 		pr_err("%s: %s: read id failed\n", __func__,
 			s_ctrl->sensordata->sensor_name);
+		g_camera_status = 0;	//ASUS_BSP LiJen: add camera status for ATD
 		return rc;
 	}
 
 	CDBG("%s: read id: %x expected id %x:\n", __func__, chipid,
 		s_ctrl->sensordata->slave_info->sensor_id);
 	if (chipid != s_ctrl->sensordata->slave_info->sensor_id) {
+		g_camera_status = 0;	//ASUS_BSP LiJen: add camera status for ATD
 		pr_err("msm_sensor_match_id chip id doesnot match\n");
 		return -ENODEV;
 	}
@@ -1254,6 +1398,10 @@ static int msm_sensor_get_af_status(struct msm_sensor_ctrl_t *s_ctrl,
 	/* TO-DO: Need to set AF status register address and expected value
 	We need to check the AF status in the sensor register and
 	set the status in the *status variable accordingly*/
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"  
+        int32_t *status = (int32_t*)argp;
+        *status = iCatch_get_AF_result(0);
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting" 
 	return 0;
 }
 
@@ -1767,6 +1915,8 @@ static struct msm_sensor_fn_t msm_sensor_func_tbl = {
 	.sensor_match_id = msm_sensor_match_id,
 };
 
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#if 0
 static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl = {
 	.i2c_read = msm_camera_cci_i2c_read,
 	.i2c_read_seq = msm_camera_cci_i2c_read_seq,
@@ -1778,6 +1928,8 @@ static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl = {
 	.i2c_util = msm_sensor_cci_i2c_util,
 	.i2c_write_conf_tbl = msm_camera_cci_i2c_write_conf_tbl,
 };
+#endif 
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 
 static struct msm_camera_i2c_fn_t msm_sensor_qup_func_tbl = {
 	.i2c_read = msm_camera_qup_i2c_read,
@@ -1795,9 +1947,11 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 	int32_t rc = 0;
 	struct msm_sensor_ctrl_t *s_ctrl =
 		(struct msm_sensor_ctrl_t *)data;
-	struct msm_camera_cci_client *cci_client = NULL;
-	uint32_t session_id;
-	unsigned long mount_pos;
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"    
+	//struct msm_camera_cci_client *cci_client = NULL;
+	//uint32_t session_id;
+	//unsigned long mount_pos;
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"	
 
 	s_ctrl->pdev = pdev;
 	s_ctrl->dev = &pdev->dev;
@@ -1810,6 +1964,8 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 			return rc;
 		}
 	}
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#if 0        
 	s_ctrl->sensor_device_type = MSM_CAMERA_PLATFORM_DEVICE;
 	s_ctrl->sensor_i2c_client->cci_client = kzalloc(sizeof(
 		struct msm_camera_cci_client), GFP_KERNEL);
@@ -1879,6 +2035,8 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 	CDBG("%s:%d\n", __func__, __LINE__);
+#endif
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"     
 	return rc;
 }
 
@@ -1908,18 +2066,26 @@ int32_t msm_sensor_i2c_probe(struct i2c_client *client,
 		s_ctrl->sensordata = client->dev.platform_data;
 	} else {
 		CDBG("msm_sensor_i2c_probe: of_node exisists");
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#if 0		
 		rc = msm_sensor_get_dt_data(client->dev.of_node, s_ctrl);
 		if (rc < 0) {
 			pr_err("%s failed line %d\n", __func__, __LINE__);
 			return rc;
 		}
+#endif		
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 	}
 
 	s_ctrl->sensor_device_type = MSM_CAMERA_I2C_DEVICE;
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#if 0  
 	if (s_ctrl->sensordata == NULL) {
 		pr_err("%s %s NULL sensor data\n", __func__, client->name);
 		return -EFAULT;
 	}
+#endif
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 
 	if (s_ctrl->sensor_i2c_client != NULL) {
 		s_ctrl->sensor_i2c_client->client = client;
@@ -1943,6 +2109,17 @@ int32_t msm_sensor_i2c_probe(struct i2c_client *client,
 	if (!s_ctrl->sensor_v4l2_subdev_ops)
 		s_ctrl->sensor_v4l2_subdev_ops = &msm_sensor_subdev_ops;
 
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#if 1
+	s_ctrl->clk_info = kzalloc(sizeof(cam_8974_clk_info),
+		GFP_KERNEL);
+	if (!s_ctrl->clk_info) {
+		pr_err("%s:%d failed nomem\n", __func__, __LINE__);
+		return -ENOMEM;
+	}
+	memcpy(s_ctrl->clk_info, cam_8974_clk_info, sizeof(cam_8974_clk_info));	
+	s_ctrl->clk_info_size = ARRAY_SIZE(cam_8974_clk_info);
+#else
 	if (!client->dev.of_node) {
 		s_ctrl->clk_info = kzalloc(sizeof(cam_8960_clk_info),
 			GFP_KERNEL);
@@ -1964,6 +2141,7 @@ int32_t msm_sensor_i2c_probe(struct i2c_client *client,
 			sizeof(cam_8610_clk_info));
 		s_ctrl->clk_info_size = ARRAY_SIZE(cam_8610_clk_info);
 	}
+#endif
 
 	rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);
 	if (rc < 0) {
@@ -1999,6 +2177,15 @@ int32_t msm_sensor_i2c_probe(struct i2c_client *client,
 	msm_sd_register(&s_ctrl->msm_sd);
 	CDBG("%s:%d\n", __func__, __LINE__);
 
+	if(g_ASUS_hwID < A91_SR1){
+		if(strcmp(client->name, "mt9m114")==0){  //only for back camera
+			get_fw_version_in_isp();  //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+		}
+	}else{
+		//do nothing
+	}
+
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 	return rc;
 }

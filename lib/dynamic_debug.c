@@ -520,7 +520,7 @@ static char *dynamic_emit_prefix(const struct _ddebug *desc, char *buf)
 	int pos_after_tid;
 	int pos = 0;
 
-	pos += snprintf(buf + pos, remaining(pos), "%s", KERN_DEBUG);
+	pos += snprintf(buf + pos, remaining(pos), "%s", KERN_INFO);
 	if (desc->flags & _DPRINTK_FLAGS_INCL_TID) {
 		if (in_interrupt())
 			pos += snprintf(buf + pos, remaining(pos), "%s ",

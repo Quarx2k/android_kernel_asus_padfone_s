@@ -438,6 +438,7 @@ static int mdss_mdp_wb_queue(struct msm_fb_data_type *mfd,
 {
 	struct mdss_mdp_wb *wb = mfd_to_wb(mfd);
 	struct mdss_mdp_wb_data *node = NULL;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	int ret = 0;
 
 	if (!wb) {
@@ -446,6 +447,9 @@ static int mdss_mdp_wb_queue(struct msm_fb_data_type *mfd,
 	}
 
 	pr_debug("fb%d queue\n", wb->fb_ndx);
+
+	if (!mfd->panel_info->cont_splash_enabled)
+		mdss_iommu_attach(mdp5_data->mdata);
 
 	mutex_lock(&wb->lock);
 	if (local)
@@ -830,3 +834,22 @@ int msm_fb_writeback_set_secure(struct fb_info *info, int enable)
 	return mdss_mdp_wb_set_secure(mfd, enable);
 }
 EXPORT_SYMBOL(msm_fb_writeback_set_secure);
+
+/**
+ * msm_fb_writeback_iommu_ref() - Power ON/OFF mdp clock
+ * @enable - true/false to Power ON/OFF mdp clock
+ *
+ * Call to enable mdp clock at start of mdp_mmap/mdp_munmap API and
+ * to disable mdp clock at end of these API's to ensure iommu is in
+ * proper state while driver map/un-map any buffers.
+ */
+int msm_fb_writeback_iommu_ref(struct fb_info *info, int enable)
+{
+	if (enable)
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+	else
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_fb_writeback_iommu_ref);

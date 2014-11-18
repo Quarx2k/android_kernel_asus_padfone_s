@@ -79,7 +79,7 @@
 			spi-max-frequency = <5000000>;
 		};
 	};
-
+/*
 	i2c@f9966000 {
 		status = "disable";
 	};
@@ -93,9 +93,10 @@
 		interrupt-names = "qup_err_intr";
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
-		gpios = <&msmgpio 83 0>, /* DAT  */
-			<&msmgpio 84 0>; /* CLK */
+		gpios = <&msmgpio 83 0>, //DAT
+			<&msmgpio 84 0>; //CLK 
 	};
+*/
 
 	slim@fe12f000 {
 		status = "disable";

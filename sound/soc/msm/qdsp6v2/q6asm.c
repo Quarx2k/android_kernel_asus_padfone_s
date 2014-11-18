@@ -81,6 +81,26 @@ static void q6asm_reset_buf_state(struct audio_client *ac);
 static int q6asm_map_channels(u8 *channel_mapping, uint32_t channels);
 void *q6asm_mmap_apr_reg(void);
 
+static int set_custom_topology;
+static int topology_map_handle;
+static struct audio_buffer common_buf[2];
+static struct audio_client common_client;
+
+int q6asm_mmap_apr_dereg(void)
+{
+	int c;
+
+	c = atomic_sub_return(1, &this_mmap.ref_cnt);
+	if (c == 0) {
+		apr_deregister(this_mmap.apr);
+		pr_debug("%s: APR De-Register common port\n", __func__);
+	} else if (c < 0) {
+		pr_err("%s: APR Common Port Already Closed\n", __func__);
+		atomic_set(&this_mmap.ref_cnt, 0);
+	}
+
+	return 0;
+}
 
 /* for ASM custom topology */
 static struct audio_buffer common_buf[2];
@@ -106,22 +126,8 @@ static int out_cold_index;
 static char *out_buffer;
 static char *in_buffer;
 
-
-int q6asm_mmap_apr_dereg(void)
-{
-	int c;
-
-	c = atomic_sub_return(1, &this_mmap.ref_cnt);
-	if (c == 0) {
-		apr_deregister(this_mmap.apr);
-		pr_debug("%s: APR De-Register common port\n", __func__);
-	} else if (c < 0) {
-		pr_err("%s: APR Common Port Already Closed\n", __func__);
-		atomic_set(&this_mmap.ref_cnt, 0);
-	}
-
-	return 0;
-}
+static int set_custom_topology;
+static int topology_map_handle;
 
 static int audio_output_latency_dbgfs_open(struct inode *inode,
 							struct file *file)

@@ -205,7 +205,11 @@ static int xhci_alloc_segments_for_ring(struct xhci_hcd *xhci,
 
 		next = xhci_segment_alloc(xhci, cycle_state, flags);
 		if (!next) {
-			xhci_free_segments_for_ring(xhci, *first);
+			prev = *first;
+			do {
+				next = prev->next;
+				xhci_segment_free(xhci, prev);
+			} while ((prev = next));
 			return -ENOMEM;
 		}
 		xhci_link_segments(xhci, prev, next, type);
@@ -258,7 +262,7 @@ static struct xhci_ring *xhci_ring_alloc(struct xhci_hcd *xhci,
 	return ring;
 
 fail:
-	xhci_ring_free(xhci, ring);
+	kfree(ring);
 	return NULL;
 }
 
@@ -1422,8 +1426,15 @@ int xhci_endpoint_init(struct xhci_hcd *xhci,
 
 	type = usb_endpoint_type(&ep->desc);
 	/* Set up the endpoint ring */
-	virt_dev->eps[ep_index].new_ring =
+	//ASUS_BSP+++ BennyCheng "fix ring expansion failure when transferring with iso"
+	if (TYPE_ISOC == type) {
+		virt_dev->eps[ep_index].new_ring =
+			xhci_ring_alloc(xhci, 8, 1, type, mem_flags);
+	} else {
+		virt_dev->eps[ep_index].new_ring =
 		xhci_ring_alloc(xhci, 2, 1, type, mem_flags);
+	}
+	//ASUS_BSP--- BennyCheng "fix ring expansion failure when transferring with iso"
 	if (!virt_dev->eps[ep_index].new_ring) {
 		/* Attempt to use the ring cache */
 		if (virt_dev->num_rings_cached == 0)

@@ -35,6 +35,7 @@
 
 #include <asm/fb.h>
 
+#include "./msm/mdss/mdss_mdp.h" //joe1_++
 
     /*
      *  Frame buffer device initialization and setup routines
@@ -1065,6 +1066,33 @@ fb_blank(struct fb_info *info, int blank)
  	return ret;
 }
 
+//ASUS_BSP: Louis+++
+
+void fb_call_back(struct fb_info *info, int blank)
+{
+    struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par; //joe1_++
+	int rc;
+
+    int ret = 0;
+    if (blank > FB_BLANK_POWERDOWN)
+        blank = FB_BLANK_POWERDOWN;
+	
+	if (blank == FB_BLANK_UNBLANK)
+		rc = mdss_mdp_overlay_kickoff(mfd, NULL);
+//	printk("[joe1] %s ++mdss_mdp_overlay_kickoff\n", __func__);
+
+    if (!ret) {
+        struct fb_event event;
+
+        event.info = info;
+        event.data = &blank;
+
+        fb_notifier_call_chain(FB_EVENT_BLANK, &event);
+    }
+
+}
+//ASUS_BSP: Louis---
+
 static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			unsigned long arg)
 {
@@ -1177,15 +1205,35 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		unlock_fb_info(info);
 		break;
 	case FBIOBLANK:
+	//ASUS_BSP: Louis +++
+        printk("[Display] FBIOBLANK(%d)+++\n", (int) arg);
 		if (!lock_fb_info(info))
 			return -ENODEV;
-		console_lock();
+		//console_lock();
 		info->flags |= FBINFO_MISC_USEREVENT;
 		ret = fb_blank(info, arg);
 		info->flags &= ~FBINFO_MISC_USEREVENT;
-		console_unlock();
+		//console_unlock();
 		unlock_fb_info(info);
+        printk("[Display] FBIOBLANK(%d)---\n", (int) arg);
 		break;
+	//ASUS_BSP: Louis ---
+
+    //ASUS_BSP: Louis +++
+    case EXT_FBNOTIFY:
+        printk("[Display] EXT_FBNOTIFY(%d)+++\n", (int) arg);
+        if (!lock_fb_info(info))
+            return -ENODEV;
+        //console_lock();
+        info->flags |= FBINFO_MISC_USEREVENT;
+        fb_call_back(info, arg);
+        info->flags &= ~FBINFO_MISC_USEREVENT;
+        //console_unlock();
+        unlock_fb_info(info);
+        printk("[Display] EXT_FBNOTIFY(%d)---\n", (int) arg);
+        break;
+    //ASUS_BSP: Louis ---
+
 	default:
 		fb = info->fbops;
 		if (fb->fb_ioctl)

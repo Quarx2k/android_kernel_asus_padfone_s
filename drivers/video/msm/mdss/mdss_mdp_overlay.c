@@ -48,6 +48,12 @@ struct sd_ctrl_req {
 	unsigned int enable;
 } __attribute__ ((__packed__));
 
+//ASUS_BSP: Louis +++
+#include <linux/of_gpio.h>
+#include "video/msm_hdmi_modes.h"
+extern int MdpBoostUp;
+//ASUS_BSP: Louis ---
+
 static atomic_t ov_active_panels = ATOMIC_INIT(0);
 static int mdss_mdp_overlay_free_fb_pipe(struct msm_fb_data_type *mfd);
 static int mdss_mdp_overlay_fb_parse_dt(struct msm_fb_data_type *mfd);
@@ -677,6 +683,7 @@ int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
 	if ((num_planes <= 0) || (num_planes > MAX_PLANES))
 		return -EINVAL;
 
+	mdss_bus_bandwidth_ctrl(1);
 	memset(data, 0, sizeof(*data));
 	for (i = 0; i < num_planes; i++) {
 		data->p[i].flags = flags;
@@ -690,6 +697,7 @@ int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
 			break;
 		}
 	}
+	mdss_bus_bandwidth_ctrl(0);
 
 	data->num_planes = i;
 
@@ -699,8 +707,11 @@ int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
 int mdss_mdp_overlay_free_buf(struct mdss_mdp_data *data)
 {
 	int i;
+
+	mdss_bus_bandwidth_ctrl(1);
 	for (i = 0; i < data->num_planes && data->p[i].len; i++)
 		mdss_mdp_put_img(&data->p[i]);
+	mdss_bus_bandwidth_ctrl(0);
 
 	data->num_planes = 0;
 
@@ -831,13 +842,12 @@ static int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 	if (ctl->power_on) {
 		if (!mdp5_data->mdata->batfet)
 			mdss_mdp_batfet_ctrl(mdp5_data->mdata, true);
-		if (!is_mdss_iommu_attached() &&
-					!mfd->panel_info->cont_splash_enabled)
+		if (!mfd->panel_info->cont_splash_enabled)
 			mdss_iommu_attach(mdp5_data->mdata);
 		return 0;
 	}
 
-	pr_debug("starting fb%d overlay\n", mfd->index);
+	pr_info("starting fb%d overlay\n", mfd->index);
 
 	rc = pm_runtime_get_sync(&mfd->pdev->dev);
 	if (IS_ERR_VALUE(rc)) {
@@ -936,6 +946,11 @@ static void mdss_mdp_overlay_update_pm(struct mdss_overlay_private *mdp5_data)
 	if (!mdp5_data->cpu_pm_hdl)
 		return;
 
+    //Mickey+++, double check if mdp5_data->ctl is null
+    if (mdp5_data->ctl == NULL)
+        return;
+    //Mickey---
+
 	if (mdss_mdp_display_wakeup_time(mdp5_data->ctl, &wakeup_time))
 		return;
 
@@ -951,9 +966,6 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 	struct mdss_mdp_ctl *tmp;
 	int ret = 0;
 	int sd_in_pipe = 0;
-
-	if (!is_mdss_iommu_attached() && !mfd->panel_info->cont_splash_enabled)
-		mdss_iommu_attach(mdp5_data->mdata);
 
 	if (ctl->shared_lock)
 		mutex_lock(ctl->shared_lock);
@@ -1084,6 +1096,15 @@ commit_fail:
 	mutex_unlock(&mdp5_data->ov_lock);
 	if (ctl->shared_lock)
 		mutex_unlock(ctl->shared_lock);
+
+    //ASUS_BSP: Louis +++
+    if (MdpBoostUp > 0) {
+        MdpBoostUp--;
+        if (MdpBoostUp == 0) {
+            mdss_set_mdp_max_clk(0);
+        }
+    }
+    //ASUS_BSP: Louis ---
 
 	return ret;
 }
@@ -1256,6 +1277,9 @@ static int mdss_mdp_overlay_queue(struct msm_fb_data_type *mfd,
 
 	flags = (pipe->flags & MDP_SECURE_OVERLAY_SESSION);
 	flags |= (pipe->flags & MDP_SECURE_DISPLAY_OVERLAY_SESSION);
+
+	if (!mfd->panel_info->cont_splash_enabled)
+		mdss_iommu_attach(mdata);
 
 	src_data = &pipe->back_buf;
 	if (src_data->num_planes) {
@@ -2411,12 +2435,28 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 		mdp5_data->ctl = ctl;
 	}
 
-	if (!mfd->panel_info->cont_splash_enabled &&
+	if ((!mfd->panel_info->cont_splash_enabled &&
 		(mfd->panel_info->type != DTV_PANEL) &&
-		(mfd->panel_info->type != WRITEBACK_PANEL)) {
+		(mfd->panel_info->type != WRITEBACK_PANEL)) 
+//  ASUS_BSP: Louis +++
+#ifdef CONFIG_ASUS_HDMI 
+    /* start mdp overlay when receivce pad mode uevent and try to open fb1   */
+        || ((gpio_get_value(75) == 1) && (mfd->panel_info->type == DTV_PANEL)) //ASUS_BSP: joe1_++: prevent Android restart when connecting WFD on Pad mode
+#endif
+//  ASUS_BSP: Louis ---
+        ) {
 		rc = mdss_mdp_overlay_start(mfd);
-		if (!IS_ERR_VALUE(rc))
-			rc = mdss_mdp_overlay_kickoff(mfd, NULL);
+		if (!IS_ERR_VALUE(rc)
+//  ASUS_BSP: Louis +++
+#ifdef CONFIG_ASUS_HDMI 
+    /*  don't turn on hdmi pwr here    */
+            && !(gpio_get_value(75) == 1 && mfd->fbi->node == 1)
+#endif
+//  ASUS_BSP: Louis ---
+            ) {
+                printk("%s: kickoff fb%d\n", __func__, mfd->fbi->node);
+			    rc = mdss_mdp_overlay_kickoff(mfd, NULL);
+            }
 	} else {
 		rc = mdss_mdp_ctl_setup(mdp5_data->ctl);
 		if (rc)
@@ -2472,9 +2512,11 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 		mdss_mdp_overlay_kickoff(mfd, NULL);
 	}
 
+	__mdss_mdp_overlay_free_list_purge(mfd);//Mickey+++, free buffer list before turn off mdp
+
 	rc = mdss_mdp_ctl_stop(mdp5_data->ctl);
 	if (rc == 0) {
-		__mdss_mdp_overlay_free_list_purge(mfd);
+		//__mdss_mdp_overlay_free_list_purge(mfd);//Mickey+++, move up to prevent unmap iommu while iommu dettached
 		mdss_mdp_ctl_notifier_unregister(mdp5_data->ctl,
 				&mfd->mdp_sync_pt_data.notifier);
 
@@ -2497,14 +2539,9 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 
 int mdss_panel_register_done(struct mdss_panel_data *pdata)
 {
-	/*
-	 * Clocks are already on if continuous splash is enabled,
-	 * increasing ref_cnt to help balance clocks once done.
-	 */
-	if (pdata->panel_info.cont_splash_enabled) {
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+	if (pdata->panel_info.cont_splash_enabled)
 		mdss_mdp_footswitch_ctrl_splash(1);
-	}
+
 	return 0;
 }
 

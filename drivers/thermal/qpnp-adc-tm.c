@@ -1266,12 +1266,14 @@ static void notify_adc_tm_fn(struct work_struct *work)
 {
 	struct qpnp_adc_tm_sensor *adc_tm = container_of(work,
 		struct qpnp_adc_tm_sensor, work);
-
+#if 0 //ASUS_BSP Eason: don't judge thermal_node in pm8941, let threshold_notification in notify_battery_therm & notify_clients can work 
 	if (adc_tm->thermal_node) {
 		sysfs_notify(&adc_tm->tz_dev->device.kobj,
 					NULL, "btm");
 		pr_debug("notifying uspace client\n");
-	} else {
+	} else 
+#endif
+	{
 		if (adc_tm->scale_type == SCALE_RBATT_THERM)
 			notify_battery_therm(adc_tm);
 		else

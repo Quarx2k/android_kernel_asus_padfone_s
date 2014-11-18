@@ -28,8 +28,8 @@
 #include "audio_acdb.h"
 #include "q6voice.h"
 
-
-#define TIMEOUT_MS 200
+//Bruno++ patch from Qualcomm for VoLTE no sound issue.
+#define TIMEOUT_MS 300
 
 
 #define CMD_STATUS_SUCCESS 0

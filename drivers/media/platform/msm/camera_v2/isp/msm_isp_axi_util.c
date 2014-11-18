@@ -397,7 +397,7 @@ static void msm_isp_reset_framedrop(struct vfe_device *vfe_dev,
 	stream_info->runtime_framedrop_update = stream_info->framedrop_update;
 	vfe_dev->hw_info->vfe_ops.axi_ops.cfg_framedrop(vfe_dev, stream_info);
 }
-
+extern bool g_is1stFrame; //BSP PJ  [A91][Camera][NA][NA] kernel got 1st frame log
 void msm_isp_sof_notify(struct vfe_device *vfe_dev,
 	enum msm_vfe_input_src frame_src, struct msm_isp_timestamp *ts) {
 	struct msm_isp_event_data sof_event;
@@ -405,6 +405,13 @@ void msm_isp_sof_notify(struct vfe_device *vfe_dev,
 	case VFE_PIX_0:
 		ISP_DBG("%s: PIX0 frame id: %lu\n", __func__,
 			vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id);
+		//BSP PJ +++ [A91][Camera][NA][NA] kernel got 1st frame log
+		if(g_is1stFrame )
+			{
+			pr_info("%s : Got 1st frame\n",__func__);
+			g_is1stFrame = false;
+			}
+		//BSP PJ --- [A91][Camera][NA][NA] kernel got 1st frame log		
 		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id++;
 		if (vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id == 0)
 			vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id = 1;
@@ -1014,6 +1021,7 @@ static int msm_isp_update_stream_bandwidth(struct vfe_device *vfe_dev)
 	return rc;
 }
 
+extern void iCatch_debug(void); //ASUS_BSP LiJen "dump iCatch registers when no output frame"
 static int msm_isp_axi_wait_for_cfg_done(struct vfe_device *vfe_dev,
 	enum msm_isp_camif_update_state camif_update)
 {
@@ -1029,6 +1037,7 @@ static int msm_isp_axi_wait_for_cfg_done(struct vfe_device *vfe_dev,
 		msecs_to_jiffies(VFE_MAX_CFG_TIMEOUT));
 	if (rc == 0) {
 		pr_err("%s: wait timeout\n", __func__);
+		iCatch_debug(); //ASUS_BSP LiJen "dump iCatch registers when no output frame"
 		rc = -1;
 	} else {
 		rc = 0;
