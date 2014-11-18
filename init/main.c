@@ -319,7 +319,7 @@ EXPORT_SYMBOL(g_Recovery);
 static int set_recovery_id(char *str)
 {
     if ( strcmp("Y", str) == 0 )
-        g_Recovery = true;
+        g_Recovery = false;
     else
         g_Recovery = false;
 
@@ -410,7 +410,7 @@ bool g_Charger_mode = false;
 static int set_charger_mode(char *str)
 {
     if ( strcmp("charger", str) == 0 )
-        g_Charger_mode = true;
+        g_Charger_mode = false;
     else
         g_Charger_mode = false;
 
