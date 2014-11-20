@@ -828,12 +828,6 @@ static inline unsigned int adreno_getreg(struct adreno_device *adreno_dev,
 	return adreno_dev->gpudev->reg_offsets->offsets[offset_name];
 }
 
-#ifdef CONFIG_DEBUG_FS
-void adreno_debugfs_init(struct kgsl_device *device);
-#else
-static inline void adreno_debugfs_init(struct kgsl_device *device) { }
-#endif
-
 /**
  * adreno_gpu_fault() - Return the current state of the GPU
  * @adreno_dev: A ponter to the adreno_device to query
