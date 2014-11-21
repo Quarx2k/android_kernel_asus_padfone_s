@@ -4170,7 +4170,6 @@ qpnp_batt_power_set_property(struct power_supply *psy,
 		if(A90_EVB0!=g_ASUS_hwID )
 		{
 			notifyThermalLimit( val->intval);
-			ASUSEvtlog("[BAT]set SYSTEM_TEMP_LEVEL:%d \n",val->intval);
 		}
 		//ASUS_BSP Eason: notify thermal limit ---
 		qpnp_batt_system_temp_level_set(chip, val->intval);

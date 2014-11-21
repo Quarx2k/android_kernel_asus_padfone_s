@@ -417,7 +417,6 @@ static int a86_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl, int value)
 #endif
     asus_set_brightness(ctrl, index);
     if((index > pdata->timaout_backlight_level) & (backlight_previous_value != 0) & ( (backlight_previous_value == 5) ||(abs(backlight_previous_value - index) >= 30))){
-		//ASUSEvtlog("[BL]: Phone Set Backlight brightness = %d \n",index);
 		backlight_previous_value = index;
     	}
 
@@ -506,7 +505,6 @@ static int ME771KL_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl,int value)
 
     asus_set_brightness(ctrl,index);
     if((index > pdata->timaout_backlight_level) & (backlight_previous_value != 0) & ( (backlight_previous_value == 5) ||(abs(backlight_previous_value - index) >= 30))){
-		//ASUSEvtlog("[BL]: Phone Set Backlight brightness = %d \n",index);
 		backlight_previous_value = index;
     	}
 
@@ -747,7 +745,6 @@ int pad_set_backlight(int value)
 
 	ret = AX_MicroP_setPWMValue(index);
 	if((index > pdata->timaout_backlight_level) & (backlight_previous_value != 0) & ((backlight_previous_value == 5) ||(abs(backlight_previous_value - index) >= 30))){
-			//ASUSEvtlog("[BL]: Pad Set Backlight brightness = %d \n",index);
 			backlight_previous_value = index;
 		}
 

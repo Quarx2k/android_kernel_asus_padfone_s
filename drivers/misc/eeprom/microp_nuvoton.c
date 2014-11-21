@@ -1959,7 +1959,6 @@ static int microp_resume( struct device *dev )
                 && uP_nuvoton_read_reg(MICROP_GPIO_OUTPUT_LEVEL, &out_reg) > 0
                 && uP_nuvoton_read_reg(MICROP_OPERATING_STATE, &state) > 0)
                     printk("[PAD DEBUG] state=%d, uP In=0x%8x, Out=0x%8x, gpio 9=%d\r\n", state, reg_input, out_reg, gpio_get_value(9));
-                    ASUSEvtlog("[PAD DEBUG] state=%d, uP In=0x%8x, Out=0x%8x, gpio 9=%d\r\n", state, reg_input, out_reg, gpio_get_value(9));
                     if(st_MICROP_Off==state){
                             uP_nuvoton_read_reg(MICROP_POWER_ON_REASON, &reg_powerOnReason);
                             printk("reg_powerOnReason=%d\r\n", reg_powerOnReason);

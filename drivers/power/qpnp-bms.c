@@ -1046,7 +1046,6 @@ static int read_soc_params_raw(struct qpnp_bms_chip *chip,
 	if (rc) {
 		unlock_output_data(chip);
 		mutex_unlock(&chip->bms_output_lock);
-		ASUSEvtlog("[BAT][BMS]%s read last_good_ocv_raw Error!\n", __FUNCTION__);
 		pr_err("Error reading ocv: rc = %d\n", rc);
 		return -ENXIO;
 	}
@@ -1055,7 +1054,6 @@ static int read_soc_params_raw(struct qpnp_bms_chip *chip,
 	if (rc) {
 		unlock_output_data(chip);
 		mutex_unlock(&chip->bms_output_lock);
-		ASUSEvtlog("[BAT][BMS]%s read cc Error!\n", __FUNCTION__);
 		pr_err("Failed to read raw cc data, rc = %d\n", rc);
 		return rc;
 	}
@@ -1065,7 +1063,6 @@ static int read_soc_params_raw(struct qpnp_bms_chip *chip,
 		
 		unlock_output_data(chip);
 		mutex_unlock(&chip->bms_output_lock);
-		ASUSEvtlog("[BAT][BMS]%s read shdw_cc Error!\n", __FUNCTION__);
 		pr_err("Failed to read raw cc data, rc = %d\n", rc);
 		return rc;
 	}
@@ -2582,7 +2579,6 @@ static int recalculate_raw_soc(struct qpnp_bms_chip *chip)
 			rc = read_soc_params_raw(chip, &raw, batt_temp);
 			if(rc)
 			{		
-				ASUSEvtlog("[BAT][BAT]%s read_soc_params_raw Error! return calculated soc\n", __FUNCTION__);
 				soc = chip->calculated_soc;
 			}
 			else
@@ -2642,7 +2638,6 @@ static int recalculate_soc(struct qpnp_bms_chip *chip)
 			rc = read_soc_params_raw(chip, &raw, batt_temp);
 			if (rc) 
 			{
-				ASUSEvtlog("[BAT][BAT]%s read_soc_params_raw Error! return calculated soc\n", __FUNCTION__);
 				soc = chip->calculated_soc;
 			}
 			else

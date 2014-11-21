@@ -894,10 +894,6 @@ static void wcnss_post_bootup(struct work_struct *work)
 
 	pr_info("[wcnss]: Cancel APPS vote for Iris & WCNSS.\n");
 
-	//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-	ASUSEvtlog("[wcnss]: wcnss_post_bootup, Cancel APPS vote for Iris & Riva.\n");
-	//ASUS_BSP--- "for /data/log/ASUSEvtlog"
-
 	/* Since WCNSS is up, cancel any APPS vote for Iris & WCNSS VREGs  */
 	wcnss_wlan_power(&penv->pdev->dev, &penv->wlan_config,
 		WCNSS_WLAN_SWITCH_OFF, NULL);
@@ -2277,10 +2273,6 @@ wcnss_trigger_config(struct platform_device *pdev)
 	if (IS_ERR(penv->pil)) {
 		dev_err(&pdev->dev, "Peripheral Loader failed on WCNSS.\n");
 
-		//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-		ASUSEvtlog("[wcnss]: Load WCNSS failed.\n");
-		//ASUS_BSP--- "for /data/log/ASUSEvtlog"
-
 		ret = PTR_ERR(penv->pil);
 		wcnss_pronto_log_debug_regs();
 		penv->pil = NULL;
@@ -2288,10 +2280,6 @@ wcnss_trigger_config(struct platform_device *pdev)
 	}
 	else {
 		printk("[wcnss]: Load WCNSS image ok.\n");
-
-		//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-		ASUSEvtlog("[wcnss]: Load WCNSS image ok.\n");
-		//ASUS_BSP--- "for /data/log/ASUSEvtlog"
     	}
 
 	return 0;

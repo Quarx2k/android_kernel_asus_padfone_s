@@ -194,7 +194,6 @@ void wait_for_power_key_6s_work(struct work_struct *work)
 		if(((i == TIMEOUT_COUNT) || (slow_ok == 1) || time_after_eq(jiffies, timeout)) && (gpio_get_value_cansleep(power_key) == 0) && (i > 0))
 		{
 			duration = (jiffies - startime)*10/HZ;
-			ASUSEvtlog("ASDF: reset device after power press %d.%d sec (%d)\n", duration/10, duration%10, i);
 			set_vib_enable(200);
 			msleep(200);
 
@@ -250,15 +249,11 @@ void wait_for_slowlog_work(struct work_struct *work)
 					printk("[FastBoot] In fastboot mode power on! without enable slow log!(%d)\n", fastboot_state);
 				}
 				else	{
-#endif
-				save_all_thread_info();
-				
+#endif			
 				msleep(1 * 1000);
 				
 				duration = (jiffies - startime)*10/HZ;
 				printk("start to gi delta after power press %d.%d sec (%d)\n", duration/10, duration%10, i);
-				delta_all_thread_info();
-				save_phone_hang_log();
 				//Dump_wcd9310_reg();     //Bruno++    
 				//printk_lcd("slow log captured\n");
 				slow_ok = 1;
@@ -301,14 +296,6 @@ void wait_for_two_keys_work(struct work_struct *work)
         }
         if(i == 20)
         {
-            printk("start to gi chk\n");
-            save_all_thread_info();
-            
-            msleep(5 * 1000);
-            
-            printk("start to gi delta\n");
-            delta_all_thread_info();
-            save_phone_hang_log();
             //Dump_wcd9310_reg();     //Bruno++    
             //printk_lcd("slow log captured\n");
         }
