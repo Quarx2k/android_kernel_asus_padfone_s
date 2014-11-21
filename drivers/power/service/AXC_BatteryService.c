@@ -325,8 +325,8 @@ extern void AXC_bq51220_Charger_Init(void);
 #define WC_PD_DET_GPIO 20
 static time_t g_WcEocTime; 
 extern void IDTP9023_RxTurnOffTx(void);
-extern int pm8941_get_prop_batt_temp(void);
 #endif
+
 //Eason : Wireless PMA spec Rx turn off Tx ---
 //ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
 #define GPIO_WC_PD_DET 20
@@ -342,6 +342,7 @@ bool g_PastTime_set_WC_DCIN300 = false;
 //Eason: judge status by user Cap +++
 #ifdef CONFIG_PM_8941_CHARGER
 extern int pm8941_getCapacity(void);
+extern int pm8941_get_prop_batt_temp(void);
 #endif
 //Eason: judge status by user Cap ---
 
