@@ -3065,8 +3065,6 @@ static void asus_phone_bat_low_work(struct work_struct *work)
 	printk(DBGMSK_BAT_INFO "[BAT] phone bat volt from TIgauge: %dmV \r\n", batLowWorkVoltage);//Eason takeoff Battery shutdown
     printk(DBGMSK_BAT_INFO "[BAT] %s(),bat_low_gpio_value: %d \r\n", __FUNCTION__, bat_low_gpio_value);
 //ASUS_BSP Eason_Chang add event log +++
-	ASUSEvtlog("[BAT] phone bat volt from TIgauge: %dmV \r\n", batLowWorkVoltage);//Eason takeoff Battery shutdown
-    ASUSEvtlog("[BAT] %s(),bat_low_gpio_value: %d \r\n", __FUNCTION__, bat_low_gpio_value);
 //ASUS_BSP Eason_Chang add event log ---    
 
 //Eason takeoff Battery shutdown +++

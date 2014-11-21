@@ -1769,9 +1769,6 @@ static void asus_usb_detect_work(struct work_struct *w)
 	asus_chg_set_chg_mode(ASUS_CHG_SRC_USB);
 #endif
 	printk("[USB] set_chg_mode: USB\n");
-	//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
-	ASUSEvtlog("[USB] set_chg_mode: USB\n");
-	//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
 }
 
 static void asus_chg_detect_work(struct work_struct *w)
@@ -1783,9 +1780,6 @@ static void asus_chg_detect_work(struct work_struct *w)
 		asus_chg_set_chg_mode(ASUS_CHG_SRC_UNKNOWN);
 #endif
 		printk("[USB] set_chg_mode: UNKNOWN\n");
-		//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
-		ASUSEvtlog("[USB] set_chg_mode: UNKNOWN\n");
-		//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
 	}
 	else{
 		printk("[USB] vbus not active, ignore set_chg_mode: UNKNOWN\n");
@@ -1934,9 +1928,6 @@ static void dwc3_start_chg_det(struct dwc3_charger *charger, bool start)
 		asus_chg_set_chg_mode(ASUS_CHG_SRC_NONE);
 #endif
 		printk("[USB] set_chg_mode: NONE\n");
-		//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
-		ASUSEvtlog("[USB] set_chg_mode: NONE\n");
-		//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
 //ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 		cancel_delayed_work_sync(&mdwc->chg_work);
 		mdwc->chg_state = USB_CHG_STATE_UNDEFINED;

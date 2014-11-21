@@ -337,19 +337,6 @@ static int eval_bat_life_when_discharging(
 			printk( "[BAT][Fil]Error!!! %s(), interval < 0\n",
 					__func__);
 		}
-
-		ASUSEvtlog( "[BAT][Fil] int:%d, sus:%d, dp:%d, pre:%d, fast:%d, BMS:%d, fine:%d, cnt:%d, aCur:%d, nCur:%d, dot:%d\n",
-			interval,
-			filRealSusT,
-			drop_val,
-			max_predict_drop_val,
-			fasterLeverage_drop_val,
-			gDiff_BMS,
-			finetune_max_predict_drop_val,
-			g_do_fasterLeverage_count,
-			pastTimeAvgCurr,
-			gCurr_TIgauge,
-			g_discharge_after_dot);
 	} 
 	else 
 	{
@@ -588,7 +575,6 @@ int AXC_Cap_Filter_A66_FilterCapacity(struct AXI_Cap_Filter *apCapFilter, int no
 	}
 	//Eason: if BatLow keep 15 min, shutdown devices+++
 	if ((g_ASUS_hwID >= A90_EVB0)&& isBatLow && g_batLowLongTimeShut && (nowCap <= BATLOW_LONGTIME_SHUT_CAP) && (lastCap <= BATLOW_LONGTIME_SHUT_CAP)){
-		ASUSEvtlog("[BAT][Fil][BatLow]Long tme => shutdown\n");
 		return BAT_LIFE_TO_SHUTDOWN;
 	}
 	//Eason: if BatLow keep 15 min, shutdown devices---

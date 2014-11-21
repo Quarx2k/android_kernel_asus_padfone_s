@@ -2526,7 +2526,6 @@ static void check_touch_fw_work(struct work_struct *work)
 			}else {
 				sis_debug(DEBUG_POWER, "[Touch][sis9257] Touch restart\n");
 #ifdef ASUS_DEBUG_LOG
-				ASUSEvtlog("[Touch][sis9257] Touch restart successfully after resume\n");
 #endif
 				break;
 			}
@@ -2571,7 +2570,6 @@ static void attach_padstation_work(struct work_struct *work)
 	g_bIsSleep = false;
 
 #ifdef ASUS_DEBUG_LOG
-	ASUSEvtlog("[Touch][sis9257] Attach Pad\n");
 #endif
 
 	msleep(100); //wait for the touch ic reset
@@ -2663,13 +2661,6 @@ static void attach_padstation_work(struct work_struct *work)
 	msleep(20);
 	g_bIsPadAttach = true;
 
-#ifdef ASUS_DEBUG_LOG
-	if(g_fw_id[4] >= 'A' && g_fw_id[4] <= 'Z')
-		ASUSEvtlog("[Touch][sis9257] FWID: %c%02x%02x%02x%02x, BOOT_FLAG: %02x%02x%02x%02x, TPID: %d\n", g_fw_id[4], g_fw_id[8], g_fw_id[9], g_fw_id[10], g_fw_id[11], g_boot_flag[0], g_boot_flag[1], g_boot_flag[2], g_boot_flag[3], g_tp_id);
-	else
-		ASUSEvtlog("[Touch][sis9257] FWID: %02x%02x%02x%02x%02x, BOOT_FLAG: %02x%02x%02x%02x, TPID: %d\n", g_fw_id[4], g_fw_id[8], g_fw_id[9], g_fw_id[10], g_fw_id[11], g_boot_flag[0], g_boot_flag[1], g_boot_flag[2], g_boot_flag[3], g_tp_id);
-#endif
-
 	forceDoMicropIrqHandler(); //Clear microp state to release pad INT
 
 	sis_debug(DEBUG_POWER, "[Touch][sis9257] attach_padstation_work()--%d\n", gpio_get_value(9));
@@ -2681,9 +2672,6 @@ static void detach_padstation_work(struct work_struct *work)
 	int i;
 
 	sis_debug(DEBUG_POWER, "[Touch][sis9257] detach_padstation_work()++\n");
-#ifdef ASUS_DEBUG_LOG
-	ASUSEvtlog("[Touch][sis9257] Detach Pad\n");
-#endif
 
 	for(i=0; i<12; i++)
 		g_fw_id [i] = 0xff;
