@@ -2347,10 +2347,8 @@ VOS_STATUS vos_nv_write(VNV_TYPE type, v_VOID_t *inputVoidBuffer,
           VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
                     "vos_nv_write_to_efs failed!!!");
           status = VOS_STATUS_E_FAULT;
-          goto try_perist_and_exit;
       }
 
-try_perist_and_exit:
 #ifdef WLAN_NV_OTA_UPGRADE
       if(type != VNV_FIELD_IMAGE)
           goto exit;
@@ -2362,8 +2360,9 @@ try_perist_and_exit:
       }
 #endif
    }
-
+#ifdef WLAN_NV_OTA_UPGRADE
 exit:
+#endif
    return status;
 }
 
