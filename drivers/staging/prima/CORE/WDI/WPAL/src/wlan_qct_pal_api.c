@@ -61,7 +61,6 @@
 #ifndef MEMORY_DEBUG
 #include "vos_memory.h"
 #endif /* MEMORY_DEBUG */
-#include "vos_sched.h"
 #include "vos_api.h"
 
 #include "dma-mapping.h"
@@ -235,7 +234,7 @@ void *wpalDmaMemoryAllocate(wpt_uint32 size, void **ppPhysicalAddr)
    if ( NULL == pv ) 
    {
      WPAL_TRACE(eWLAN_MODULE_PAL, eWLAN_PAL_TRACE_LEVEL_ERROR, 
-                 "%s Unable to allocate DMA buffer", __func__);
+                 "%s Unable to allocate DMA buffer\n", __func__);
      return NULL;
    }
 
@@ -462,17 +461,5 @@ void wpalDevicePanic(void)
 {
    BUG_ON(0);
    return;
-}
-/*---------------------------------------------------------------------------
-    wpalIsWDresetInProgress -  calls vos API isWDresetInProgress()
-
-    Param:
-       NONE
-    Return:
-       STATUS
- ---------------------------------------------------------------------------*/
-int  wpalIsWDresetInProgress(void)
-{
-   return isWDresetInProgress();
 }
 
