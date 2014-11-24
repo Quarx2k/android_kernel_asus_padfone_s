@@ -1656,7 +1656,6 @@ batt_power_set_property(struct power_supply *psy,
 		if(A90_EVB0==g_ASUS_hwID )
 		{
 			notifyThermalLimit(gTempLevel);
-			ASUSEvtlog("[BAT]set SYSTEM_TEMP_LEVEL:%d \n",val->intval);
 		}
 		break;
 	default:

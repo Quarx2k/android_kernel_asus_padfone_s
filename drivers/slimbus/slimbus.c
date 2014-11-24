@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -288,37 +288,27 @@ static struct device_type slim_dev_type = {
 
 static void slim_report(struct work_struct *work)
 {
-	u8 laddr;
-	int ret, i;
 	struct slim_driver *sbdrv;
 	struct slim_device *sbdev =
 			container_of(work, struct slim_device, wd);
-	struct slim_controller *ctrl = sbdev->ctrl;
 	if (!sbdev->dev.driver)
 		return;
 	/* check if device-up or down needs to be called */
-	mutex_lock(&ctrl->m_ctrl);
-	/* address no longer valid, means device reported absent */
-	for (i = 0; i < ctrl->num_dev; i++) {
-		if (sbdev->laddr == ctrl->addrt[i].laddr &&
-			ctrl->addrt[i].valid == false &&
-			sbdev->notified)
-			break;
-	}
-	mutex_unlock(&ctrl->m_ctrl);
+	if ((!sbdev->reported && !sbdev->notified) ||
+			(sbdev->reported && sbdev->notified))
+		return;
+
 	sbdrv = to_slim_driver(sbdev->dev.driver);
-	if (i < ctrl->num_dev) {
+	/*
+	 * address no longer valid, means device reported absent, whereas
+	 * address valid, means device reported present
+	 */
+	if (sbdev->notified && !sbdev->reported) {
 		sbdev->notified = false;
 		if (sbdrv->device_down)
 			sbdrv->device_down(sbdev);
-		return;
-	}
-	if (sbdev->notified)
-		return;
-	ret = slim_get_logical_addr(sbdev, sbdev->e_addr, 6, &laddr);
-	if (!ret) {
-		if (sbdrv)
-			sbdev->notified = true;
+	} else if (!sbdev->notified && sbdev->reported) {
+		sbdev->notified = true;
 		if (sbdrv->device_up)
 			sbdrv->device_up(sbdev);
 	}
@@ -533,6 +523,10 @@ out_list:
 /* slim_remove_device: Remove the effect of slim_add_device() */
 void slim_remove_device(struct slim_device *sbdev)
 {
+	struct slim_controller *ctrl = sbdev->ctrl;
+	mutex_lock(&ctrl->m_ctrl);
+	list_del_init(&sbdev->dev_list);
+	mutex_unlock(&ctrl->m_ctrl);
 	device_unregister(&sbdev->dev);
 }
 EXPORT_SYMBOL_GPL(slim_remove_device);
@@ -645,6 +639,7 @@ void slim_report_absent(struct slim_device *sbdev)
 			ctrl->addrt[i].valid = false;
 	}
 	mutex_unlock(&ctrl->m_ctrl);
+	sbdev->reported = false;
 	queue_work(ctrl->wq, &sbdev->wd);
 }
 EXPORT_SYMBOL(slim_report_absent);
@@ -803,6 +798,8 @@ int slim_assign_laddr(struct slim_controller *ctrl, const u8 *e_addr,
 	u8 i = 0;
 	bool exists = false;
 	struct slim_device *sbdev;
+	struct list_head *pos, *next;
+
 	mutex_lock(&ctrl->m_ctrl);
 	/* already assigned */
 	if (ctrl_getlogical_addr(ctrl, e_addr, e_len, &i) == 0) {
@@ -854,10 +851,12 @@ ret_assigned_laddr:
 	pr_info("slimbus:%d laddr:0x%x, EAPC:0x%x:0x%x", ctrl->nr, *laddr,
 				e_addr[1], e_addr[2]);
 	//mutex_lock(&ctrl->m_ctrl); //ASUS Tim++
-	list_for_each_entry(sbdev, &ctrl->devs, dev_list) {
+	list_for_each_safe(pos, next, &ctrl->devs) {
+		sbdev = list_entry(pos, struct slim_device, dev_list);
 		if (memcmp(sbdev->e_addr, e_addr, 6) == 0) {
 			struct slim_driver *sbdrv;
 			sbdev->laddr = *laddr;
+			sbdev->reported = true;
 			if (sbdev->dev.driver) {
 				sbdrv = to_slim_driver(sbdev->dev.driver);
 				if (sbdrv->device_up)
@@ -1557,7 +1556,8 @@ static void slim_add_ch(struct slim_controller *ctrl, struct slim_ich *slc)
 	for (j = *len - 1; j > i; j--)
 		arr[j] = arr[j - 1];
 	arr[i] = slc;
-	ctrl->sched.usedslots += sl;
+	if (!ctrl->allocbw)
+		ctrl->sched.usedslots += sl;
 
 	return;
 }
@@ -2663,7 +2663,8 @@ static void slim_chan_changes(struct slim_device *sb, bool revert)
 				u32 sl = slc->seglen << slc->rootexp;
 				if (slc->coeff == SLIM_COEFF_3)
 					sl *= 3;
-				ctrl->sched.usedslots -= sl;
+				if (!ctrl->allocbw)
+					ctrl->sched.usedslots -= sl;
 				slim_remove_ch(ctrl, slc);
 				slc->state = SLIM_CH_DEFINED;
 			}
@@ -2684,7 +2685,8 @@ static void slim_chan_changes(struct slim_device *sb, bool revert)
 		if (revert || slc->def > 0) {
 			if (slc->coeff == SLIM_COEFF_3)
 				sl *= 3;
-			ctrl->sched.usedslots += sl;
+			if (!ctrl->allocbw)
+				ctrl->sched.usedslots += sl;
 			if (revert)
 				slc->def++;
 			slc->state = SLIM_CH_ACTIVE;
@@ -2778,7 +2780,8 @@ int slim_reconfigure_now(struct slim_device *sb)
 		u32 sl = slc->seglen << slc->rootexp;
 		if (slc->coeff == SLIM_COEFF_3)
 			sl *= 3;
-		ctrl->sched.usedslots -= sl;
+		if (!ctrl->allocbw)
+			ctrl->sched.usedslots -= sl;
 		slc->state = SLIM_CH_PENDING_REMOVAL;
 	}
 	list_for_each_entry(pch, &sb->mark_suspend, pending) {
@@ -3133,8 +3136,15 @@ int slim_ctrl_clk_pause(struct slim_controller *ctrl, bool wakeup, u8 restart)
 		 */
 		if (ctrl->clk_state == SLIM_CLK_PAUSED && ctrl->wakeup)
 			ret = ctrl->wakeup(ctrl);
+		/*
+		 * If wakeup fails, make sure that next attempt can succeed.
+		 * Since we already consumed pause_comp, complete it so
+		 * that next wakeup isn't blocked forever
+		 */
 		if (!ret)
 			ctrl->clk_state = SLIM_CLK_ACTIVE;
+		else
+			complete(&ctrl->pause_comp);
 		mutex_unlock(&ctrl->m_ctrl);
 		return ret;
 	} else {

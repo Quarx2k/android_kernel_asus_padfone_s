@@ -69,7 +69,7 @@ void msm_slim_put_ctrl(struct msm_slim_ctrl *dev)
 	if (ref <= 0)
 		dev_err(dev->dev, "reference count mismatch:%d", ref);
 	else
-		pm_runtime_put(dev->dev);
+		pm_runtime_put_sync(dev->dev);
 #endif
 }
 
@@ -210,7 +210,13 @@ int msm_slim_connect_pipe_port(struct msm_slim_ctrl *dev, u8 pn)
 	struct msm_slim_endp *endpoint = &dev->pipes[pn];
 	struct sps_connect *cfg = &endpoint->config;
 	u32 stat;
-	int ret = sps_get_config(dev->pipes[pn].sps, cfg);
+	int ret;
+
+	if (pn >= (MSM_SLIM_NPORTS - dev->port_b))
+		return -ENODEV;
+
+	endpoint = &dev->pipes[pn];
+	ret = sps_get_config(dev->pipes[pn].sps, cfg);
 	if (ret) {
 		dev_err(dev->dev, "sps pipe-port get config error%x\n", ret);
 		return ret;
@@ -355,6 +361,8 @@ int msm_slim_port_xfer(struct slim_controller *ctrl, u8 pn, u8 *iobuf,
 	if (pn >= 7)
 		return -ENODEV;
 
+	if (!dev->pipes[pn].connected)
+		return -ENOTCONN;
 
 	sreg.options = (SPS_EVENT_DESC_DONE|SPS_EVENT_ERROR);
 	sreg.mode = SPS_TRIGGER_WAIT;
@@ -792,14 +800,6 @@ int msm_slim_sps_init(struct msm_slim_ctrl *dev, struct resource *bam_mem,
 	if (dev->pdata.apps_pipes)
 		sec_props.ees[dev->ee].pipe_mask = dev->pdata.apps_pipes;
 
-	/* First 7 bits are for message Qs */
-	for (i = 7; i < 32; i++) {
-		/* Check what pipes are owned by Apps. */
-		if ((sec_props.ees[dev->ee].pipe_mask >> i) & 0x1)
-			break;
-	}
-	dev->port_b = i - 7;
-
 	/* Register the BAM device with the SPS driver */
 	ret = sps_register_bam_device(&bam_props, &bam_handle);
 	if (ret) {
@@ -812,6 +812,14 @@ int msm_slim_sps_init(struct msm_slim_ctrl *dev, struct resource *bam_mem,
 	dev_dbg(dev->dev, "SLIM BAM registered, handle = 0x%x\n", bam_handle);
 
 init_msgq:
+	/* First 7 bits are for message Qs */
+	for (i = 7; i < 32; i++) {
+		/* Check what pipes are owned by Apps. */
+		if ((dev->pdata.apps_pipes >> i) & 0x1)
+			break;
+	}
+	dev->port_b = i - 7;
+
 	ret = msm_slim_init_rx_msgq(dev, pipe_reg);
 	if (ret)
 		dev_err(dev->dev, "msm_slim_init_rx_msgq failed 0x%x\n", ret);
@@ -863,12 +871,22 @@ static void msm_slim_remove_ep(struct msm_slim_ctrl *dev,
 
 void msm_slim_sps_exit(struct msm_slim_ctrl *dev, bool dereg)
 {
+	int i;
+	struct sps_register_event sps_event;
+
 	if (dev->use_rx_msgqs >= MSM_MSGQ_ENABLED)
 		msm_slim_remove_ep(dev, &dev->rx_msgq, &dev->use_rx_msgqs);
 	if (dev->use_tx_msgqs >= MSM_MSGQ_ENABLED)
 		msm_slim_remove_ep(dev, &dev->tx_msgq, &dev->use_tx_msgqs);
+	for (i = dev->port_b; i < MSM_SLIM_NPORTS; i++) {
+		struct msm_slim_endp *endpoint = &dev->pipes[i - dev->port_b];
+		if (!(dev->pipes[i - dev->port_b].connected))
+			continue;
+		memset(&sps_event, 0, sizeof(sps_event));
+		sps_register_event(endpoint->sps, &sps_event);
+		dev->pipes[i - dev->port_b].connected = false;
+	}
 	if (dereg) {
-		int i;
 		for (i = dev->port_b; i < MSM_SLIM_NPORTS; i++) {
 			if (dev->pipes[i - dev->port_b].connected)
 				msm_dealloc_port(&dev->ctrl,
@@ -877,6 +895,7 @@ void msm_slim_sps_exit(struct msm_slim_ctrl *dev, bool dereg)
 		sps_deregister_bam_device(dev->bam.hdl);
 		dev->bam.hdl = 0L;
 	}
+	dev->port_b = MSM_SLIM_NPORTS;
 }
 
 /* Slimbus QMI Messaging */
@@ -884,11 +903,14 @@ void msm_slim_sps_exit(struct msm_slim_ctrl *dev, bool dereg)
 #define SLIMBUS_QMI_SELECT_INSTANCE_RESP_V01 0x0020
 #define SLIMBUS_QMI_POWER_REQ_V01 0x0021
 #define SLIMBUS_QMI_POWER_RESP_V01 0x0021
+#define SLIMBUS_QMI_CHECK_FRAMER_STATUS_REQ 0x0022
+#define SLIMBUS_QMI_CHECK_FRAMER_STATUS_RESP 0x0022
 
 #define SLIMBUS_QMI_POWER_REQ_MAX_MSG_LEN 7
 #define SLIMBUS_QMI_POWER_RESP_MAX_MSG_LEN 7
 #define SLIMBUS_QMI_SELECT_INSTANCE_REQ_MAX_MSG_LEN 14
 #define SLIMBUS_QMI_SELECT_INSTANCE_RESP_MAX_MSG_LEN 7
+#define SLIMBUS_QMI_CHECK_FRAMER_STAT_RESP_MAX_MSG_LEN 7
 
 enum slimbus_mode_enum_type_v01 {
 	/* To force a 32 bit signed enum. Do not change or use*/
@@ -935,6 +957,13 @@ struct slimbus_power_resp_msg_v01 {
 	/* Result Code */
 	struct qmi_response_type_v01 resp;
 };
+
+struct slimbus_chkfrm_resp_msg {
+	/* Mandatory */
+	/* Result Code */
+	struct qmi_response_type_v01 resp;
+};
+
 
 static struct elem_info slimbus_select_inst_req_msg_v01_ei[] = {
 	{
@@ -1029,6 +1058,27 @@ static struct elem_info slimbus_power_resp_msg_v01_ei[] = {
 		.is_array  = NO_ARRAY,
 		.tlv_type  = 0x02,
 		.offset    = offsetof(struct slimbus_power_resp_msg_v01, resp),
+		.ei_array  = get_qmi_response_type_v01_ei(),
+	},
+	{
+		.data_type = QMI_EOTI,
+		.elem_len  = 0,
+		.elem_size = 0,
+		.is_array  = NO_ARRAY,
+		.tlv_type  = 0x00,
+		.offset    = 0,
+		.ei_array  = NULL,
+	},
+};
+
+static struct elem_info slimbus_chkfrm_resp_msg_v01_ei[] = {
+	{
+		.data_type = QMI_STRUCT,
+		.elem_len  = 1,
+		.elem_size = sizeof(struct qmi_response_type_v01),
+		.is_array  = NO_ARRAY,
+		.tlv_type  = 0x02,
+		.offset    = offsetof(struct slimbus_chkfrm_resp_msg, resp),
 		.ei_array  = get_qmi_response_type_v01_ei(),
 	},
 	{
@@ -1230,4 +1280,33 @@ int msm_slim_qmi_power_request(struct msm_slim_ctrl *dev, bool active)
 		req.pm_req = SLIMBUS_PM_INACTIVE_V01;
 
 	return msm_slim_qmi_send_power_request(dev, &req);
+}
+
+int msm_slim_qmi_check_framer_request(struct msm_slim_ctrl *dev)
+{
+	struct slimbus_chkfrm_resp_msg resp = { { 0, 0 } };
+	struct msg_desc req_desc, resp_desc;
+	int rc;
+
+	req_desc.msg_id = SLIMBUS_QMI_CHECK_FRAMER_STATUS_REQ;
+	req_desc.max_msg_len = 0;
+	req_desc.ei_array = NULL;
+
+	resp_desc.msg_id = SLIMBUS_QMI_CHECK_FRAMER_STATUS_RESP;
+	resp_desc.max_msg_len = SLIMBUS_QMI_CHECK_FRAMER_STAT_RESP_MAX_MSG_LEN;
+	resp_desc.ei_array = slimbus_chkfrm_resp_msg_v01_ei;
+
+	rc = qmi_send_req_wait(dev->qmi.handle, &req_desc, NULL, 0,
+					&resp_desc, &resp, sizeof(resp), 5000);
+	if (rc < 0) {
+		dev_err(dev->dev, "%s: QMI send req failed %d\n", __func__, rc);
+		return rc;
+	}
+	/* Check the response */
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		dev_err(dev->dev, "%s: QMI request failed 0x%x (%s)\n",
+			__func__, resp.resp.result, get_qmi_error(&resp.resp));
+		return -EREMOTEIO;
+	}
+	return 0;
 }

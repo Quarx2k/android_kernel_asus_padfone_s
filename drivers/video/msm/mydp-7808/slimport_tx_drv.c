@@ -1993,7 +1993,6 @@ uint sp_tx_link_err_check(void)
 
 	DEV_ERR(" Err of Lane = %d, swing = %d\n", errl, g_swing_value);
     if (errl > 5){
-		ASUSEvtlog(" Err of Lane = %d, swing = %d\n", errl, g_swing_value);
     }	
 	return errl;
 }
@@ -2015,7 +2014,6 @@ uint sp_tx_link_err_check_1(void)
 
        if (errl){
 		DEV_ERR(" ## Err of Lane = %d\n", errl);
-		ASUSEvtlog(" ## Err of Lane = %d\n", errl);
        }
 	   
 	return errl;
@@ -2962,7 +2960,6 @@ static void sp_tx_irq_isr(void)
 					if(g_MyDP_HDCP_FAIL_COUNT>5){
 						g_MyDP_HDCP_FAIL_COUNT=0;
 						DEV_ERR("%s:MyDP_HDCP_SYNC_LOST ++++\n",__func__);
-						ASUSEvtlog("%s:MyDP_HDCP_SYNC_LOST ++++\n",__func__);
 						hdcp_enable=0;
 					}
 				}
@@ -3286,7 +3283,6 @@ void sp_tx_hdcp_process(void)
 		sp_tx_power_down(SP_TX_PWR_HDCP);
 		sp_tx_video_mute(0);
 		sp_tx_set_sys_state(STATE_PLAY_BACK);
-		ASUSEvtlog("[MyDP] MyDP run TV mode in Pad \n");
 		return;
 	}
 //ANX +++: (ver0.4)
@@ -3669,7 +3665,6 @@ void sp_tx_int_irq_handler(void)
 	   	    DEV_DBG("sp_tx_int   C1=0x%x,c2=0x%x,c3=0x%x,c4=0x%x,c5=0x%x\n",c1,c2,c3,c4,c5);
 		    if (g_hdmi_rx_vsync_change > 1)
 			{
-			  //  ASUSEvtlog("[myDP]sp_tx_int   C1=0x%x,c2=0x%x,c3=0x%x,c4=0x%x,c5=0x%x\n",c1,c2,c3,c4,c5);
 			}
 		}
 	}
@@ -5002,7 +4997,6 @@ void hdmi_rx_int_irq_handler(void)
 
 		    if (g_hdmi_rx_vsync_change > 1)
 		    	{
-			    //ASUSEvtlog("[myDP]hdmi rx:c4=0x%x,vsync change=0x%x\n",c4, g_hdmi_rx_vsync_change);
 		        DEV_DBG("vsync change = 0x%x\n", g_hdmi_rx_vsync_change);					 
 		    	}
 			

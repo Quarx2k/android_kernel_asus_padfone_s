@@ -391,18 +391,14 @@ struct qpnp_chg_chip {
 	bool				power_stage_workaround_enable;
 };
 
-
-static struct of_device_id qpnp_charger_match_table[] = {
-	{ .compatible = QPNP_CHARGER_DEV_NAME, },
-	{}
-};
-
 //ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
 #define ASUS_WIRELESS_LOW_VDDMAX 3600
 #define GPIO_WC_PD_DET 20
+#ifdef CONFIG_PM_8941_CHARGER
 extern bool g_ASUS_WC_set_low_VDDMAX;
 #include <linux/gpio.h>
 //ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
+#endif
 
 //ASUS_BSP lenter +++
 static struct qpnp_chg_chip *the_chip = NULL;
@@ -414,9 +410,11 @@ extern void asus_fsm_chargingstart(void);
 static bool g_PMIC_CHG_EN = true;// bool to record ASUS set PMIC CHG_EN flag actively
 #endif
 //ASUS_BSP lenter ---
+#ifdef CONFIG_BATTERY_ASUS_SERVICE
 //ASUS_BSP Eason: notify thermal limit +++
 extern void notifyThermalLimit(int thermalnotify);
 //ASUS_BSP Eason: notify thermal limit ---
+#endif
 //Eason: Factory5060Mode+++
 #ifdef ASUS_FACTORY_BUILD
 extern bool g_5060modeCharging;
@@ -1397,7 +1395,7 @@ qpnp_chg_vddmax_and_trim_set(struct qpnp_chg_chip *chip,
 		return -EINVAL;
 	}
 
-
+#ifdef CONFIG_BATTERY_ASUS_SERVICE
 //Eason_Chang: PF500KL WC_PD_DET reverse. default high, with wireless low+++
 if( (true == g_ASUS_WC_set_low_VDDMAX)&&(1 == !gpio_get_value(GPIO_WC_PD_DET))&&(g_ASUS_hwID >= PF500KL_PR) )
 {
@@ -1412,7 +1410,7 @@ if( (true == g_ASUS_WC_set_low_VDDMAX)&&(1 == gpio_get_value(GPIO_WC_PD_DET))&&(
 	printk("[BAT][WC][workAround]%s:3600mV\n",__FUNCTION__);
 }
 //ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
-
+#endif
 	vddmax = (voltage - QPNP_CHG_V_MIN_MV) / QPNP_CHG_V_STEP_MV;
 	rc = qpnp_chg_write(chip, &vddmax, chip->chgr_base + CHGR_VDD_MAX, 1);
 	if (rc) {
@@ -2742,7 +2740,7 @@ qpnp_chg_bat_if_configure_btc(struct qpnp_chg_chip *chip)
 			chip->bat_if_base + BAT_IF_BTC_CTRL,
 			mask, btc_cfg, 1);
 }
-
+#ifdef CONFIG_BATTERY_ASUS
 //ASUS_BSP +++ frank_tao "add asus battery driver"
 static struct qpnp_chg_chip *local_chip = NULL;
 //ASUS_BSP --- frank_tao "add asus battery driver"
@@ -2790,6 +2788,7 @@ static int api_get_prop_batt_curr(void)
 	return get_prop_current_now(local_chip);
 }
 
+#endif
 int get_temp_for_ASUSswgauge(void)
 { 
 	if (the_chip == NULL){
@@ -4167,11 +4166,12 @@ qpnp_batt_power_set_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		//ASUS_BSP Eason: notify thermal limit +++
+#ifdef CONFIG_BATTERY_ASUS_SERVICE	
 		if(A90_EVB0!=g_ASUS_hwID )
 		{
 			notifyThermalLimit( val->intval);
-			ASUSEvtlog("[BAT]set SYSTEM_TEMP_LEVEL:%d \n",val->intval);
 		}
+#endif
 		//ASUS_BSP Eason: notify thermal limit ---
 		qpnp_batt_system_temp_level_set(chip, val->intval);
 		break;
@@ -5601,7 +5601,9 @@ qpnp_charger_probe(struct spmi_device *spmi)
 
 	if (chip->dc_chgpth_base) {
 		chip->dc_psy.name = "wireless";//ASUS_BSP Eason_Chang: for Wireless charger
+#ifdef CONFIG_IDTP9023_CHARGER  
 		chip->dc_psy.type = POWER_SUPPLY_TYPE_WIRELESS;//ASUS_BSP Eason_Chang: for Wireless charger
+#endif
 		chip->dc_psy.supplied_to = pm_power_supplied_to;
 		chip->dc_psy.num_supplicants = ARRAY_SIZE(pm_power_supplied_to);
 		chip->dc_psy.properties = pm_power_props_mains;
@@ -5788,6 +5790,13 @@ static int qpnp_chg_suspend(struct device *dev)
 
 	return rc;
 }
+
+
+static struct of_device_id qpnp_charger_match_table[] = {
+	{ .compatible = QPNP_CHARGER_DEV_NAME, },
+	{}
+};
+
 
 static const struct dev_pm_ops qpnp_chg_pm_ops = {
 	.resume		= qpnp_chg_resume,

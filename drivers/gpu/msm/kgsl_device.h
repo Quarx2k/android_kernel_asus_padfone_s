@@ -351,6 +351,8 @@ struct kgsl_process_private;
  * is set.
  * @flags: flags from userspace controlling the behavior of this context
  * @pwr_constraint: power constraint from userspace for this context
+ * @fault_count: number of times gpu hanged in last _context_throttle_time ms
+ * @fault_time: time of the first gpu hang in last _context_throttle_time ms
  */
 struct kgsl_context {
 	struct kref refcount;
@@ -369,6 +371,8 @@ struct kgsl_context {
 	unsigned int pagefault_ts;
 	unsigned int flags;
 	struct kgsl_pwr_constraint pwr_constraint;
+	unsigned int fault_count;
+	unsigned long fault_time;
 };
 
 /**
@@ -544,6 +548,9 @@ void kgsl_context_destroy(struct kref *kref);
 int kgsl_context_init(struct kgsl_device_private *, struct kgsl_context
 		*context);
 int kgsl_context_detach(struct kgsl_context *context);
+
+int kgsl_memfree_find_entry(pid_t pid, unsigned long *gpuaddr,
+	unsigned long *size, unsigned int *flags);
 
 /**
  * kgsl_context_put() - Release context reference count

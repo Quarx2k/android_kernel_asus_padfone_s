@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -44,12 +44,6 @@
 
 static int enable_debug;
 module_param(enable_debug, int, S_IRUGO | S_IWUSR);
-
-// ASUS_BSP+++ "save SSR reason"
-#include "linux/asusdebug.h"
-#include <linux/syscalls.h>
-#include <asm/uaccess.h>
-// ASUS_BSP+++ "save SSR reason"
 
 /**
  * enum p_subsys_state - state of a subsystem (private)
@@ -266,53 +260,7 @@ static DEFINE_IDA(subsys_ida);
 
 static int enable_ramdumps;
 module_param(enable_ramdumps, int, S_IRUGO | S_IWUSR);
-// ASUS_BSP+++ "save SSR reason"
-#ifndef ASUS_SHIP_BUILD
-//#define USER_FATAL "User Triggers Fatal"
-static char *ssr_no_dump = NULL;
-module_param(ssr_no_dump, charp, 0644);
-static char *ssr_panic = NULL;
-module_param(ssr_panic, charp, 0644);
-#endif
 
-#define MAX_SSR_REASON_LEN (128)
-static char *ssr_reason = NULL;
-module_param(ssr_reason, charp, 0444);
-
-void subsys_save_reason(char *reason)
-{
-#ifndef ASUS_SHIP_BUILD
-	if (strlen(ssr_panic) > 0) {
-		char *pch = strstr(ssr_panic, "\n");
-		if(pch != NULL)
-			strncpy(pch, "\0", 1);
-		if (strstr(reason, ssr_panic) != NULL)
-			panic("%s", reason); 
-	}
-#endif
-	strlcpy(ssr_reason, reason, MAX_SSR_REASON_LEN);
-	ASUSEvtlog("[SSR]:%s\n", reason);
-}
-
-static bool is_system_shutdown(void)
-{
-	return (system_state == SYSTEM_RESTART || system_state == SYSTEM_POWER_OFF);
-}
-
-int get_ssr_enable_ramdumps(void)
-{
-#ifndef ASUS_SHIP_BUILD
-	if (strlen(ssr_no_dump) > 0) {
-		char *pch = strstr(ssr_no_dump, "\n");
-		if(pch != NULL)
-			strncpy(pch, "\0", 1);
-		if (strstr(ssr_reason, ssr_no_dump) != NULL)
-			return 0; 
-	}
-#endif
-	return enable_ramdumps;
-}
-// ASUS_BSP--- "save SSR reason"
 struct workqueue_struct *ssr_wq;
 
 static LIST_HEAD(restart_log_list);
@@ -495,7 +443,7 @@ static void subsystem_shutdown(struct subsys_device *dev, void *data)
 	const char *name = dev->desc->name;
 
 	pr_info("[%p]: Shutting down %s\n", current, name);
-	if (dev->desc->shutdown(dev->desc) < 0 && !is_system_shutdown())
+	if (dev->desc->shutdown(dev->desc) < 0)
 		panic("subsys-restart: [%p]: Failed to shutdown %s!",
 			current, name);
 	subsys_set_state(dev, SUBSYS_OFFLINE);
@@ -506,7 +454,7 @@ static void subsystem_ramdump(struct subsys_device *dev, void *data)
 	const char *name = dev->desc->name;
 
 	if (dev->desc->ramdump)
-		if (dev->desc->ramdump(get_ssr_enable_ramdumps(), dev->desc) < 0) // ASUS_BSP+ "save SSR reason"
+		if (dev->desc->ramdump(enable_ramdumps, dev->desc) < 0)
 			pr_warn("%s[%p]: Ramdump failed.\n", name, current);
 	dev->do_ramdump_on_put = false;
 }
@@ -518,13 +466,20 @@ static void subsystem_powerup(struct subsys_device *dev, void *data)
 
 	pr_info("[%p]: Powering up %s\n", current, name);
 	init_completion(&dev->err_ready);
-	if (dev->desc->powerup(dev->desc) < 0 && !is_system_shutdown())
+
+	if (dev->desc->powerup(dev->desc) < 0) {
+		notify_each_subsys_device(&dev, 1, SUBSYS_POWERUP_FAILURE,
+								NULL);
 		panic("[%p]: Powerup error: %s!", current, name);
+	}
 
 	ret = wait_for_err_ready(dev);
-	if (ret && !is_system_shutdown())
+	if (ret) {
+		notify_each_subsys_device(&dev, 1, SUBSYS_POWERUP_FAILURE,
+								NULL);
 		panic("[%p]: Timed out waiting for error ready: %s!",
 			current, name);
+	}
 	subsys_set_state(dev, SUBSYS_ONLINE);
 }
 
@@ -713,9 +668,7 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 
 	mutex_lock(&track->lock);
 	do_epoch_check(dev);
-// ASUS_BSP+++ "save SSR reason"
-	kobject_uevent(&(desc->dev->kobj), KOBJ_OFFLINE);
-// ASUS_BSP--- "save SSR reason"
+
 	/*
 	 * It's necessary to take the registration lock because the subsystem
 	 * list in the SoC restart order will be traversed and it shouldn't be
@@ -748,7 +701,6 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 
 	mutex_unlock(&soc_order_reg_lock);
 	mutex_unlock(&track->lock);
-	kobject_uevent(&(desc->dev->kobj), KOBJ_ONLINE); // ASUS_BSP+ "save SSR reason"
 
 	spin_lock_irqsave(&track->s_lock, flags);
 	track->p_state = SUBSYS_NORMAL;
@@ -804,7 +756,8 @@ int subsystem_restart_dev(struct subsys_device *dev)
 	 * However, print a message so that we know that a subsystem behaved
 	 * unexpectedly here.
 	 */
-	if (is_system_shutdown()) {
+	if (system_state == SYSTEM_RESTART
+		|| system_state == SYSTEM_POWER_OFF) {
 		pr_err("%s crashed during a system poweroff/shutdown.\n", name);
 		return -EBUSY;
 	}
@@ -835,16 +788,10 @@ int subsystem_restart(const char *name)
 {
 	int ret;
 	struct subsys_device *dev = find_subsys(name);
-	struct subsys_tracking *track;
 
 	if (!dev)
 		return -ENODEV;
 
-	track = subsys_get_track(dev);
-	if (SUBSYS_ONLINE != track->state) {
-		pr_err("%s state = %d", name, track->state);
-		return -EBUSY;
-	}
 	ret = subsystem_restart_dev(dev);
 	put_device(&dev->dev);
 	return ret;
@@ -1335,13 +1282,6 @@ static int __init subsys_restart_init(void)
 	ret = ssr_init_soc_restart_orders();
 	if (ret)
 		goto err_soc;
-// ASUS_BSP+++ "save SSR reason"
-	ssr_reason = kzalloc(sizeof(char) * MAX_SSR_REASON_LEN, GFP_KERNEL);
-#ifndef ASUS_SHIP_BUILD
-	ssr_panic = kzalloc(sizeof(char) * MAX_SSR_REASON_LEN, GFP_KERNEL);
-	ssr_no_dump = kzalloc(sizeof(char) * MAX_SSR_REASON_LEN, GFP_KERNEL);
-#endif
-// ASUS_BSP--- "save SSR reason"
 	return 0;
 
 err_soc:

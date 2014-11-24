@@ -1343,7 +1343,6 @@ static void slimport_playback_proc(void)
 		if(c1!=0x7||c!=0xd0)
 		{
 			DEV_DBG("ANX7808 TX cur_h_res = 0x%x,0x%x\n", c,c1);
-			ASUSEvtlog("[mydp]ANX7808 TX cur_h_res = 0x%x,0x%x\n", c,c1);
 		}
 		sp_read_reg(TX_P2, SP_TX_TOTAL_LINE_STA_L, &c);
 		sp_read_reg(TX_P2, SP_TX_TOTAL_LINE_STA_H, &c1);
@@ -1351,20 +1350,17 @@ static void slimport_playback_proc(void)
 		if(c1!=0x4||c!=0xd3)
 		{
 		 	DEV_DBG("ANX7808 TX cur_v_res = 0x%x\n,0x%x\n", c,c1);
-			ASUSEvtlog("[mydp]ANX7808 TX cur_v_res = 0x%x\n,0x%x\n", c,c1);
 		}
 		sp_read_reg(RX_P0, HDMI_RX_HTOTAL_LOW, &cl);
 		sp_read_reg(RX_P0, HDMI_RX_HTOTAL_HIGH, &ch);
 		if(ch!=0x7||cl!=0xd0)
 		{
 			DEV_DBG("ANX7808 RX cur_h_res = 0x%x 0x%x\n",ch,cl);
-			ASUSEvtlog("[mydp]ANX7808 RX cur_h_res = 0x%x 0x%x\n", ch,cl);
 		}
 		sp_read_reg(RX_P0, HDMI_RX_VTOTAL_LOW, &cl);
 		sp_read_reg(RX_P0, HDMI_RX_VTOTAL_HIGH, &ch);
 		if(ch!=0x4||cl!=0xd3){
 			DEV_DBG("ANX7808 RX cur_v_res = 0x%x 0x%x\n", ch,cl);
-			ASUSEvtlog("[mydp]ANX7808 RX cur_v_res = 0x%x 0x%x\n", ch,cl);
 		}
         if (!myDP_DP_Dongle)
 		{
@@ -1391,7 +1387,6 @@ static void slimport_playback_proc(void)
 			    g_hdmi_rx_vsync_change++;
 				
 			DEV_DBG("# 7730 video FIFO error , 0xcb= (%x), RX ISR6 = (%x)\n",  c1, c);
-			ASUSEvtlog("[myDP]7730 video FIFO error , 0xcb= (%x), RX ISR6 = (%x)\n", c1, c);
 		}
 		
 //		printk("========== ANX7730 reg 0x50 DUMP ============\n");
@@ -1412,7 +1407,6 @@ static void slimport_playback_proc(void)
 		if ((c1 != 0x7) || (c2 != 0xd0))
 		{
 			DEV_DBG("Fail 7730 0x50 H total = (%x, %x)", c1, c2);
-			ASUSEvtlog("[myDP]Fail 7730 0x50 H total = (%x, %x)", c1, c2);			
 		}
 						
 //		printk("========== ANX7730 reg 0x72 DUMP ============\n");
@@ -1432,7 +1426,6 @@ static void slimport_playback_proc(void)
 		if ((c1 != 0xd0) || (c2 != 0x7))
 		{
 			DEV_DBG("Fail 7730 0x72 H total = (%x, %x)", c1, c2);	
-			ASUSEvtlog("[myDP]Fail 7730 0x72 H total = (%x, %x)", c1, c2);									
 		}
 //		
 //========================================
