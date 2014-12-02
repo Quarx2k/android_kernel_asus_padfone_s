@@ -2453,7 +2453,7 @@ static ssize_t duty_pcts_show(struct device *dev, struct device_attribute *attr,
 	struct pwm_config_data *pwm_cfg;
 	//int tmp[PWM_LUT_MAX_SIZE] = {0};
 	int i=0;
-	int previous_duty_pcts;
+	int previous_duty_pcts = 0;
 
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
 
@@ -2489,7 +2489,7 @@ static ssize_t duty_pcts_store(struct device *dev,
 	struct pwm_config_data *pwm_cfg;
 	u32 previous_num_duty_pcts;
 	int value;
-	int *previous_duty_pcts;
+	int *previous_duty_pcts = 0;
 	int tmp=0;
 
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
@@ -2589,7 +2589,7 @@ static ssize_t breathe_pcts_show(struct device *dev, struct device_attribute *at
 	struct pwm_config_data *pwm_cfg;
 	//int tmp[PWM_LUT_MAX_SIZE] = {0};
 	int i=0;
-	int previous_duty_pcts;
+	int previous_duty_pcts = 0;
 
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
 
@@ -2625,7 +2625,7 @@ static ssize_t breathe_pcts_store(struct device *dev,
 	struct pwm_config_data *pwm_cfg;
 	u32 previous_num_duty_pcts;
 	int value;
-	int *previous_duty_pcts;
+	int *previous_duty_pcts = 0;
 	int tmp=0;
 
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);

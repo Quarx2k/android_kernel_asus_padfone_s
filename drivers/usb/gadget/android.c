@@ -2333,7 +2333,7 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	struct android_usb_function_holder *f_holder;
 	char *name;
 	char buf[256], *b;
-	int err;
+	int err = 0;
 
 	mutex_lock(&dev->mutex);
 

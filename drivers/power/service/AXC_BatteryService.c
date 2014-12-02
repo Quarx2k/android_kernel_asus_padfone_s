@@ -814,7 +814,8 @@ static void judgeWirelessLow_VDD_MAX(int temp, int bmsCap)
 
 void  IDTP9023_handler_judgeWireless(void)
 {
-	int pmicTemp;
+	int pmicTemp = 0;
+
 	pmicTemp = pm8941_get_prop_batt_temp();
 
 	printk("[BAT][WC][workAround]%s\n",__FUNCTION__);
@@ -4922,7 +4923,7 @@ static void AXC_BatteryService_reportPropertyCapacity(struct AXC_BatteryService 
     int BatteryVolt;
     int BatteryFCC;	
     int maxMah;
-    int pmicTemp;
+    int pmicTemp = 0;
     int WirelessChg;
     //ASUS_BSP Eason read PM8941 register value+++
     u32 pm8941_0x1444_value;

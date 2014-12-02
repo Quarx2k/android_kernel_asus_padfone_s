@@ -2468,7 +2468,7 @@ static int asus_bat_report_pad_status(void)
 
 #else
 	/*Eason: When Pad plug cable, pad battery status will change to charging or full no matter what Pad battery status+++*/
-	int pad_charging_sts_hw;
+	int pad_charging_sts_hw = 0;
 	
 	if ( (ASUS_BAT_CHARGER_AC != asus_bat_get_pad_charger_byhw())&&(ASUS_BAT_CHARGER_USB != asus_bat_get_pad_charger_byhw()) ){
 		pad_charging_sts = POWER_SUPPLY_STATUS_DISCHARGING;
