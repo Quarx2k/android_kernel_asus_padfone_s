@@ -38,7 +38,7 @@
 #include <mach/clk.h>
 #endif
 #include <linux/switch.h>
-#include <iCatch7002a.h>
+#include "iCatch7002a.h"
 #include <linux/proc_fs.h>
 #include <linux/cred.h>
 #include <linux/security.h>
@@ -5240,7 +5240,8 @@ void iCatch_release_sensor(void)
 	if(retry<10)
 		pr_info("%s : [PJ] DIT process AF done success and retry = %d. \n",__func__,retry);
 //ASUS_BSP --- PJ "[A91][Camera][NA][Others] wait DIT process AF release"	    
-}
+}
+
 
 
 //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]add switch file for Camera FW update"
