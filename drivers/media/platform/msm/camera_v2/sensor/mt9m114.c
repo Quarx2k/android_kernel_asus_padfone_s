@@ -89,6 +89,7 @@ extern int g_pre_res;
 extern int g_cur_res;
 extern bool iCatch_first_open;
 //ASUS_BSP Stimber ---
+extern int g_is_eis_on;  //ASUS_BSP bill_chen "Implement image stabilization"
 //ASUS_BSP+++ YM only turn off stream, when the sensor is turned on
 static bool g_bSensorState_StreamOn = false;
 //ASUS_BSP--- YM only turn off stream, when the sensor is turned on
@@ -2192,7 +2193,8 @@ int32_t mt9m114_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
     enable_isp_torch_interrupt();
     iCatch_first_open = true;
     g_mt9m114_power = true;
-       
+    g_is_eis_on = false;  //ASUS_BSP bill_chen "Implement image stabilization"
+
     pr_info("%s X\n", __func__);
     return 0;
 

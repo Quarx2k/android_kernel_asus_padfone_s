@@ -179,6 +179,7 @@ extern void taiko_event_register(
 	struct snd_soc_codec *codec);
 
 extern void ApplyA68SPKGain(void);  //Bruno++
+extern void ApplyHeadsetGain(void);  // ASUS_BSP Paul +++
 extern void Dump_wcd9320_reg(void);  //Bruno++
 
 #endif

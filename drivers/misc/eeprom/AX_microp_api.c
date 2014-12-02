@@ -20,6 +20,8 @@ extern unsigned int g_i2c_microp_busy;
 // ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
 extern unsigned int g_i2c_bus_3v3_state;
 
+static bool SPK_EN_DuringSetting = false;//Eason fix [TT469667]
+
 int AX_MicroP_Is_3V3_ON(void)	{
         return (g_i2c_bus_3v3_state==1)?1:0;
 }
@@ -242,14 +244,30 @@ int AX_MicroP_setGPIOOutputPin(int pinID, int level){
 
 	//workaround: for P92L , first OPEN 5V_EN, and delay 210ms before open SPK_EN
 
+	//Eason fix [TT469667]+++
+	/*
+	  5v boost will be shutdown by firmware in microp sleep mode while vbus or SPK_EN be shutdown(while vbus & SPK_EN are both low)
+	  If clear vbus(HS_5V_EN), then set 5v boost(5V_PWR_EN), then clear vbus(HS_5V_EN) before SPK_EN is set high
+	  audio may no sound
+	*/
+	if(  true== SPK_EN_DuringSetting && (0 == level && OUT_uP_VBUS_EN==pinID) && (PAD_P92L==AX_MicroP_getPadModel()||PAD_P93L==AX_MicroP_getPadModel()) ){
+		msleep(250);
+	}
+	//Eason fix [TT469667]---
+
 	if( OUT_uP_SPK_EN==pinID && (PAD_P92L==AX_MicroP_getPadModel()||PAD_P93L==AX_MicroP_getPadModel()) ){		
-		if(0==AX_MicroP_getGPIOOutputPinLevel(OUT_uP_5V_PWR_EN)){
+		//Eason fix [TT469667]+++
+		if(level)
+			SPK_EN_DuringSetting = true;
+		//Eason fix [TT469667]---
+		//Eason fix [TT469667]: take off this judge, because if 5V boost trigged set by vbus, may does not do following workaround
+		/*if(0==AX_MicroP_getGPIOOutpu5V_PWR_EN may set high by set HS_5V_EN, SPK_ENtPinLevel(OUT_uP_5V_PWR_EN)){*/ 
 			printk("[%s][workaround] 5V_EN is off, enable and then delay 210ms\r\n", __FUNCTION__);
 			uP_nuvoton_write_reg(MICROP_GPIO_OUTPUT_BIT_SET, &sel_offset_5V_EN );
 			msleep(110);
                         AX_MicroP_getGPIOOutputPinLevel(OUT_uP_5V_PWR_EN); // have a dummy read to avoid microp enter into idle
                         msleep(100);
-		}
+		//}
 	}
         sel_offset=1<<pinID;
         if(level)
@@ -257,11 +275,18 @@ int AX_MicroP_setGPIOOutputPin(int pinID, int level){
         else
                 ret=uP_nuvoton_write_reg(MICROP_GPIO_OUTPUT_BIT_CLR,&sel_offset);
 
+	//Eason fix [TT469667]+++
+	if( OUT_uP_SPK_EN==pinID && (PAD_P92L==AX_MicroP_getPadModel()||PAD_P93L==AX_MicroP_getPadModel()) ){
+		if(level)
+			SPK_EN_DuringSetting = false;
+	}
+	//Eason fix [TT469667]---
+
        // check after set /clear
        ret=uP_nuvoton_read_reg(MICROP_GPIO_OUTPUT_LEVEL, &out_reg);
        if(ret >=0){
             level_pinID=(out_reg & sel_offset)?1:0;
-            printk("[MicroP] AfterSet GPIO pin=%d, level=%d\r\n", pinID, level_pinID);
+            printk("[MicroP] AfterSet GPIO pin=%d, level=%d, Out=0x%8x\r\n", pinID, level_pinID, out_reg);
             if(level_pinID!=level){
                     printk("[MicroP] [Debug] cur state =%d\r\n", AX_MicroP_getOPState());                    
                     ret=-3;

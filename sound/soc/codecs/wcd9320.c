@@ -2635,6 +2635,7 @@ static int taiko_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 		snd_soc_update_bits(codec, TAIKO_A_SPKR_DRV_EN, 0x80, 0x00);
 		break;
 	}
+	ApplyHeadsetGain(); // ASUS_BSP Paul +++
 	return 0;
 }
 
@@ -6913,6 +6914,7 @@ void report_hs_event_insertion(struct work_struct *work)
 				switch_set_state(&g_taiko->headset_jack->sdev, 2);
 				hs_sent_count = 0;
 			}
+			gpio_direction_output(wcd9320_hs_data.hsmic_bias, 0);
 		}
 	}
 }
@@ -6994,6 +6996,8 @@ u32 bMaxxOn = 0;
 extern int gSKYPE_state;
 extern int gRingtone_state;
 extern int gGarmin_state;
+extern int gOutAcdbId;
+extern int gRingtoneProfile;
 
 static int taiko_reg_dump[] = {
     TAIKO_A_CHIP_CTL,
@@ -7698,9 +7702,11 @@ void ApplyA68SPKGain(void)
     }
 #ifdef CONFIG_EEPROM_NUVOTON
     else if (P03_pamp_on) {
-	    if (AX_MicroP_getPadModel()==PAD_P93L)//PAD_P93L
-	    {
+        if (AX_MicroP_getPadModel()==PAD_P93L)//PAD_P93L
+        {
             if ((g_flag_csvoice_fe_connected) || (gSKYPE_state) || (gRingtone_state)) {
+                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX3_VOL_CTL_B2_CTL, 0x0);
+                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX5_VOL_CTL_B2_CTL, 0x0);
                 wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN, ((lineout1 & 0xE0)));       //0db
                 wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, (lineout1 & 0xE0));         //0db
                 if (g_flag_csvoice_fe_connected)
@@ -7709,15 +7715,16 @@ void ApplyA68SPKGain(void)
                     wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX5_VOL_CTL_B2_CTL, 0xA);           //+10db
                 }
             } else {
+                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX3_VOL_CTL_B2_CTL, 0x0);
+                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX5_VOL_CTL_B2_CTL, 0x0);
                 if (bMaxxOn) {
-			        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN, (lineout1 & 0xE0));     //0db
-			        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, (lineout2 & 0xE0));     //0db
+                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN, (lineout1 & 0xE0));     //0db
+                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, (lineout2 & 0xE0));     //0db
                 } else {
-			        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN, ((lineout1 & 0xE0)|2)); //-3db
-			        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, ((lineout2 & 0xE0)|2)); //-3db
+                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN, ((lineout1 & 0xE0)|2)); //-3db
+                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, ((lineout2 & 0xE0)|2)); //-3db
                 }
-            }
-    
+            } 
         }
 	    else//PAD_P92L
 	    {
@@ -7743,6 +7750,36 @@ void ApplyA68SPKGain(void)
     printk("[Audio][MaxxAudio] after spkdrvgain:0x%x rx7_vol:0x%x lineout1:0x%x lineout2:0x%x\n", spkdrvgain, rx7_vol, lineout1, lineout2);
 }
 EXPORT_SYMBOL_GPL(ApplyA68SPKGain);
+
+void ApplyHeadsetGain(void)
+{
+	u32 rx1_vol, rx2_vol;
+	rx1_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL);
+	rx2_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL);
+	printk("[Audio] before rx1_vol:0x%x rx2_vol:0x%x\n", rx1_vol, rx2_vol);
+
+	if (g_taiko->spkr_pa_widget_on) {
+		if (gOutAcdbId == 205) {
+			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL, 0xF0);
+			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL, 0xF0);
+		}
+	}
+	else if (P03_pamp_on) {
+		if (gOutAcdbId == 241) {
+			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL, 0xF0);
+			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL, 0xF0);
+		}
+	}
+	else {
+		wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL, 0x0);
+		wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL, 0x0);
+	}
+
+	rx1_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL);
+	rx2_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL);
+	printk("[Audio] after rx1_vol:0x%x rx2_vol:0x%x\n", rx1_vol, rx2_vol);
+}
+EXPORT_SYMBOL_GPL(ApplyHeadsetGain);
 
 static ssize_t audio_debug_proc_write(struct file *filp, const char __user *buff, size_t len, loff_t *off)
 {

@@ -295,11 +295,22 @@ int himax_ts_suspend(void)
 	uint8_t buf[2] = { 0 };
 
 	ts_modify = private_ts;
+	printk("[Touch_H] %s himax_ts_suspend start \n",__func__);
+	//Wakelock Protect Start
+	wake_lock(&ts_modify->wake_lock);
+	//Wakelock Protect End
+
+	//Mutexlock Protect Start
+	mutex_lock(&ts_modify->mutex_process_lock);
+	//Mutexlock Protect End
 
 	if(ts_suspend)
 	{
 		if(touch_debug_mask & SUS_INFO)
 			printk("[Touch_H] %s reject the suspend action\n",__func__);
+		//Mutexlock Protect Start
+		mutex_unlock(&ts_modify->mutex_process_lock);
+		//Mutexlock Protect End
 		return 0;
 	}
 
@@ -307,20 +318,19 @@ int himax_ts_suspend(void)
 	if(getFlashDumpGoing())
 	{
 		printk("[Touch_H] %s: Flash dump is going, reject suspend\n",__func__);
+		//Mutexlock Protect Start
+		mutex_unlock(&ts_modify->mutex_process_lock);
+		//Mutexlock Protect End
 		return 0;
 	}
 #endif
 
 	printk("[Touch_H] %s: TS suspend\n", __func__);
 
-	//Wakelock Protect Start
-	wake_lock(&ts_modify->wake_lock);
-	//Wakelock Protect End
-
 	//Mutexlock Protect Start
 	mutex_lock(&ts_modify->mutex_lock);
 	//Mutexlock Protect End
-
+	
 	buf[0] = HX_CMD_TSSOFF;
 	if(i2c_himax_master_write(ts_modify->client, buf, 1, DEFAULT_RETRY_CNT) < 0)
 	{
@@ -346,6 +356,12 @@ int himax_ts_suspend(void)
 	}
 	msleep(120);
 
+	// leave event
+	input_report_key(private_ts->input_dev, BTN_TOUCH, 0);  // touch up
+	input_mt_sync(private_ts->input_dev);
+	input_sync(private_ts->input_dev);
+
+
 	//Mutexlock Protect Start
 	mutex_unlock(&ts_modify->mutex_lock);
 	//Mutexlock Protect End
@@ -364,7 +380,11 @@ int himax_ts_suspend(void)
 	}
 
 	ts_suspend = 1;
-
+	
+	//Mutexlock Protect Start
+	mutex_unlock(&ts_modify->mutex_process_lock);
+	//Mutexlock Protect End
+	printk("[Touch_H] %s himax_ts_suspend end \n",__func__);
 	return 0;
 }
 EXPORT_SYMBOL(himax_ts_suspend);
@@ -387,11 +407,22 @@ static int himax_resume(void)
 	uint8_t buf[2] = { 0 };
 
 	ts_modify = private_ts;
+	printk("[Touch_H] %s himax_resume start \n",__func__);
+	//Wakelock Protect Start
+	wake_lock(&ts_modify->wake_lock);
+	//Wakelock Protect End
+
+	//Mutexlock Protect Start
+	mutex_lock(&ts_modify->mutex_process_lock);
+	//Mutexlock Protect End
 
 	if(!ts_suspend)
 	{
 		if(touch_debug_mask & SUS_INFO)
 			printk("[Touch_H] %s TP never enter suspend , reject the resume action\n",__func__);
+		//Mutexlock Protect Start
+		mutex_unlock(&ts_modify->mutex_process_lock);
+		//Mutexlock Protect End
 		return 0;
 	}
 
@@ -399,14 +430,13 @@ static int himax_resume(void)
 	{
 		if(touch_debug_mask & SUS_INFO)
 			printk("[Touch_H] %s in pad now , reject the resume action\n",__func__);
+		//Mutexlock Protect Start
+		mutex_unlock(&ts_modify->mutex_process_lock);
+		//Mutexlock Protect End
 		return 0;
 	}
 
 	printk("[Touch_H] %s: TS resume\n", __func__);
-
-	//Wakelock Protect Start
-	wake_lock(&ts_modify->wake_lock);
-	//Wakelock Protect End
 
 	buf[0] = HX_CMD_SETDEEPSTB;
 	buf[1] = 0x00;
@@ -427,6 +457,10 @@ static int himax_resume(void)
 
 	ts_suspend = 0;
 
+	//Mutexlock Protect Start
+	mutex_unlock(&ts_modify->mutex_process_lock);
+	//Mutexlock Protect End
+	printk("[Touch_H] %s himax_resume end \n",__func__);
 	return 0;
 }
 //----[ normal function]----------------------------------------------------------------------------------end
@@ -4919,6 +4953,10 @@ static int himax_ts_probe(struct i2c_client *client, const struct i2c_device_id 
 	mutex_init(&ts->mutex_lock);
  	//Mutexlock Protect End
 
+ 	//Mutexlock Protect Start
+	mutex_init(&ts->mutex_process_lock);
+ 	//Mutexlock Protect End
+
 	//Wakelock Protect Start
 	wake_lock_init(&ts->wake_lock, WAKE_LOCK_SUSPEND, "himax_touch_wake_lock");
 	//Wakelock Protect End
@@ -5067,6 +5105,10 @@ err_input_dev_alloc_failed:
 	mutex_destroy(&ts->mutex_lock);
 	//Mutexlock Protect End
 
+	//Mutexlock Protect Start
+	mutex_destroy(&ts->mutex_process_lock);
+	//Mutexlock Protect End
+
 	//Wakelock Protect Start
 	wake_lock_destroy(&ts->wake_lock);
  	//Wakelock Protect End
@@ -5140,6 +5182,10 @@ static int himax_ts_remove(struct i2c_client *client)
 
 	//Mutexlock Protect Start
 	mutex_destroy(&ts->mutex_lock);
+	//Mutexlock Protect End
+
+	//Mutexlock Protect Start
+	mutex_destroy(&ts->mutex_process_lock);
 	//Mutexlock Protect End
 
 	if (ts->himax_wq)

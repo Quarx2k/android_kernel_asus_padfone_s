@@ -328,9 +328,11 @@ static void msm8974_liquid_ext_spk_power_amp_enable(u32 on)
 
 #ifdef CONFIG_EEPROM_NUVOTON
 int P03_pamp_on = 0; //Rice
+int g_pad_speaker_retry = 0; //Rice
 //extern int P05_mic_inuse;
 static void asus_pad_spk_power_amp(u32 on)
 {
+    int ret = 0;
     if (on) {
         //int iRetryCount = 5;
 
@@ -351,7 +353,12 @@ static void asus_pad_spk_power_amp(u32 on)
             msleep(100);
         }
 #endif
-        AX_MicroP_setGPIOOutputPin(OUT_uP_SPK_EN, 1);
+        ret = AX_MicroP_setGPIOOutputPin(OUT_uP_SPK_EN, 1);
+        if (ret == -1)
+        {
+            printk("%s:pad spaker amp on FAIL, ask mydp to power on speaker amp!\n", __func__);
+            g_pad_speaker_retry = 1;
+        }
         P03_pamp_on = 1;
         ApplyA68SPKGain();
     } else {
@@ -360,6 +367,8 @@ static void asus_pad_spk_power_amp(u32 on)
             printk("%s: P03_pamp_on is already off\n", __func__);
             return;
         }
+        if (g_pad_speaker_retry)
+            g_pad_speaker_retry = 0;
         printk("%s: disable P03 spkr amp\n", __func__);
         AX_MicroP_setGPIOOutputPin(OUT_uP_SPK_EN, 0);
         P03_pamp_on = 0;
@@ -370,6 +379,8 @@ static void asus_pad_spk_power_amp(u32 on)
         msleep(10);
 #endif
     }
+
+    ApplyHeadsetGain(); // ASUS_BSP Paul +++
 
     printk("%s: %s external speaker PAs.\n", __func__,
             on ? "Enable" : "Disable");

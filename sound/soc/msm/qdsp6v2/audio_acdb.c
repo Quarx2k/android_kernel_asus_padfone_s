@@ -1268,6 +1268,8 @@ int gVR_state = 0;      //Bruno++
 int gHAC_mode;     //ASUS Tim++
 int gdevice_change = 0;  //ASUS Tim++
 int gGarmin_state = 0;    //ASUS Tim++
+int gOutAcdbId = 0; // ASUS_BSP Paul +++
+int gRingtoneProfile = 0; // ASUS_BSP Paul +++
 
 static long acdb_ioctl(struct file *f,
 		unsigned int cmd, unsigned long arg)
@@ -1393,6 +1395,36 @@ static long acdb_ioctl(struct file *f,
 	case AUDIO_SET_HW_DELAY_TX:
 		result = store_hw_delay(TX_CAL, (void *)arg);
 		goto done;
+// ASUS_BSP Paul +++
+	case AUDIO_SET_OUT_ACDB_ID:
+		if (copy_from_user(&gOutAcdbId, (void *)arg,
+				sizeof(gOutAcdbId))) {
+			pr_err("%s: fail to copy gOutAcdbId!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_GET_OUT_ACDB_ID:
+		if (copy_to_user((void *)arg, &gOutAcdbId,
+				sizeof(gOutAcdbId))) {
+			pr_err("%s: fail to copy gOutAcdbId!!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_SET_RINGTONE_PROFILE:
+		if (copy_from_user(&gRingtoneProfile, (void *)arg,
+				sizeof(gRingtoneProfile))) {
+			pr_err("%s: fail to copy gRingtoneProfile!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_GET_RINGTONE_PROFILE:
+		if (copy_to_user((void *)arg, &gRingtoneProfile,
+				sizeof(gRingtoneProfile))) {
+			pr_err("%s: fail to copy gRingtoneProfile!!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+// ASUS_BSP Paul ---
 //Bruno++
     case AUDIO_SET_RINGTONE_STATE:
         if (copy_from_user(&gRingtone_state, (void *)arg,

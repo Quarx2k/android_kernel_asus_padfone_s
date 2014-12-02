@@ -201,6 +201,10 @@ struct himax_ts_data
 	struct mutex mutex_lock;
 	// Mutexlock Protect End
 
+	// Mutexlock Protect Start
+	struct mutex mutex_process_lock;
+	// Mutexlock Protect End
+
 //----[HX_TP_SYS_FLASH_DUMP]--------------------------------------------------------------------------start
 #ifdef HX_TP_SYS_FLASH_DUMP
 	struct workqueue_struct *flash_wq;

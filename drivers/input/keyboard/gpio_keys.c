@@ -1962,7 +1962,7 @@ static int mp_PadKeyevent_report(struct notifier_block *this, unsigned long even
 				Pad_keys_report_event(PAD_KEY_VOLUP, 0);				
 				pad_volUp_still_press = 0;
 			}	
-			else if (pad_volDown_still_press){
+			if (pad_volDown_still_press){
 				printk("[Gpio_keys] fake VOLDOWN_release for padmode.\n ");
 				Pad_keys_report_event(PAD_KEY_VOLDOWN, 0);				
 				pad_volDown_still_press = 0;

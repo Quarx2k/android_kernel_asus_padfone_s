@@ -38,7 +38,7 @@
 #include <mach/clk.h>
 #endif
 #include <linux/switch.h>
-#include "iCatch7002a.h"
+#include <iCatch7002a.h>
 #include <linux/proc_fs.h>
 #include <linux/cred.h>
 #include <linux/security.h>
@@ -135,7 +135,7 @@ static bool g_TAEenable = 0;	//0: Disable, 1:Enable
 
 static int g_is_hdr_on = 0;	//0: Disable, 1:Enable //ASUS_BSP stimber "Implement HDR feature"
 static int g_is_nr_on = 0;	//0: Disable, 1:Enable //ASUS_BSP stimber "Implement NR feature"
-static int g_is_eis_on = 0;	//0: Disable, 1:Enable //ASUS_BSP bill_chen "Implement image stabilization"
+int g_is_eis_on = 0;	//0: Disable, 1:Enable //ASUS_BSP bill_chen "Implement image stabilization"
 
 static bool  is_calibration_table_set = true;
 bool g_isAFCancel = false;
@@ -163,6 +163,7 @@ int g_cur_res = MSM_SENSOR_INVALID_RES;
 bool iCatch_first_open = true;
 bool g_ISPbootup = false;  //ASUS_BSP LiJen "ISP flash power state"
 bool g_is1stFrame = false; //ASUS_BSP jim3_lin "Add log while kernel got 1st frame after streamon"
+bool frontcam_capture_status = false;
 bool g_isISP_IRQ_eanble = false;
 int g_pre_torch_irq_val=-1;
 static int g_pmic_flash_status=PMIC_FLASH_STATUS_FLASH_OFF;
@@ -2139,14 +2140,10 @@ int sensor_set_mode_main_camera(int  res, bool bSpeedUpPreview)
             iCatch_enable_autonight(true); //ASUS_BSP jim3_lin "Implement DIT postprocess-Mode2"
        }
 
-#if 0
        //ASUS_BSP +++ bill_chen "Implement image stabilization"
        if(g_is_eis_on)
           iCatch_enable_autonight(false);
-       else
-          iCatch_enable_autonight(true);
        //ASUS_BSP --- bill_chen "Implement image stabilization"
-#endif
 
        if((MSM_SENSOR_RES_FULL_SINGLE_CAPTURE == res||
             MSM_SENSOR_RES_FULL_BURST_CAPTURE== res ||
@@ -2428,21 +2425,18 @@ int sensor_set_mode_second_camera(int res)
 {
        if(true == iCatch_first_open){                  
             //wait_for_AE_ready();
-            //iCatch_enable_autonight(true); //ASUS_BSP jim3_lin "Implement DIT postprocess-Mode2"
+            iCatch_enable_autonight(true); //ASUS_BSP jim3_lin "Implement DIT postprocess-Mode2"
        }
 
-#if 0
        //ASUS_BSP +++ bill_chen "Implement image stabilization"
        if(g_is_eis_on)
           iCatch_enable_autonight(false);
-       else
-          iCatch_enable_autonight(true);
        //ASUS_BSP --- bill_chen "Implement image stabilization"
-#endif
 
        switch(res){
             case MSM_SENSOR_RES_QTR:            //MODE_1 - Capture
                 pr_info("%s: MODE_1 - Capture\n",__func__);
+		  frontcam_capture_status = true;
                 setCaptureVideoMode(0);
                 if(g_is_hdr_on){ //HDR
                     pr_info("[Camera] HDR mode\n");
@@ -4090,6 +4084,7 @@ void iCatch_get_exif(struct exif_cfg *exif)
 #endif
 
        if( !is_calibration && ( //ASUS_BSP jim3_lin "Add for ATD CameraTest"
+          frontcam_capture_status||
           g_cur_res == MSM_SENSOR_RES_FULL ||
           g_cur_res == MSM_SENSOR_RES_10M ||
           g_cur_res == MSM_SENSOR_RES_FULL_SINGLE_CAPTURE ||
@@ -4161,10 +4156,11 @@ void iCatch_get_exif(struct exif_cfg *exif)
             sensor_read_reg_bytes(mt9m114_s_ctrl.sensor_i2c_client->client, 0x72d8, info_3a_data, exif_bytes); 
             memcpy(exif->info_3a, info_3a_data, 24);
 #endif
-
-            if(g_cur_res != MSM_SENSOR_RES_QTR){
+	
+            if((g_cur_res != MSM_SENSOR_RES_QTR)||frontcam_capture_status){
         	    pr_info("[EXIF] ISO(%d), ET(%d/%d), FLASH(%d), EDGE(%d), Yaverage(%d), Scene_info(%d)\n", exif->iso, exif->exp_time_num, exif->exp_time_denom, exif->flash_mode,exif->edge,exif->Yaverage,exif->scene_info);
             }
+	     frontcam_capture_status =false;		
             memcpy(&g_JpegExif, exif, sizeof(struct exif_cfg));
        }else{
             //pr_info("%s ignore\n",__func__);
@@ -5244,8 +5240,7 @@ void iCatch_release_sensor(void)
 	if(retry<10)
 		pr_info("%s : [PJ] DIT process AF done success and retry = %d. \n",__func__,retry);
 //ASUS_BSP --- PJ "[A91][Camera][NA][Others] wait DIT process AF release"	    
-}
-
+}
 
 
 //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]add switch file for Camera FW update"

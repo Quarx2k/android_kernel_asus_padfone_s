@@ -71,6 +71,7 @@ DEFINE_MSM_MUTEX(ov2720asus_mut);
 
 extern unsigned char g_camera_status;  	//ASUS_BSP Stimber "Add ATD proc interface"
 extern bool iCatch_first_open;
+extern int g_is_eis_on;  //ASUS_BSP bill_chen "Implement image stabilization"
 extern bool g_ISPbootup; //ASUS_BSP LiJen "ISP flash power state"
 extern int g_pre_res;
 extern int g_cur_res;
@@ -2005,6 +2006,7 @@ int32_t ov2720asus_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
     
     g_ov2720asus_power = true;
     iCatch_first_open = true;
+    g_is_eis_on = false;  //ASUS_BSP bill_chen "Implement image stabilization"
 
     pr_info("%s X\n", __func__);
     return 0;
