@@ -870,7 +870,7 @@
 		reg-names = "qup_phys_addr";
 		interrupts = <0 106 0>;
 		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
+		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
 		qcom,master-id = <84>;
 	};
@@ -886,7 +886,7 @@
 		reg-names = "qup_phys_addr";
 		interrupts = <0 95 0>;
 		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
+		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
 		qcom,master-id = <86>;
 	};
@@ -902,7 +902,7 @@
 		reg-names = "qup_phys_addr";
 		interrupts = <0 96 0>;
 		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
+		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
 		qcom,master-id = <86>;
 	};
@@ -950,7 +950,7 @@
 		reg-names = "qup_phys_addr";
 		interrupts = <0 100 0>;
 		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
+		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
 		qcom,master-id = <86>;
 		qcom,scl-gpio = <&msmgpio 29 0>;
@@ -1623,7 +1623,8 @@
 			< 1728000 1651200 6103 >,
 			< 1958400 1728000 7102 >,
 			< 2265600 1728000 7102 >,
-			< 2457600 1728000 7102 >;
+			< 2457600 1728000 7102 >,
+			< 2956800 1728000 7102 >;
 	};
 
 	usb3: qcom,ssusb@f9200000 {
@@ -1669,6 +1670,7 @@
 			interrupts = <0 131 0>, <0 179 0>;
 			interrupt-names = "irq", "otg_irq";
 			tx-fifo-resize;
+			maximum-speed="high";
 		};
 	};
 
