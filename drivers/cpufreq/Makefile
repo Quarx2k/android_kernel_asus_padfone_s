@@ -1,5 +1,9 @@
 # CPUfreq core
+ifndef CONFIG_AERO_HOTPLUG
 obj-$(CONFIG_CPU_FREQ)			+= cpufreq.o cpu-boost.o
+else 
+obj-$(CONFIG_CPU_FREQ)			+= cpufreq.o
+endif
 # CPUfreq stats
 obj-$(CONFIG_CPU_FREQ_STAT)             += cpufreq_stats.o
 
