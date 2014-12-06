@@ -36,7 +36,7 @@
 #define HIGH_LOAD_COUNTER	25
 #define SAMPLING_RATE		4
 #define DEFAULT_MIN_ONLINE	2
-//#define SMART_LOAD_CALC
+#define SMART_LOAD_CALC
 
 struct hotplug_data {
 	/* The threshold level for the average load of all onlined cpus */
