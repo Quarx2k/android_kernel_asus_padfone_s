@@ -645,26 +645,24 @@ static int msm_ext_spkramp_event(struct snd_soc_dapm_widget *w,
 			     struct snd_kcontrol *k, int event)
 {
 	pr_debug("%s()\n", __func__);
-
-	if (SND_SOC_DAPM_EVENT_ON(event)) {
 #ifdef CONFIG_EEPROM_NUVOTON
+	if (SND_SOC_DAPM_EVENT_ON(event)) {
+
 		if (!strncmp(w->name, "Lineout_1 amp", 14))
 			pr_debug("%s() Lineout_1 amp -> do nothing.\n", __func__);
 		else if (!strncmp(w->name, "Lineout_2 amp", 14))
 			asus_pad_spk_power_amp(1);
-#endif
+
 		else {
 			pr_err("%s() Invalid Speaker Widget = %s\n",
 					__func__, w->name);
 			return -EINVAL;
 		}
 	} else {
-#ifdef CONFIG_EEPROM_NUVOTON
 		if (!strncmp(w->name, "Lineout_1 amp", 14))
 			pr_debug("%s() Lineout_1 amp -> do nothing.\n", __func__);
 		else if (!strncmp(w->name, "Lineout_2 amp", 14))
 			asus_pad_spk_power_amp(0);
-#endif
 		else {
 			pr_err("%s() Invalid Speaker Widget = %s\n",
 					__func__, w->name);
@@ -673,6 +671,10 @@ static int msm_ext_spkramp_event(struct snd_soc_dapm_widget *w,
 	}
 
 	return 0;
+#else
+	return -EINVAL;
+#endif
+
 
 }
 

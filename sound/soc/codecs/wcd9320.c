@@ -7764,12 +7764,14 @@ void ApplyHeadsetGain(void)
 			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL, 0xF0);
 		}
 	}
+#ifdef CONFIG_EEPROM_NUVOTON
 	else if (P03_pamp_on) {
 		if (gOutAcdbId == 241) {
 			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL, 0xF0);
 			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL, 0xF0);
 		}
 	}
+#endif
 	else {
 		wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL, 0x0);
 		wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL, 0x0);

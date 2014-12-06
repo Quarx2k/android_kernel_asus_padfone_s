@@ -144,7 +144,9 @@ static int g_al3010_light_first=1;
 static int p_als_threshold_lo = 0;
 static int p_als_threshold_hi = 0;
 static int a_als_calibration_accuracy = 10000;
+#ifdef CONFIG_EEPROM_NUVOTON
 extern unsigned int g_microp_ver;
+#endif
 #ifdef ASUS_FACTORY_BUILD
 static int p_als_calibration_lux = 800;		//1000 - 200 Lux
 static int p_als_low_calibration_adc = 0;
@@ -372,13 +374,14 @@ int set_als_power_state_of_P01(int state)
 	mutex_lock(&g_al3010_data_as->lock);
 	wake_lock_timeout(&pad_lightsensoer_wake_lock, 2*HZ);
 	al3010_interrupt_busy = true;
-
+#ifdef CONFIG_EEPROM_NUVOTON
 	/*Check microp state before Inital al3010 */
 	if(!AX_MicroP_Is_3V3_ON())	{
 		printk("[als_P01][als] Bus Suspended: Skip\r\n");
 		microp_state = st_MICROP_Sleep;
 	}
 	else
+#endif
 		microp_state = AX_MicroP_getOPState();
 	
 	if(microp_state == st_MICROP_Active)	{
@@ -1112,10 +1115,12 @@ static void al3010_late_resume_delayed_work(struct work_struct *work)
 		set_als_power_state_of_P01(g_al3010_suspend_switch_on || g_al3010_switch_on);
 
 	/*Release interrupt trigger*/
+#ifdef CONFIG_EEPROM_NUVOTON
 	if(AX_MicroP_Is_3V3_ON())	{
 		i2c_smbus_read_byte_data(g_al3010_data_as->client, AL3010_ADC_MSB);
 		al3010_interrupt_busy = false;
 	}
+#endif
 }
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -1201,12 +1206,14 @@ static void lightsensor_attached_pad(struct work_struct *work)
 {
 	uint64_t p0_calibration_data = 0;
 	u32 p0_shift_calibration_data = 0;
-
+#ifndef CONFIG_EEPROM_NUVOTON
+	int g_microp_ver = 0;
+#endif	
 	printk(DBGMSK_PRX_G2"[als_P01] lightsensor_attached_pad()++\n");	
 
 	/*Get calibration data*/
 	p0_calibration_data = AX_MicroP_readKDataOfLightSensor();
-	
+
 	if (g_microp_ver >= 0x906)	{
 		p0_shift_calibration_data = p0_calibration_data >> 32;
 

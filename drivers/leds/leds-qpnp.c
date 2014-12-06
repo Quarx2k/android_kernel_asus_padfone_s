@@ -1516,9 +1516,10 @@ void qpnp_led_close_pad_led(void){
 	printk("%s: call by HDMI \n",__func__);
 	if(ctl_by_frameWork || g_Charger_mode)
 		return;
+#ifdef CONFIG_EEPROM_NUVOTON
 	else
 	  AX_MicroP_ControlLED(0,0);
-
+#endif
 }
 
 //ASUS BSP Wei ------
@@ -2998,8 +2999,10 @@ void led_set_charger_mode(uint8_t led_type)
 	if(led_type == 1)	// cable in
 	{
 		if (pad_in ){
+#ifdef CONFIG_EEPROM_NUVOTON
 			AX_MicroP_ControlLED(1,1);
 			return;
+#endif
 		}
 
 		red_led->cdev.brightness = 64;
@@ -3011,8 +3014,10 @@ void led_set_charger_mode(uint8_t led_type)
 	else if(led_type == 2) // battery-full
 	{
 		if (pad_in ){
+#ifdef CONFIG_EEPROM_NUVOTON
 			AX_MicroP_ControlLED(0,1);
 			return;
+#endif
 		}
 
 		red_led->cdev.brightness = 0;
@@ -3023,9 +3028,10 @@ void led_set_charger_mode(uint8_t led_type)
 	}
 	else				// cable out
 	{
+#ifdef CONFIG_EEPROM_NUVOTON
 		if (pad_in )
 			AX_MicroP_ControlLED(0,0);
-
+#endif
 		led_clean();
 		return;
 	}
