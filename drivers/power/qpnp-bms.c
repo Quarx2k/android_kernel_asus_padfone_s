@@ -4256,13 +4256,13 @@ static ssize_t pm8941_dump_read_proc(char *page, char **start, off_t off, int co
 	int batt_temp;
 	//struct raw_soc_params raw;
 	//struct soc_params params;
-	
+	#ifdef CONFIG_EEPROM_NUVOTON
 	//Eason: A91 TLT add pad cap+++
 	int P_gauge;
 	int16_t P_voltage;
 	int16_t P_current;
 
-	#ifdef CONFIG_EEPROM_NUVOTON
+
 	if(1==AX_MicroP_IsP01Connected())
 	{
 		P_gauge = AX_MicroP_readBattCapacity(PAD_BAT);
@@ -4291,9 +4291,11 @@ static ssize_t pm8941_dump_read_proc(char *page, char **start, off_t off, int co
 						"BMS: %d\n"
 						"SWgauge: %d\n"
 						"Pad_Cap: %d\n"
+	#ifdef CONFIG_EEPROM_NUVOTON
 						"P_gauge: %d\n"
 						"P_voltage: %d\n"
 						"P_current: %d\n"
+	#endif
 						, g_bms_fcc - g_bms_uuc
 						, g_bms_ocv_charge - g_bms_cc - g_bms_uuc
 						, asus_bat_report_phone_capacity(100)
@@ -4303,9 +4305,11 @@ static ssize_t pm8941_dump_read_proc(char *page, char **start, off_t off, int co
 						, get_prop_bms_capacity(g_qpnp_bms_chip)
 						, cal_SWgauge_capacity()
 						, BatteryServiceReportPADCAP()
+	#ifdef CONFIG_EEPROM_NUVOTON
 						, P_gauge
 						, P_voltage
 						, P_current
+	#endif
 						);
 }
 
