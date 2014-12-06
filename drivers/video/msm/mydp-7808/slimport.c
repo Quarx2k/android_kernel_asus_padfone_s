@@ -285,7 +285,9 @@ int dump_7808_reg_pclk(void)
 	return 0;
 }
 void sp_tx_hdmi_error_power_down(void);
+#ifdef CONFIG_EEPROM_NUVOTON
 extern void reportPadStationI2CFail(char *devname);
+#endif
 static int dp_reset_pd_function(const char *val, struct kernel_param *kp)
 {
 	int ret=0;
@@ -326,9 +328,11 @@ static int dp_reset_pd_function(const char *val, struct kernel_param *kp)
 	else if (dp_pd_value==2) {
 		hdcp_enable=1;
 	}
+#ifdef CONFIG_EEPROM_NUVOTON
 	else if (dp_pd_value==3) {
 		reportPadStationI2CFail("MyDP");
 	}	
+#endif
 	else if (dp_pd_value==4) {
 		sp_tx_hardware_poweron(anx7808_client);				
 	}

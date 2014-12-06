@@ -4773,7 +4773,9 @@ error:
 //ANX +++: (ver0.4)			
 
 extern int g_Pad_LT_Fail_Count;
+#ifdef CONFIG_EEPROM_NUVOTON
 extern void reportPadStationI2CFail(char *devname);
+#endif
 unchar sp_tx_config_hdmi_pad(void)
 {
 
@@ -4929,7 +4931,9 @@ unchar sp_tx_config_hdmi_pad(void)
 						//ASUS BSP wei +++
 						if(g_Pad_LT_Fail_Count>=5){
 							g_Pad_LT_Fail_Count=0;
+#ifdef CONFIG_EEPROM_NUVOTON
 							reportPadStationI2CFail("MyDP");
+#endif
 							DEV_NOTICE("____________Hardware LT Fail in Pad mode \n");
 							return 1;	
 						}
