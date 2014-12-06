@@ -3707,15 +3707,10 @@ static int  AXC_BatteryService_getCapacity(struct AXI_BatteryServiceFacade * bat
 				#endif //#ifdef CONFIG_FASTBOOT
 					
 				return 0;//BMS table 1% need mapping to 0%
-			}
-		}else if( (true==_this->BatteryService_IsFULL)&&(gBMS_Cap>=99) ) {
-			printk("[BAT][BMS]more than 99p & FULL flag, show 100:%d\n",gBMS_Cap);
-			return 100;
-		}else if( (false==_this->BatteryService_IsFULL)&&(100 == gBMS_Cap) ) {
-			printk("[BAT][BMS]100p but Not_FULL flag, show 99:%d\n",gBMS_Cap);
-			return 99;			
-		}else
+			}			
+		} else {
 			return gBMS_Cap;
+		}
 	}	
 	//Eason show BMS cap to user---
 }
