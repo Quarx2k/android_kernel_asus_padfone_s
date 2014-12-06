@@ -117,7 +117,7 @@ extern int AX_MicroP_IsECDockIn(void);
 extern void asus_bat_update_DockAcOnline(void);
 #endif
 extern void BatteryService_P02update(void);
-extern bool reportRtcReady(void);
+static bool reportRtcReady = true;
 
 extern void asus_bat_update_PadAcOnline(void);
 
@@ -194,7 +194,6 @@ static DECLARE_WAIT_QUEUE_HEAD(cableIn_alarm_wait_queue);
 static uint32_t alarm_enabled;
 static uint32_t batLowAlarm_enabled;
 static uint32_t cableInAlarm_enabled;
-extern void alarm_start_range(struct alarm *alarm, ktime_t start, ktime_t end);
 #define RTCSetInterval 610
 //Eason: dynamic set Pad alarm +++
 //#define RTCSetIntervalwhenCapLess20  610
@@ -227,7 +226,6 @@ extern bool g_BootUp_IsBatLow;
 //Eason boot up in BatLow situation, take off cable can shutdown---
 //Eason : In suspend have same cap don't update savedTime +++
 bool SameCapDontUpdateSavedTime = false;
-extern bool g_RTC_update;
 //Eason : In suspend have same cap don't update savedTime ---
 //Eason : prevent thermal too hot, limit charging current in phone call+++
 extern bool g_audio_limit;
@@ -2072,7 +2070,7 @@ static void DoWhenPadAlarmResume(void)
                                &balance_this->BatteryServiceUpdateWorker,\
                                0 * HZ);
 
-        if( false == reportRtcReady()){
+        if( false == reportRtcReady){
             queue_delayed_work(balance_this->BatteryServiceCapUpdateQueue,
                                    &balance_this->BatRtcReadyWorker,
                                    RTC_READY_DELAY_TIME * HZ);
@@ -2125,9 +2123,6 @@ void SetRTCAlarm(void)
     //ReportTime();
     spin_lock_irqsave(&bat_alarm_slock, flags);
     alarm_enabled |= alarm_type_mask;
-    alarm_start_range(&bat_alarm,
-    timespec_to_ktime(new_alarm_time),
-    timespec_to_ktime(new_alarm_time));
     spin_unlock_irqrestore(&bat_alarm_slock, flags);
 
 }
@@ -2181,9 +2176,6 @@ static void SetBatLowRTCAlarm(void)
     //ReportTime();
     spin_lock_irqsave(&batLow_alarm_slock, batlowflags);
     batLowAlarm_enabled |= batLowAlarm_type_mask;
-    alarm_start_range(&batLow_alarm,
-    timespec_to_ktime(new_batLowAlarm_time),
-    timespec_to_ktime(new_batLowAlarm_time));
     spin_unlock_irqrestore(&batLow_alarm_slock, batlowflags);
 
 } 
@@ -2225,9 +2217,6 @@ static void SetCableInRTCAlarm(void)
     //ReportTime();
     spin_lock_irqsave(&cableIn_alarm_slock, cableInflags);
     cableInAlarm_enabled |= cableInAlarm_type_mask;
-    alarm_start_range(&cableIn_alarm,
-    timespec_to_ktime(new_cableInAlarm_time),
-    timespec_to_ktime(new_cableInAlarm_time));
     spin_unlock_irqrestore(&cableIn_alarm_slock, cableInflags);
 
 } 
@@ -2252,7 +2241,7 @@ static void CheckBatRtcReady(struct work_struct *dat)
        AXC_BatteryService *_this = container_of(dat,AXC_BatteryService,\
                                                 BatRtcReadyWorker.work);
        
-       if( true == reportRtcReady())
+       if( true == reportRtcReady)
        {
             _this->savedTime=updateNowTime(_this);
 		//Eason: when change MaxMah clear interval+++
@@ -4174,7 +4163,7 @@ static void AXC_BatteryService_resume(struct AXI_BatteryServiceFacade *bat,int d
         
         
 
-        if( false == reportRtcReady()){
+        if( false == reportRtcReady){
             queue_delayed_work(_this->BatteryServiceCapUpdateQueue,
                                    &_this->BatRtcReadyWorker,
                                    RTC_READY_DELAY_TIME * HZ);
@@ -4197,7 +4186,7 @@ static void AXC_BatteryService_resume(struct AXI_BatteryServiceFacade *bat,int d
         
         
 
-        if( false == reportRtcReady()){
+        if( false == reportRtcReady){
             queue_delayed_work(_this->BatteryServiceCapUpdateQueue,
                                    &_this->BatRtcReadyWorker,
                                    RTC_READY_DELAY_TIME * HZ);
@@ -4251,7 +4240,7 @@ static void AXC_BatteryService_resume(struct AXI_BatteryServiceFacade *bat,int d
         
         
 
-        if( false == reportRtcReady()){
+        if( false == reportRtcReady){
             queue_delayed_work(_this->BatteryServiceCapUpdateQueue,
                                    &_this->BatRtcReadyWorker,
                                    RTC_READY_DELAY_TIME * HZ);
@@ -4348,7 +4337,7 @@ static void AXC_BatteryService_forceResume(struct AXI_BatteryServiceFacade *bat,
                                delayStartInSeconds * HZ);
         //ReportTime();
 
-        if( false == reportRtcReady())
+        if( false == reportRtcReady)
 	 {
             queue_delayed_work(_this->BatteryServiceCapUpdateQueue,&_this->BatRtcReadyWorker,
                                    RTC_READY_DELAY_TIME * HZ);
@@ -5443,7 +5432,7 @@ static int BatteryServiceGauge_OnCapacityReply(struct AXI_Gauge *gauge, struct A
     			//Hank: A86 no use---
 	  	}	
 	 //Eason: choose Capacity type SWGauge/BMS ---	
-		
+/*
         //Eason : In suspend have same cap don't update savedTime +++
         if( (A66_LastTime_capacity == _this->A66_capacity)&&(true==SameCapDontUpdateSavedTime)&&
             (false==g_RTC_update) )
@@ -5464,6 +5453,7 @@ static int BatteryServiceGauge_OnCapacityReply(struct AXI_Gauge *gauge, struct A
 	  //Eason: when change MaxMah clear interval+++
 	  _this->ForceSavedTime = updateNowTime(_this);//for A68 will always update no matter if change MaxMAh
 	  //Eason: when change MaxMah clear interval---
+*/
     }
 
      //Hank: schedule next polling in capacity update worker+++ 
@@ -5478,6 +5468,7 @@ static int BatteryServiceGauge_OnCapacityReply(struct AXI_Gauge *gauge, struct A
     pr_debug("[BAT][SER]%s() --- \n",__func__);	
     return 0;
 }
+
 int BatteryServiceGauge_AskSuspendCharging(struct AXI_Gauge_Callback *gaugeCb)
 {
     AXC_BatteryService  *_this=

@@ -4040,9 +4040,6 @@ qpnp_chg_reduce_power_stage(struct qpnp_chg_chip *chip)
 	if (usb_present && usb_ma_above_wall) {
 		getnstimeofday(&ts);
 		ts.tv_sec += POWER_STAGE_REDUCE_CHECK_PERIOD_SECONDS;
-		alarm_start_range(&chip->reduce_power_stage_alarm,
-					timespec_to_ktime(ts),
-					timespec_to_ktime(ts));
 	} else {
 		pr_debug("stopping power stage workaround\n");
 		chip->power_stage_workaround_running = false;
