@@ -48,6 +48,23 @@
 #include "pm.h"
 #include "modem_notifier.h"
 #include "platsmp.h"
+#include <linux/persistent_ram.h>
+
+static struct platform_device *ram_console_dev;
+
+static struct persistent_ram_descriptor msm_prd[] __initdata = {
+	{
+		.name = "ram_console",
+		.size = SZ_1M,
+	},
+};
+
+static struct persistent_ram msm_pr __initdata = {
+	.descs = msm_prd,
+	.num_descs = ARRAY_SIZE(msm_prd),
+	.start = PLAT_PHYS_OFFSET + SZ_1G + SZ_512M,
+	.size = SZ_1M,
+};
 
 
 static struct memtype_reserve msm8974_reserve_table[] __initdata = {
@@ -73,6 +90,7 @@ static struct reserve_info msm8974_reserve_info __initdata = {
 
 void __init msm_8974_reserve(void)
 {
+	persistent_ram_early_init(&msm_pr);
 	reserve_info = &msm8974_reserve_info;
 	of_scan_flat_dt(dt_scan_for_memory_reserve, msm8974_reserve_table);
 	msm_reserve();
@@ -319,6 +337,24 @@ static void __init msm8974_map_io(void)
 	msm_map_8974_io();
 }
 
+static void __init asus_config_ramconsole(void)
+{
+	int ret;
+
+	ram_console_dev = platform_device_alloc("ram_console", -1);
+	if (!ram_console_dev) {
+		pr_err("%s: Unable to allocate memory for RAM console device",
+				__func__);
+		return;
+	}
+
+	ret = platform_device_add(ram_console_dev);
+	if (ret) {
+		pr_err("%s: Unable to add RAM console device", __func__);
+		return;
+	}
+}
+
 //++ASUS_BSP : add for miniporting
 #include <linux/init.h>
 #include <linux/ioport.h>
@@ -356,6 +392,7 @@ void __init msm8974_init(void)
 	regulator_has_full_constraints();
 	board_dt_populate(adata);
 	msm8974_add_drivers();
+	asus_config_ramconsole();
 }
 
 void __init msm8974_init_very_early(void)
