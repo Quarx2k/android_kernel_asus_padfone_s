@@ -35,6 +35,35 @@
 
 #define RTB_COMPAT_STR	"qcom,msm-rtb"
 
+/* Write
+ * 1) 3 bytes sentinel
+ * 2) 1 bytes of log type
+ * 3) 4 bytes of where the caller came from
+ * 4) 4 bytes index
+ * 4) 4 bytes extra data from the caller
+ *
+ * Total = 16 bytes.
+ */
+struct msm_rtb_layout {
+	unsigned char sentinel[3];
+	unsigned char log_type;
+	void *caller;
+	unsigned long idx;
+	void *data;
+} __attribute__ ((__packed__));
+
+
+struct msm_rtb_state {
+	struct msm_rtb_layout *rtb;
+	phys_addr_t phys;
+	int nentries;
+	int size;
+	int enabled;
+	int initialized;
+	uint32_t filter;
+	int step_size;
+};
+
 #if defined(CONFIG_MSM_RTB_SEPARATE_CPUS)
 DEFINE_PER_CPU(atomic_t, msm_rtb_idx_cpu);
 #else
