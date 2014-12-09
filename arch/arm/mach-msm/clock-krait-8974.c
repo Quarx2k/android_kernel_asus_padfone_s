@@ -720,8 +720,8 @@ static int clock_krait_8974_driver_probe(struct platform_device *pdev)
 			"qcom,speed%d-pvs%d-bin-v%d", speed, pvs, pvs_ver);
 
 	// Force own freq table
-	snprintf(table_name, ARRAY_SIZE(table_name), "qcom,speed4-pvs1-bin-v1");
-	printk("table_name %s\n", table_name);
+	//snprintf(table_name, ARRAY_SIZE(table_name), "qcom,speed4-pvs1-bin-v1");
+	//printk("table_name %s\n", table_name);
 
 	rows = parse_tbl(dev, table_name, 3,
 			(u32 **) &freq, (u32 **) &uv, (u32 **) &ua);
