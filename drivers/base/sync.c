@@ -255,25 +255,12 @@ static struct sync_fence *sync_fence_alloc(const char *name)
 	struct sync_fence *fence;
 	unsigned long flags;
 
-	//Mickey+++, add client name into fence file
-	static char fence_file_name[256];
-
 	fence = kzalloc(sizeof(struct sync_fence), GFP_KERNEL);
 	if (fence == NULL)
 		return NULL;
 
-    memset(fence_file_name,0x00,sizeof(char)*256);
-
-    if (strlen(name)<(256-20)) {
-        sprintf(fence_file_name, "sync_fence(%s)", name);
-        fence->file = anon_inode_getfile(fence_file_name, &sync_fence_fops,
-						fence, 0);
-    } else {
-        fence->file = anon_inode_getfile("sync_fence", &sync_fence_fops,
-						fence, 0);
-    }
-	//Mickey---
-
+	fence->file = anon_inode_getfile("sync_fence", &sync_fence_fops,
+					 fence, 0);
 	if (fence->file == NULL)
 		goto err;
 
