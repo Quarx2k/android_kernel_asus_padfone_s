@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,22 +32,13 @@ struct kgsl_process_private;
 
 extern struct kgsl_memdesc_ops kgsl_page_alloc_ops;
 
-int kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
-			   struct kgsl_pagetable *pagetable, size_t size);
-
 int kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
 				struct kgsl_pagetable *pagetable,
 				size_t size);
 
-int kgsl_sharedmem_alloc_coherent(struct kgsl_memdesc *memdesc, size_t size);
-
-int kgsl_sharedmem_ebimem_user(struct kgsl_memdesc *memdesc,
-			     struct kgsl_pagetable *pagetable,
-			     size_t size);
-
-int kgsl_sharedmem_ebimem(struct kgsl_memdesc *memdesc,
-			struct kgsl_pagetable *pagetable,
-			size_t size);
+int kgsl_cma_alloc_coherent(struct kgsl_device *device,
+			struct kgsl_memdesc *memdesc,
+			struct kgsl_pagetable *pagetable, size_t size);
 
 void kgsl_sharedmem_free(struct kgsl_memdesc *memdesc);
 
@@ -65,7 +56,9 @@ int kgsl_sharedmem_set(struct kgsl_device *device,
 			unsigned int offsetbytes, unsigned int value,
 			unsigned int sizebytes);
 
-void kgsl_cache_range_op(struct kgsl_memdesc *memdesc, int op);
+int kgsl_cache_range_op(struct kgsl_memdesc *memdesc,
+			size_t offset, size_t size,
+			unsigned int op);
 
 int kgsl_process_init_sysfs(struct kgsl_device *device,
 		struct kgsl_process_private *private);
@@ -253,30 +246,8 @@ kgsl_memdesc_mmapsize(const struct kgsl_memdesc *memdesc)
 }
 
 static inline int
-kgsl_allocate(struct kgsl_memdesc *memdesc,
-		struct kgsl_pagetable *pagetable, size_t size)
-{
-	int ret;
-	memdesc->priv |= (KGSL_MEMTYPE_KERNEL << KGSL_MEMTYPE_SHIFT);
-	if (kgsl_mmu_get_mmutype() == KGSL_MMU_TYPE_NONE)
-		return kgsl_sharedmem_ebimem(memdesc, pagetable, size);
-
-	ret = kgsl_sharedmem_page_alloc(memdesc, pagetable, size);
-	if (ret)
-		return ret;
-	ret = kgsl_mmu_get_gpuaddr(pagetable, memdesc);
-	if (ret) {
-		kgsl_sharedmem_free(memdesc);
-		return ret;
-	}
-	ret = kgsl_mmu_map(pagetable, memdesc);
-	if (ret)
-		kgsl_sharedmem_free(memdesc);
-	return ret;
-}
-
-static inline int
-kgsl_allocate_user(struct kgsl_memdesc *memdesc,
+kgsl_allocate_user(struct kgsl_device *device,
+		struct kgsl_memdesc *memdesc,
 		struct kgsl_pagetable *pagetable,
 		size_t size, unsigned int flags)
 {
@@ -287,8 +258,10 @@ kgsl_allocate_user(struct kgsl_memdesc *memdesc,
 
 	memdesc->flags = flags;
 
-	if (kgsl_mmu_get_mmutype() == KGSL_MMU_TYPE_NONE)
-		ret = kgsl_sharedmem_ebimem_user(memdesc, pagetable, size);
+	if (kgsl_mmu_get_mmutype() == KGSL_MMU_TYPE_NONE) {
+		size = ALIGN(size, PAGE_SIZE);
+		ret = kgsl_cma_alloc_coherent(device, memdesc, pagetable, size);
+	}
 	else
 		ret = kgsl_sharedmem_page_alloc_user(memdesc, pagetable, size);
 
@@ -296,13 +269,17 @@ kgsl_allocate_user(struct kgsl_memdesc *memdesc,
 }
 
 static inline int
-kgsl_allocate_contiguous(struct kgsl_memdesc *memdesc, size_t size)
+kgsl_allocate_contiguous(struct kgsl_device *device,
+			struct kgsl_memdesc *memdesc, size_t size)
 {
-	int ret  = kgsl_sharedmem_alloc_coherent(memdesc, size);
+	int ret;
+
+	size = ALIGN(size, PAGE_SIZE);
+
+	ret = kgsl_cma_alloc_coherent(device, memdesc, NULL, size);
 	if (!ret && (kgsl_mmu_get_mmutype() == KGSL_MMU_TYPE_NONE))
 		memdesc->gpuaddr = memdesc->physaddr;
 
-	memdesc->flags |= (KGSL_MEMTYPE_KERNEL << KGSL_MEMTYPE_SHIFT);
 	return ret;
 }
 
