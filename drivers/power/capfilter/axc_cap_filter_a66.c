@@ -42,9 +42,6 @@ extern int gDiff_BMS;
 //Eason: remember last BMS Cap to filter---
 #endif
 static int gDiff_BMS;
-//Hank: A86 bo use---
-//Eason:In  phone call suspend, use 200mA do fasterLeverage+++
-extern int g_flag_csvoice_fe_connected;
 //Eason:In  phone call suspend, use 200mA do fasterLeverage---
 //Hank:A86 slowly drop+++
 extern int gCurr_TIgauge;
@@ -229,10 +226,6 @@ static int eval_bat_life_when_discharging(
 					}else{
 						fasterLeverage_drop_val = formula_of_discharge(DEFAULT_SUSPEND_PHONE_FAST, batCapMah, interval);
 						fast_discharge_after_dot = formula_of_discharge_dot(DEFAULT_SUSPEND_PHONE_FAST, batCapMah, interval);
-					}
-					if(0 == g_flag_csvoice_fe_connected)
-					{
-						g_BatFil_InPhoneCall_PastTime = 0;
 					}
 				}
 				//Eason:In  phone call suspend, use 200mA do fasterLeverage---

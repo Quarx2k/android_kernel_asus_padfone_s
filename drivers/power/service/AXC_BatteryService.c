@@ -4057,7 +4057,6 @@ void doInBalanceModeWhenSuspend(void)
 
 
 extern void setSmb346CC_Curr1250mA_Iterm50(void);
-extern int g_flag_csvoice_fe_connected;
 extern void setChgLimitThermalRuleDrawCurrent(bool isSuspendCharge);
 static void AXC_BatteryService_suspend(struct AXI_BatteryServiceFacade *bat)
 {
@@ -4100,19 +4099,6 @@ static void AXC_BatteryService_suspend(struct AXI_BatteryServiceFacade *bat)
 	//Eason: check FC flag to disable charge, prevent Battery over charge, let gauge FCC abnormal+++
 	checkGaugeFCSetChg();
 	//Eason: check FC flag to disable charge, prevent Battery over charge, let gauge FCC abnormal---
-	
-	//Hank:suspend and not in phone call set cc current 1250mA+++
-	if(g_flag_csvoice_fe_connected == 0 && SMB346_INOK_Online && (A90_EVB0==g_ASUS_hwID))
-	{
-		setSmb346CC_Curr1250mA_Iterm50();
-		printk("[BAT][Ser]%s()set cc current 1250mA\n",__func__);
-	}
-	else
-	{
-		pr_debug("[BAT][Ser]%s()phone call:%d cable-in:%d do not set cc current\n",__func__,g_flag_csvoice_fe_connected,SMB346_INOK_Online);
-	}
-	//Hank:suspend and not in phone call set cc current 1250mA---
-	
 
 	if(DffsDown == true && SMB346_INOK_Online && (A90_EVB0==g_ASUS_hwID))
 	{

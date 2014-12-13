@@ -64,7 +64,7 @@
 struct taiko_priv *g_taiko;
 struct wcd9xxx *g_wcd9xxx;
 
-extern int g_flag_csvoice_fe_connected;
+int g_flag_csvoice_fe_connected = 0;
 struct timer_list hs_timer_insertion;
 struct timer_list hs_timer_removal;
 struct timer_list button_timer;
@@ -6993,11 +6993,11 @@ static void deinitKernelEnv(void)
 }
 
 u32 bMaxxOn = 0;
-extern int gSKYPE_state;
-extern int gRingtone_state;
-extern int gGarmin_state;
-extern int gOutAcdbId;
-extern int gRingtoneProfile;
+int gSKYPE_state = 0;
+int gRingtone_state = 0;
+int gGarmin_state = 0;
+int gOutAcdbId = 0;
+int gRingtoneProfile = 0;
 
 static int taiko_reg_dump[] = {
     TAIKO_A_CHIP_CTL,
@@ -7684,50 +7684,10 @@ void ApplyA68SPKGain(void)
             spkdrvgain, rx7_vol, lineout1, lineout2);
 
     if (g_taiko->spkr_pa_widget_on) {
-        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_SPKR_DRV_GAIN, 0x05);
-        if ((g_flag_csvoice_fe_connected) || (gSKYPE_state) || (gRingtone_state) || (gGarmin_state)) {
-            wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL, 0x01);
-        } else {
-            if (bMaxxOn) {
-                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL, 0x01);
-            } else {
-                #ifdef ASUS_PF500KL_PROJECT
-                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL, 0xF8);//PF500KL
-                #endif
-                #ifdef ASUS_A91_PROJECT
-                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL, 0xFE);
-                #endif
-            }
-        }
+        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_SPKR_DRV_GAIN, 0xA0);
+        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL, 0x01);
     }
-#ifdef CONFIG_EEPROM_NUVOTON
-    else if (P03_pamp_on) {
-        if (AX_MicroP_getPadModel()==PAD_P93L)//PAD_P93L
-        {
-            if ((g_flag_csvoice_fe_connected) || (gSKYPE_state) || (gRingtone_state)) {
-                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX3_VOL_CTL_B2_CTL, 0x0);
-                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX5_VOL_CTL_B2_CTL, 0x0);
-                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN, ((lineout1 & 0xE0)));       //0db
-                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, (lineout1 & 0xE0));         //0db
-                if (g_flag_csvoice_fe_connected)
-                {
-                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX3_VOL_CTL_B2_CTL, 0xA);           //+10db
-                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX5_VOL_CTL_B2_CTL, 0xA);           //+10db
-                }
-            } else {
-                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX3_VOL_CTL_B2_CTL, 0x0);
-                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX5_VOL_CTL_B2_CTL, 0x0);
-                if (bMaxxOn) {
-                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN, (lineout1 & 0xE0));     //0db
-                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, (lineout2 & 0xE0));     //0db
-                } else {
-                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN, ((lineout1 & 0xE0)|2)); //-3db
-                    wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, ((lineout2 & 0xE0)|2)); //-3db
-                }
-            } 
-        }
-	    else//PAD_P92L
-	    {
+
 	        if ((g_flag_csvoice_fe_connected) || (gSKYPE_state) || (gRingtone_state)) {
 		        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN, (lineout1 & 0xE0));         //0db
 		        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, (lineout2 & 0xE0));         //0db
@@ -7740,9 +7700,6 @@ void ApplyA68SPKGain(void)
 			        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN, ((lineout2 & 0xE0)|2)); //-3db
 		        }
 	        }
-	    }
-    }
-#endif
     spkdrvgain = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_SPKR_DRV_GAIN);
     rx7_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL);
     lineout1 = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN);
