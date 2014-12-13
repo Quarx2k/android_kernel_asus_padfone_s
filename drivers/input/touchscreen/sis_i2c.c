@@ -48,10 +48,6 @@
 #include <linux/of_gpio.h>
 #include <linux/switch.h>
 
-#define ASUS_DEBUG_LOG
-#ifdef ASUS_DEBUG_LOG
-#include <linux/asusdebug.h>
-#endif
 //Desmond--
 
 #ifdef _STD_RW_IO

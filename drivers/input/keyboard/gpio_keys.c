@@ -51,7 +51,6 @@ static struct input_dev *g_input_dev; //ASUS BSP freddy+ get input_dev info for 
 
 struct kobject *kobj;//ASUS_BSP + [thomas]Send uevent to userspace
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. ++
-#include <linux/asusdebug.h>
 #include <linux/reboot.h>
 #include <asm/cacheflush.h>
 

@@ -25,9 +25,6 @@
 
 #include "axc_gaugefactory.h"
 #include "axc_gauge_a66.h"
-//ASUS_BSP Eason_Chang add event log +++
-#include <linux/asusdebug.h>
-//ASUS_BSP Eason_Chang add event log ---
 //ASUS_BSP Eason read battery ID+++
 #include <linux/qpnp/qpnp-adc.h>
 //ASUS_BSP Eason read battery ID---

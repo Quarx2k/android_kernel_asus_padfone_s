@@ -83,9 +83,6 @@ static bool IsKeepChgFrom15pTo19p = false;//Eason:balance mode keep charge from 
 #endif
 //Eason: A68 new balance mode ---
 //ASUS_BSP --- Eason_Chang BalanceMode
-//ASUS_BSP +++ Eason_Chang add event log +++
-#include <linux/asusdebug.h> 
-//ASUS_BSP +++ Eason_Chang add event log ---
 #include <linux/wakelock.h>
 #include <linux/gpio.h> //Eason:get cable In/Out at first time ask Cap
 //#define smb346INOK 27 //Eason: boot up in BatLow situation, take off cable can shutdown//ASUS BSP Eason_Chang : A86 porting

@@ -49,16 +49,6 @@ struct i2c_client *anx7808_client;
 int g_i2c_error_count = 0;
 unchar g_hdmi_rx_vsync_change = 0;
 
-//+++ ASUS BSP Bernard
-asus_debug_mask(MYDP);
-
-#ifndef ASUS_DEV_WARN
-#define ASUS_DEV_WARN(args...) asus_printk(MYDP, ASUS_DEBUG_WARNING, "[MYDP] " args)
-#endif
-
-#ifndef ASUS_DEV_INFO
-#define ASUS_DEV_INFO(args... ) asus_printk(MYDP, ASUS_DEBUG_INFO1, "[MYDP] " args)
-#endif
 //--- ASUS BSP Bernard
 
 #ifndef EYE_TEST
@@ -157,7 +147,7 @@ static void create_MYDP_proc_file(void)
 		mydp_proc_file->write_proc =mydp_write_proc;
 	}
 	else {
-		ASUS_DEV_WARN("proc file create failed!\n");
+		printk("proc file create failed!\n");
     	}
 
 	return;
@@ -239,8 +229,8 @@ int dump_7808_reg_info(void)
 	tmp= (tmp<< 8) + cl;
 
 	if(tmp!=cur_h_res){
-		ASUS_DEV_WARN("ANX7808 RX old cur_h_res = 0x%x\n", cur_h_res);
-		ASUS_DEV_WARN("ANX7808 RX new cur_h_res = 0x%x\n", tmp);
+		printk("ANX7808 RX old cur_h_res = 0x%x\n", cur_h_res);
+		printk("ANX7808 RX new cur_h_res = 0x%x\n", tmp);
 		cur_h_res=tmp;
 	}
 	sp_read_reg(RX_P0, HDMI_RX_VTOTAL_LOW, &cl);
@@ -249,8 +239,8 @@ int dump_7808_reg_info(void)
 	tmp = (tmp << 8) + cl;
 	
 	if(tmp!=cur_v_res){
-		ASUS_DEV_WARN("ANX7808 RX old cur_v_res = 0x%x\n", cur_v_res);
-		ASUS_DEV_WARN("ANX7808 RX new cur_v_res = 0x%x\n", tmp);
+		printk("ANX7808 RX old cur_v_res = 0x%x\n", cur_v_res);
+		printk("ANX7808 RX new cur_v_res = 0x%x\n", tmp);
 		cur_v_res=tmp;
 	}
 	return 0;
@@ -309,18 +299,18 @@ static int dp_reset_pd_function(const char *val, struct kernel_param *kp)
 		n = ch;
 		n = (n << 8) + cl;
 
-		ASUS_DEV_WARN("ANX7808 RX cur_h_res = 0x%x\n", n);
+		printk("ANX7808 RX cur_h_res = 0x%x\n", n);
 		sp_read_reg(RX_P0, HDMI_RX_VTOTAL_LOW, &cl);
 		sp_read_reg(RX_P0, HDMI_RX_VTOTAL_HIGH, &ch);
 		n = ch;
 		n = (n << 8) + cl;
-		ASUS_DEV_WARN("ANX7808 RX cur_v_res = 0x%x\n", n);
+		printk("ANX7808 RX cur_v_res = 0x%x\n", n);
 
 		sp_read_reg(RX_P0, HDMI_RX_VID_PCLK_CNTR_REG, &cl);
-		ASUS_DEV_WARN("ANX7808 RX cur_pix_clk = 0x%x\n", cl);
+		printk("ANX7808 RX cur_pix_clk = 0x%x\n", cl);
 
 		sp_read_reg(RX_P0, HDMI_RX_HDMI_STATUS_REG, &cl);
-		ASUS_DEV_WARN("ANX7808 RX dvi_status = 0x%x\n",  ((cl & HDMI_MODE) == HDMI_MODE));	
+		printk("ANX7808 RX dvi_status = 0x%x\n",  ((cl & HDMI_MODE) == HDMI_MODE));	
 	}
 	else if (dp_pd_value==1) {
 		hdcp_enable=0;
@@ -355,23 +345,23 @@ static int dp_reset_pd_function(const char *val, struct kernel_param *kp)
 		}
 */		
 		i2c_master_read_reg(0, 0x0B, &c1);
-		ASUS_DEV_WARN("7730reg 0x50, 0x0B=%x\n", (uint)c1);
+		printk("7730reg 0x50, 0x0B=%x\n", (uint)c1);
 		msleep(1);
 		i2c_master_read_reg(5, 0xE3, &c1);
-		ASUS_DEV_WARN("7730reg 0x72, 0xE3=%x\n", (uint)c1);		
+		printk("7730reg 0x72, 0xE3=%x\n", (uint)c1);		
 		msleep(1);
 		i2c_master_read_reg(0, 0x06, &c1);
-		ASUS_DEV_WARN("7730reg 0x50, 0x06=%x\n", (uint)c1);
+		printk("7730reg 0x50, 0x06=%x\n", (uint)c1);
 		msleep(1);
 		i2c_master_read_reg(5, 0x06, &c1);
-		ASUS_DEV_WARN("7730reg 0x72, 0x06=%x\n", (uint)c1);				
+		printk("7730reg 0x72, 0x06=%x\n", (uint)c1);				
 		i2c_master_read_reg(0, 0x05, &c1);
-		ASUS_DEV_WARN("7730reg 0x50, 0x05=%x\n", (uint)c1);				
+		printk("7730reg 0x50, 0x05=%x\n", (uint)c1);				
 	}	
 	else if (dp_pd_value==7) {
 		unchar c=0;
 		
-		ASUS_DEV_WARN("write 7730reg 0, 0x06 bit5\n");				
+		printk("write 7730reg 0, 0x06 bit5\n");				
 		i2c_master_read_reg(0,0x06, &c);
 		c = c | 0x20; 
 		i2c_master_write_reg(0,0x06, c);
@@ -379,7 +369,7 @@ static int dp_reset_pd_function(const char *val, struct kernel_param *kp)
 	else if (dp_pd_value==8) {
 		unchar c=0;
 		
-		ASUS_DEV_WARN("write 7730reg 0, 0x06 bit3\n");				
+		printk("write 7730reg 0, 0x06 bit3\n");				
 		i2c_master_read_reg(0,0x06, &c);
 		c = c | 0x08; 
 		i2c_master_write_reg(0,0x06, c);
@@ -387,7 +377,7 @@ static int dp_reset_pd_function(const char *val, struct kernel_param *kp)
 	else if (dp_pd_value==9) {
 		unchar c=0;
 		
-		ASUS_DEV_WARN("write 7730reg 0, 0x06 bit2\n");				
+		printk("write 7730reg 0, 0x06 bit2\n");				
 		i2c_master_read_reg(0,0x06, &c);
 		c = c | 0x04; 
 		i2c_master_write_reg(0,0x06, c);
@@ -396,7 +386,7 @@ static int dp_reset_pd_function(const char *val, struct kernel_param *kp)
 		
 		unchar c=0;
 
-		ASUS_DEV_WARN("write 7730reg 0, 0x06 bit0\n");				
+		printk("write 7730reg 0, 0x06 bit0\n");				
 		i2c_master_read_reg(0,0x06, &c);
 		c = c | 0x01; 
 		i2c_master_write_reg(0,0x06, c);
@@ -404,7 +394,7 @@ static int dp_reset_pd_function(const char *val, struct kernel_param *kp)
 	else if (dp_pd_value==11) {				
 		unchar c=0;
 		
-		ASUS_DEV_WARN("write 7730reg 5, 0x06 bit5\n");				
+		printk("write 7730reg 5, 0x06 bit5\n");				
 		i2c_master_read_reg(5,0x06, &c);
 		c = c | 0x20; 
 		i2c_master_write_reg(5,0x06, c);		
@@ -449,7 +439,7 @@ static int read_swing_function(const char *val, struct kernel_param *kp)
 	if (read_swing_value==1)
 	{
 		sp_read_reg(TX_P0, 0xa3, &c);
-		ASUS_DEV_WARN("TX_P0  0xa3: %x\n",c);
+		printk("TX_P0  0xa3: %x\n",c);
 	}
 	else if (read_swing_value==2)  // test tx phy 
 	{
@@ -460,10 +450,10 @@ static int read_swing_function(const char *val, struct kernel_param *kp)
 		unchar bSwing, bEmp;
 		sp_read_reg(TX_P0, 0xA3, &bSwing);
 		sp_write_reg(TX_P0, 0xA3, (bSwing&~0x03)|0x02);
-		ASUS_DEV_WARN("##lane0,Swing600mv\n");	
+		printk("##lane0,Swing600mv\n");	
 		sp_read_reg(TX_P0, 0xA3, &bEmp);
 		sp_write_reg(TX_P0, 0xA3, (bEmp&~0x18)|0x08);
-		ASUS_DEV_WARN("## lane0,emp 3.5db\n");
+		printk("## lane0,emp 3.5db\n");
 	}
 	else if (read_swing_value==4)
 	{
@@ -484,7 +474,7 @@ static int read_swing_function(const char *val, struct kernel_param *kp)
 	else if (read_swing_value==7)
 	{
 		unchar c=0;
-		ASUS_DEV_WARN("HW reset === 7730reg 0x72, 0x06 bit0\n");				
+		printk("HW reset === 7730reg 0x72, 0x06 bit0\n");				
 		i2c_master_read_reg(5,0x06, &c);
 		c = c | 0x01; 
 		i2c_master_write_reg(5,0x06, c);		
@@ -494,25 +484,25 @@ static int read_swing_function(const char *val, struct kernel_param *kp)
 		unchar c=0;
 		int i;
 		
-		ASUS_DEV_WARN("******* ANX7730 reg 0x50 DUMP ============\n");
+		printk("******* ANX7730 reg 0x50 DUMP ============\n");
 		for (i=0; i <=0xff; i++)
 		{
 			i2c_master_read_reg(0, i , &c);
 			if  (i%0xf)
-				ASUS_DEV_WARN("0x%x = (%x), ", i, c);										
+				printk("0x%x = (%x), ", i, c);										
 			else	
-				ASUS_DEV_WARN("0x%x = (%x)\n", i, c);										
+				printk("0x%x = (%x)\n", i, c);										
 				
 		}
 
-		ASUS_DEV_WARN("******* ANX7730 reg 0x72 DUMP ============\n");
+		printk("******* ANX7730 reg 0x72 DUMP ============\n");
 		for (i=0; i <=0xff; i++)
 		{
 			i2c_master_read_reg(5, i , &c);
 			if  (i%0xf)
-				ASUS_DEV_WARN("0x%x = (%x), ", i, c);										
+				printk("0x%x = (%x), ", i, c);										
 			else	
-				ASUS_DEV_WARN("0x%x = (%x)\n", i, c);										
+				printk("0x%x = (%x)\n", i, c);										
 		}		
 	}
 	else if (read_swing_value==9)
@@ -570,14 +560,14 @@ static int write_swing_function(const char *val, struct kernel_param *kp)
 		}
 		if(sp_tx_asus_pad && (sp_tx_system_state == STATE_PLAY_BACK)) {
 			g_swing_value	= 0;
-			ASUS_DEV_WARN("7808 swing = 200mv\n");
+			printk("7808 swing = 200mv\n");
 			sp_write_reg(TX_P0, 0xA3, (g_swing_value)  | (g_pre_emphis_value << 3) );    
 			sp_read_reg(TX_P0, 0xA3, &bSwing);
               	DEV_DBG("mydp 200mv swing/emp = 0x%x\n", bSwing);
 		}
 		else  {
 			g_swing_value	= 0;
-			ASUS_DEV_WARN("7808 swing = 200mv\n");
+			printk("7808 swing = 200mv\n");
 		}
 	}
 	else if (write_swing_value==3)
@@ -588,14 +578,14 @@ static int write_swing_function(const char *val, struct kernel_param *kp)
 		}
 		if(sp_tx_asus_pad && (sp_tx_system_state == STATE_PLAY_BACK)) {
 			g_swing_value	= 1;
-			ASUS_DEV_WARN("7808 swing = 400mv\n");
+			printk("7808 swing = 400mv\n");
 			sp_write_reg(TX_P0, 0xA3, (g_swing_value)  | (g_pre_emphis_value << 3) );    
 			sp_read_reg(TX_P0, 0xA3, &bSwing);
 	              DEV_DBG("mydp 400mv swing/emp = 0x%x\n", bSwing);
 		}
 		else {
 			g_swing_value	= 1;
-			ASUS_DEV_WARN("7808 swing = 400mv\n");
+			printk("7808 swing = 400mv\n");
 		}
 	}
 	else if (write_swing_value==4)
@@ -606,28 +596,28 @@ static int write_swing_function(const char *val, struct kernel_param *kp)
 		}
 		if(sp_tx_asus_pad && (sp_tx_system_state == STATE_PLAY_BACK)) {
 			g_swing_value	= 2;
-			ASUS_DEV_WARN("7808 swing = 600mv\n");
+			printk("7808 swing = 600mv\n");
 			sp_write_reg(TX_P0, 0xA3, (g_swing_value)  | (g_pre_emphis_value << 3) );    
 			sp_read_reg(TX_P0, 0xA3, &bSwing);
                	DEV_DBG("mydp 600mv swing/emp = 0x%x\n", bSwing);
 		}
 		else {
 			g_swing_value	= 2;
-			ASUS_DEV_WARN("7808 swing = 600mv\n");
+			printk("7808 swing = 600mv\n");
 		}
 
 	}
 	else if (write_swing_value==5)
 	{
 		g_swing_value	= 3;
-		ASUS_DEV_WARN("7808 swing = 800mv\n");
+		printk("7808 swing = 800mv\n");
 		
 	}
 	else if (write_swing_value==6)
 	{
 					
                 sp_tx_aux_dpcdread_bytes(0x00, 0x02, 0x06, 1, &c);
-                ASUS_DEV_WARN("sp_tx_config_hdmi_pad , ADJUST_REQUEST_LANE0_1 = 0x%x\n", c);		
+                printk("sp_tx_config_hdmi_pad , ADJUST_REQUEST_LANE0_1 = 0x%x\n", c);		
 		
 	}
 	//+++ ASUS BSP Bernard, for test pattern
@@ -708,28 +698,28 @@ extern int measure_pad_plugin_time;
 static int anx7808_suspend(struct i2c_client *client, pm_message_t mesg)
 {	
 
-	ASUS_DEV_WARN("anx7808_suspend (not implement) +++\n");
+	printk("anx7808_suspend (not implement) +++\n");
 #ifdef CONFIG_ASUS_HDMI
 	Is_HDMI_power_off=0; //ASUS wei +++
 #endif
 
 	if(gpio_get_value(75)){
-			ASUS_DEV_WARN("resume_trigger = 1 \n");
+			printk("resume_trigger = 1 \n");
 			resume_trigger=1;
 	}
 #ifdef CONFIG_ASUS_HDMI
 	measure_pad_plugin_time=0;
 #endif
-	ASUS_DEV_WARN("anx7808_suspend (not implement) ---\n");	
+	printk("anx7808_suspend (not implement) ---\n");	
 	
 	return 0;
 }
 static int anx7808_resume(struct i2c_client *client)
 {
 
-	ASUS_DEV_WARN("anx7808_resume (not implement) ++++\n");
+	printk("anx7808_resume (not implement) ++++\n");
 	   
-	ASUS_DEV_WARN("anx7808_resume (not implement) ----\n");
+	printk("anx7808_resume (not implement) ----\n");
 	
 	return 0;
 }
@@ -748,17 +738,17 @@ void dp_switch_carkit(bool enable)
 	g_b_SwitchCarkitBootPlugin= enable;	//+++ ASUS BSP Bernard
         if(NULL != notify_carkit_in_out_func_ptr)
 	{
-             ASUS_DEV_WARN("[dp] carkit cable notify (%d)\n", enable);
+             printk("[dp] carkit cable notify (%d)\n", enable);
              (*notify_carkit_in_out_func_ptr) (enable);
         }
-	ASUS_DEV_INFO("dp_switch_carkit+++++ \n");
+	printk("dp_switch_carkit+++++ \n");
 }
 //ASUS BSP wei lai ---
 
 
 int dp_registerCarkitInOutNotificaition(void (*callback)(int))
 {
-	ASUS_DEV_WARN("%s +++\n",__FUNCTION__);
+	printk("%s +++\n",__FUNCTION__);
 
 	notify_carkit_in_out_func_ptr = callback;
 	return 0;
@@ -780,7 +770,7 @@ int sp_read_reg(uint8_t slave_addr, uint8_t offset, uint8_t *buf)
 			__func__, slave_addr);
 		if ((++g_i2c_error_count) > 20)
 		{
-			ASUS_DEV_WARN("myDP read i2c error, power down\n");
+			printk("myDP read i2c error, power down\n");
 			//sp_tx_hardware_recovery(anx7808_client);
 		}	
 		return ret;
@@ -808,7 +798,7 @@ int sp_write_reg(uint8_t slave_addr, uint8_t offset, uint8_t value)
 			__func__, slave_addr);
 		if ((++g_i2c_error_count) > 20)
 		{
-			ASUS_DEV_WARN("myDP write i2c error, power down\n");
+			printk("myDP write i2c error, power down\n");
 			//sp_tx_hardware_recovery(anx7808_client);
 		}		
 	}
@@ -829,14 +819,14 @@ extern void hdmi_hdcp_recheck(void);
 //+++ ASUS BSP Bernard for mydp 1V control
 void sp_hardware_1V_Ctrl(int stat, struct anx7808_platform_data *pdata)
 {
-	ASUS_DEV_WARN("### stat of mydp 1V control = %d ###\n", stat);
+	printk("### stat of mydp 1V control = %d ###\n", stat);
 	if(stat) {
 		regulator_enable(pdata->sp_regulator);
-		ASUS_DEV_INFO("1V is enabled\n");
+		printk("1V is enabled\n");
 	}
 	else{
 		regulator_disable(pdata->sp_regulator);
-		ASUS_DEV_INFO("1V is disabled\n");
+		printk("1V is disabled\n");
 	}
 }
 //--- ASUS BSP Bernard for mydp 1V control
@@ -1027,7 +1017,7 @@ static void slimport_cable_plug_proc(struct anx7808_data *anx7808)
     //Mickey+++, wait for boot complete if we don't boot in pad
     if (!g_Pad_Bootup && !g_Android_Boot_Complete) {
         needWait=wait_for_android_boot_complete();
-        ASUS_DEV_WARN("Didn't boot up from PAD and android boot completed\n");
+        printk("Didn't boot up from PAD and android boot completed\n");
 	}
 	//Mickey---
 #endif
@@ -1056,7 +1046,7 @@ static void slimport_cable_plug_proc(struct anx7808_data *anx7808)
 					//+++ ASUS BSP Bernard
 					ret = clk_prepare_enable(anx7808->mydp_diff_clk);
 					if(ret !=0)
-						ASUS_DEV_WARN("Clk_prepare_enable fail %d\n",ret);
+						printk("Clk_prepare_enable fail %d\n",ret);
 					mydp_diffclk_flag = 1;
 					//--- ASUS BSP Bernard
 					sp_tx_vbus_poweron();
@@ -1097,7 +1087,7 @@ static void slimport_cable_plug_proc(struct anx7808_data *anx7808)
 			switch(sp_tx_rx_type) {
 			case RX_HDMI:
 				if(sp_tx_get_hdmi_connection()){
-					ASUS_DEV_INFO("==== (RX_HDMI) ===\n");
+					printk("==== (RX_HDMI) ===\n");
 //ANX +++: (ver:20130105) pad solution					
 					if(sp_tx_asus_pad) {
 						hdmi_rx_set_hpd(1);
@@ -1112,7 +1102,7 @@ static void slimport_cable_plug_proc(struct anx7808_data *anx7808)
 			case RX_DP:
 				if(sp_tx_get_dp_connection())
 				{
-					ASUS_DEV_INFO("==== (RX_DP) ===\n");				
+					printk("==== (RX_DP) ===\n");				
 					if(sp_tx_asus_pad) {
 						//skip EDID read
 						hdmi_rx_set_hpd(1);
@@ -1474,18 +1464,18 @@ static void slimport_main_proc(struct anx7808_data *anx7808)
 				try_count --;
 			};
 
-			ASUS_DEV_WARN("try_count = %d\n", try_count);
+			printk("try_count = %d\n", try_count);
 			#if 1
 			if ( !try_count)
 			{
-				ASUS_DEV_INFO("after check RX input, still TMDS not ready, go link , then power down\n");
+				printk("after check RX input, still TMDS not ready, go link , then power down\n");
 				sp_tx_set_sys_state(STATE_LINK_TRAINING);
 				//config_hdmi_try_count--;
 			}
 			else
 			{	
 				//config_hdmi_try_count=2;
-				ASUS_DEV_INFO("TMDS ready, go to next process\n");	
+				printk("TMDS ready, go to next process\n");	
 			}
 			#endif
 			if (sp_tx_system_state == STATE_LINK_TRAINING){
@@ -1734,12 +1724,12 @@ static irqreturn_t dp_usb_id_detect_handler(int irq, void *dev_id){
 	
 	struct anx7808_platform_data *pdata = anx7808_client->dev.platform_data;
 	struct anx7808_data *anx7808 = (struct anx7808_data *)dev_id;
-	ASUS_DEV_WARN("[dp_usb_id_detect_handler]+++++++++++++\n");
-	ASUS_DEV_INFO("@@@@ usb_id = %d @@@@\n", pdata->gpio_usb_id);
+	printk("[dp_usb_id_detect_handler]+++++++++++++\n");
+	printk("@@@@ usb_id = %d @@@@\n", pdata->gpio_usb_id);
 	if(gpio_get_value(pdata->gpio_cbl_det)==1)goto exit;   //asus wei lai +++
 	
 	if((gpio_get_value(pdata->gpio_usb_id)==1) && (g_carkit_flag == 1)){
-		ASUS_DEV_WARN("dp_switch_carkit is false\n");
+		printk("dp_switch_carkit is false\n");
 		dp_switch_carkit(false);
 		g_carkit_flag = 0;
 	}
@@ -1771,7 +1761,7 @@ static void anx7808_carKitwork_func(struct work_struct *work)
 		if((gpio_get_value_cansleep(td ->pdata->gpio_cbl_det) ==0) && (g_carkit_flag == 0)){
 			dp_switch_carkit(true);
 			g_carkit_flag = 1;
-			ASUS_DEV_WARN("dp_switch_carkit is true+++++\n");
+			printk("dp_switch_carkit is true+++++\n");
 		}
 		else {
 			g_b_SwitchCarkitBootPlugin = false;	//+++ ASUS BSP Bernard
@@ -1873,14 +1863,14 @@ static int anx7808_i2c_probe(struct i2c_client *client,
 				"slimport,gpio_pw_dwn",0, &anx7808->pdata->gpio_pw_dwn_flags);
 		anx7808->pdata ->gpio_usb_id= of_get_named_gpio_flags(client->dev.of_node, 
 				"slimport,gpio_usb_id",0, &anx7808->pdata->gpio_usb_id_flags);
-		ASUS_DEV_INFO("### get GPIO information ###");
+		printk("### get GPIO information ###");
 	}
-	ASUS_DEV_INFO("gpio_rst[%d], gpio_cbl_det[%d], gpio_pw_dwn[%d], Slave address[%02x]\n",
+	printk("gpio_rst[%d], gpio_cbl_det[%d], gpio_pw_dwn[%d], Slave address[%02x]\n",
 			anx7808->pdata->gpio_rst,
 			anx7808->pdata->gpio_cbl_det,
 			anx7808->pdata->gpio_pw_dwn,
 			client->addr);		
-	ASUS_DEV_INFO("gpio_usb_id[%d]\n", anx7808->pdata ->gpio_usb_id);
+	printk("gpio_usb_id[%d]\n", anx7808->pdata ->gpio_usb_id);
 
 	//to get regulator 1v  
 	anx7808->pdata->sp_regulator = regulator_get(&client->dev, "vcc_1v");
@@ -1956,7 +1946,7 @@ static int anx7808_i2c_probe(struct i2c_client *client,
 					IRQF_TRIGGER_RISING
 					| IRQF_TRIGGER_FALLING,
 					"anx7808_cabel_det", anx7808);
-	ASUS_DEV_WARN("@@@@@@@@@ irq_number = %d @@@@@@@@@@\n",client->irq); //+++ ASUS BSP Bernard, 20130426
+	printk("@@@@@@@@@ irq_number = %d @@@@@@@@@@\n",client->irq); //+++ ASUS BSP Bernard, 20130426
 	if (ret  < 0) {
 		DEV_ERR("%s : failed to request irq\n", __func__);
 		goto err3;
@@ -1974,13 +1964,13 @@ static int anx7808_i2c_probe(struct i2c_client *client,
 //+++ ASUS BSP Bernard
 	irq = irq_of_parse_and_map(intr, 0);
 	if (irq < 0) {
-		ASUS_DEV_WARN( "%s: could not get USB_ID_DETECT IRQ resource, error=%d ", __func__, irq);		
+		printk( "%s: could not get USB_ID_DETECT IRQ resource, error=%d ", __func__, irq);		
 	}
 	ret = request_irq(irq, dp_usb_id_detect_handler,
 		IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING , "dp usb id mode", anx7808);
 
 	if (ret < 0) {
-		ASUS_DEV_WARN( "%s: FACTORY USB IRQ#%d request failed with error=%d \n", __func__, irq, ret);				
+		printk( "%s: FACTORY USB IRQ#%d request failed with error=%d \n", __func__, irq, ret);				
 	}
 	
 //---  ASUS BSP Bernard
@@ -1996,7 +1986,7 @@ static int anx7808_i2c_probe(struct i2c_client *client,
 		&& !(gpio_get_value(75)))  {
 		if(gpio_get_value(anx7808->pdata->gpio_cbl_det)==0){
 			//wake_lock(&anx7808->slimport_lock);
-			ASUS_DEV_WARN("@@@@@ OTG @@@@@@@@@@@@\n");
+			printk("@@@@@ OTG @@@@@@@@@@@@\n");
 			//g_b_SwitchCarkitBootPlugin= true;
 			queue_delayed_work(anx7808->workqueue, &anx7808->carKitwork, 0);
 		}

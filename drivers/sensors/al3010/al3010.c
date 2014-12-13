@@ -332,7 +332,7 @@ static int al3010_set_power_state(struct i2c_client *client, int state)
 	}
 	g_al3010_light_first=1;
 
-	printk(DBGMSK_PRX_G2"[als_P01] al3010_set_pwr_state: state:%d\n", g_al3010_switch_on);
+	printk("[als_P01] al3010_set_pwr_state: state:%d\n", g_al3010_switch_on);
 
 	ret = i2c_smbus_write_byte_data(
 		g_al3010_data_as->client, AL3010_MODE_COMMAND, g_al3010_switch_on);
@@ -386,7 +386,7 @@ int set_als_power_state_of_P01(int state)
 	
 	if(microp_state == st_MICROP_Active)	{
 		al3010_power_on_retry_time = 0;
-		printk(DBGMSK_PRX_G2"[al3010][als] Microp in Active mode\n");
+		printk("[al3010][als] Microp in Active mode\n");
 	}
 	else	{
 		printk("[al3010][als] Microp not in Active mode(%d), retry %d\n", microp_state, al3010_power_on_retry_time);
@@ -406,7 +406,7 @@ int set_als_power_state_of_P01(int state)
 	for(indx = 0; indx<5; indx++) {
 		ret = al3010_put_property(g_al3010_data_as->client);
 		if(!ret)	{
-			printk(DBGMSK_PRX_G2"[al3010][als] init al3010 success\n");
+			printk("[al3010][als] init al3010 success\n");
 			break;
 		}else	{
 			printk("[al3010][als] init_client error retry = %d\n",indx);
@@ -425,7 +425,7 @@ int set_als_power_state_of_P01(int state)
 		ret = al3010_set_power_state(
 			g_al3010_data_as->client, state? AL3010_POW_UP:AL3010_POW_DOWN);
 		if(!ret) {
-			printk(DBGMSK_PRX_G2"[al3010][als] switch on al3010 success\n");
+			printk("[al3010][als] switch on al3010 success\n");
 			break;
 		}else
 			printk("[al3010][als] i2c error retry = %d\n",indx);
@@ -445,9 +445,9 @@ int set_als_power_state_of_P01(int state)
 	wake_unlock(&pad_lightsensoer_wake_lock);
 
 	if (state == 1)
-		printk(DBGMSK_PRX_G2"[al3010][als] P02 light sensor dev_open\n");
+		printk("[al3010][als] P02 light sensor dev_open\n");
 	else
-		printk(DBGMSK_PRX_G2"[al3010][als] P02 light sensor dev_close\n");
+		printk("[al3010][als] P02 light sensor dev_close\n");
 
 	queue_delayed_work(Al3010light_delay_workqueue, &al3010_ISR_delay_work, 10);
 
@@ -459,14 +459,14 @@ static int al3010_get_adc_value(struct i2c_client *client)
 {
 	int lsb, msb;
 	int adc;
-	printk(DBGMSK_PRX_G6"[als_P01]++al3010_get_adc_value \n");
+	printk("[als_P01]++al3010_get_adc_value \n");
 
 	mutex_lock(&g_al3010_data_as->lock);
 
 	msb = i2c_smbus_read_byte_data(client, AL3010_MODE_COMMAND);
-	printk(DBGMSK_PRX_G6"[als_P01]al3010_get_adc_value: reg (0x00) = 0x%x\n", msb);
+	printk("[als_P01]al3010_get_adc_value: reg (0x00) = 0x%x\n", msb);
 	msb = i2c_smbus_read_byte_data(client, AL3010_INT_COMMAND);
-	printk(DBGMSK_PRX_G6"[als_P01]al3010_get_adc_value: reg (0x10) = 0x%x\n", msb);
+	printk("[als_P01]al3010_get_adc_value: reg (0x10) = 0x%x\n", msb);
 
 	lsb = i2c_smbus_read_byte_data(client, AL3010_ADC_LSB);
 
@@ -478,7 +478,7 @@ static int al3010_get_adc_value(struct i2c_client *client)
 	msb = i2c_smbus_read_byte_data(client, AL3010_ADC_MSB);
 	mutex_unlock(&g_al3010_data_as->lock);
 
-	printk(DBGMSK_PRX_G6"[als_P01]****al3010_get_adc_value: msb=%d, lsb=%d\n", msb, lsb);
+	printk("[als_P01]****al3010_get_adc_value: msb=%d, lsb=%d\n", msb, lsb);
 
 	if (msb < 0)
 		return msb;
@@ -516,12 +516,12 @@ static int al3010_put_property(struct i2c_client *client)
 	status = i2c_smbus_write_byte_data(client, AL3010_INT_COMMAND,  ALS_IF | (ALS_Gain << 4 ));
 
 	if (status < 0)  {
-		printk(DBGMSK_PRX_G2"[als_P02] addr=0x%x, val=0x%x, ret=%d\n",AL3010_INT_COMMAND, ALS_IF | (ALS_Gain << 4 ), status);
+		printk("[als_P02] addr=0x%x, val=0x%x, ret=%d\n",AL3010_INT_COMMAND, ALS_IF | (ALS_Gain << 4 ), status);
 		switch_set_state(&ls_switch_dev, P01_EVENT_NOTIFY_LIGHTSENSOR_ERROR);
 		mutex_unlock(&g_al3010_data_as->lock);
 		return status;
 	}else
-		printk(DBGMSK_PRX_G2"[als_P02] addr=0x%x, val=0x%x\n",AL3010_INT_COMMAND, ALS_IF  | (ALS_Gain << 4 ) );
+		printk("[als_P02] addr=0x%x, val=0x%x\n",AL3010_INT_COMMAND, ALS_IF  | (ALS_Gain << 4 ) );
 
 	/*Set high/low threshold*/
 	i2c_smbus_write_byte_data(client, AL3010_LOW_THD_LSB, 0x00);//g_thd[0] & 0xFF);
@@ -530,7 +530,7 @@ static int al3010_put_property(struct i2c_client *client)
 	i2c_smbus_write_byte_data(client, AL3010_LOW_THD_MSB, 0x00);//(g_thd[0] >> 8 ) & 0xFF);
 	msb = i2c_smbus_read_byte_data(client, AL3010_LOW_THD_MSB);
 
-	printk(DBGMSK_PRX_G2"[als_P02]++ al3010_set_inital_low_threshold_value: msb=%d, lsb=%d\n", msb, lsb);
+	printk("[als_P02]++ al3010_set_inital_low_threshold_value: msb=%d, lsb=%d\n", msb, lsb);
 
 	/* Set High threshold*/
 	i2c_smbus_write_byte_data(client, AL3010_HIGH_THD_LSB,  0x00);//g_thd[1] & 0xFF);
@@ -539,15 +539,15 @@ static int al3010_put_property(struct i2c_client *client)
 	i2c_smbus_write_byte_data(client, AL3010_HIGH_THD_MSB, 0x00);//(g_thd[1] >> 8 ) & 0xFF);
 	msb = i2c_smbus_read_byte_data(client, AL3010_HIGH_THD_MSB);
 
-	printk(DBGMSK_PRX_G2"[als_P02]-- al3010_set_inital_high_threshold_value: msb=%d, lsb=%d\n", msb, lsb);
+	printk("[als_P02]-- al3010_set_inital_high_threshold_value: msb=%d, lsb=%d\n", msb, lsb);
 
 	/*Check interrupt state (Read only)*/
 	status = i2c_smbus_read_byte_data(client, AL3010_INT_STATUS);
 
 	if (status == 0)
-		printk(DBGMSK_PRX_G2"[al3010][als] P02 light sensor interrupt is cleared\n");
+		printk("[al3010][als] P02 light sensor interrupt is cleared\n");
 	else{
-		printk(DBGMSK_PRX_G2"[al3010][als] P02 light sensor interrupt is triggered\n");
+		printk("[al3010][als] P02 light sensor interrupt is triggered\n");
 		/*Release interrupt trigger*/
 		i2c_smbus_read_byte_data(g_al3010_data_as->client, AL3010_ADC_MSB);
 	}
@@ -579,7 +579,7 @@ static void mp_als_interrupt_delay_work(struct work_struct *work)
 
 	p_als_threshold_lo = ((msb <<8) | lsb );
 
-	printk(DBGMSK_PRX_G2"[als_P02]-- al3010_get_high_threshold_value: %d ,msb=%d, lsb=%d\n"
+	printk("[als_P02]-- al3010_get_high_threshold_value: %d ,msb=%d, lsb=%d\n"
 											,p_als_threshold_lo, msb, lsb);
 
 	/* Set High threshold*/
@@ -595,7 +595,7 @@ static void mp_als_interrupt_delay_work(struct work_struct *work)
 			g_al3010_data_as->client, AL3010_HIGH_THD_MSB);
 
 	p_als_threshold_hi = ((msb <<8) | lsb );
-	printk(DBGMSK_PRX_G2"[als_P02]++ al3010_get_low_threshold_value: %d ,msb=%d, lsb=%d\n"
+	printk("[als_P02]++ al3010_get_low_threshold_value: %d ,msb=%d, lsb=%d\n"
 											,p_als_threshold_hi, msb, lsb);
 
 	/*Trun on al3010*/
@@ -603,7 +603,7 @@ static void mp_als_interrupt_delay_work(struct work_struct *work)
 		ret = i2c_smbus_write_byte_data(
 			g_al3010_data_as->client, AL3010_MODE_COMMAND, AL3010_POW_UP);
 		if(!ret) {
-			printk(DBGMSK_PRX_G2"[al3010][als] switch on al3010 success\n");
+			printk("[al3010][als] switch on al3010 success\n");
 			break;
 		}else if ( indx >= 5 )
 			printk("[al3010][als] %s: switch on al3010 fail\n",__FUNCTION__);
@@ -616,9 +616,9 @@ static void mp_als_interrupt_delay_work(struct work_struct *work)
 	ret = i2c_smbus_read_byte_data(g_al3010_data_as->client, AL3010_INT_STATUS);
 
 	if (ret == 0)
-		printk(DBGMSK_PRX_G2"[al3010][als] P02 light sensor interrupt is cleared\n");
+		printk("[al3010][als] P02 light sensor interrupt is cleared\n");
 	else{
-		printk(DBGMSK_PRX_G2"[al3010][als] P02 light sensor interrupt is triggered\n");
+		printk("[al3010][als] P02 light sensor interrupt is triggered\n");
 		/*Release interrupt trigger*/
 		i2c_smbus_read_byte_data(g_al3010_data_as->client, AL3010_ADC_MSB);
 	}
@@ -665,8 +665,8 @@ static void mp_als_interrupt_handler(struct work_struct *work)
 		
 		mutex_unlock(&g_al3010_data_as->lock);
 		
-		printk(DBGMSK_PRX_G2"/********************************************************/\n");
-		printk(DBGMSK_PRX_G2"[als_P02] al3010_get_raw_adc_value: %d\n", adc);
+		printk("/********************************************************/\n");
+		printk("[als_P02] al3010_get_raw_adc_value: %d\n", adc);
 
 		/*Get threshold level*/
 		/*
@@ -708,7 +708,7 @@ static void mp_als_interrupt_handler(struct work_struct *work)
 		
 		if( g_al3010_light > g_al3010_light_map[TOTALMAPS - 1] )
 			g_al3010_light = g_al3010_light_map[TOTALMAPS - 1];
-		printk(DBGMSK_PRX_G2"[als_P02] level= %d, raw adc= %d, cal_adc= %d, lux = %d\n",level, adc, k_adc, g_al3010_light);
+		printk("[als_P02] level= %d, raw adc= %d, cal_adc= %d, lux = %d\n",level, adc, k_adc, g_al3010_light);
 
 		/* Report Lux*/
 		if(g_al3010_light != g_last_al3010_light || g_al3010_light_first) {
@@ -718,7 +718,7 @@ static void mp_als_interrupt_handler(struct work_struct *work)
 				printk("[als_Pad][als] First light=%d \n", g_al3010_light);
 			g_al3010_light_first = 0;
 		}
-		printk(DBGMSK_PRX_G3"[als_P02][als] last=%d light=%d \n", g_last_al3010_light, g_al3010_light);
+		printk("[als_P02][als] last=%d light=%d \n", g_last_al3010_light, g_al3010_light);
 
 		queue_delayed_work(Al3010light_delay_workqueue, &Al3010light_debounce_work, HZ);
 #if 0
@@ -731,7 +731,7 @@ static void mp_als_interrupt_handler(struct work_struct *work)
 		msb = i2c_smbus_read_byte_data(g_al3010_data_as->client, AL3010_LOW_THD_MSB);
 
 		p_als_threshold_lo = ((msb <<8) | lsb )/ CNT_RESOLUTION;
-		printk(DBGMSK_PRX_G2"[als_P02]-- al3010_get_high_threshold_value: %d ,msb=%d, lsb=%d\n"
+		printk("[als_P02]-- al3010_get_high_threshold_value: %d ,msb=%d, lsb=%d\n"
 											,p_als_threshold_lo, msb, lsb);
 
 		/* Set High threshold*/
@@ -742,13 +742,13 @@ static void mp_als_interrupt_handler(struct work_struct *work)
 		msb = i2c_smbus_read_byte_data(g_al3010_data_as->client, AL3010_HIGH_THD_MSB);
 
 		p_als_threshold_hi = ((msb <<8) | lsb )/ CNT_RESOLUTION;
-		printk(DBGMSK_PRX_G2"[als_P02]++ al3010_get_low_threshold_value: %d ,msb=%d, lsb=%d\n"
+		printk("[als_P02]++ al3010_get_low_threshold_value: %d ,msb=%d, lsb=%d\n"
 											,p_als_threshold_hi, msb, lsb);
 		/*Trun on al3010*/
 		for(indx = 0; indx<5; indx++) {
 			ret = i2c_smbus_write_byte_data(g_al3010_data_as->client, AL3010_MODE_COMMAND, AL3010_POW_UP);
 			if(!ret) {
-				printk(DBGMSK_PRX_G2"[al3010][als] switch on al3010 success\n");
+				printk("[al3010][als] switch on al3010 success\n");
 				break;
 			}else if ( indx >= 5 )
 				printk("[al3010][als] %s: switch on al3010 fail\n",__FUNCTION__);
@@ -761,9 +761,9 @@ static void mp_als_interrupt_handler(struct work_struct *work)
 		ret = i2c_smbus_read_byte_data(g_al3010_data_as->client, AL3010_INT_STATUS);
 
 		if (ret == 0)
-			printk(DBGMSK_PRX_G2"[al3010][als] P02 light sensor interrupt is cleared\n");
+			printk("[al3010][als] P02 light sensor interrupt is cleared\n");
 		else{
-			printk(DBGMSK_PRX_G2"[al3010][als] P02 light sensor interrupt is triggered\n");
+			printk("[al3010][als] P02 light sensor interrupt is triggered\n");
 			/*Release interrupt trigger*/
 			i2c_smbus_read_byte_data(g_al3010_data_as->client, AL3010_ADC_MSB);
 		}
@@ -782,7 +782,7 @@ static ssize_t al3010_show_range(struct device *dev, struct device_attribute *at
 {
 	if ( g_AlsP01ProbeError == 0 && g_bIsP01Attached )	{
 		struct i2c_client *client = to_i2c_client(dev);
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_show_range: %d\n", al3010_get_range(client));
+		printk("[als_P01] al3010_show_range: %d\n", al3010_get_range(client));
 		
 		return sprintf(buf, "%i\n", al3010_get_range(client));
 	}else
@@ -796,12 +796,12 @@ static ssize_t al3010_store_range(struct device *dev, struct device_attribute *a
 		unsigned long val;
 		int ret;
 
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_store_range\n");
+		printk("[als_P01] al3010_store_range\n");
 
 		if ((strict_strtoul(buf, 10, &val) < 0) || (val > 3))
 			return -EINVAL;
 
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_store_range: %lu\n", val);
+		printk("[als_P01] al3010_store_range: %lu\n", val);
 		ret = al3010_set_range(client, val);
 		if (ret < 0)
 			return ret;
@@ -826,7 +826,7 @@ static int al3010_show_calibration_200(struct device *dev, struct device_attribu
 
 		p0_calibration_data = p0_calibration_data & 0xFFFFFFFF;
 		
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_show_gait_calibration: %d.%d\n"
+		printk("[als_P01] al3010_show_gait_calibration: %d.%d\n"
 					, p0_calibration_data/a_als_calibration_accuracy
 					, p0_calibration_data%a_als_calibration_accuracy);
 		
@@ -846,7 +846,7 @@ static int al3010_store_calibration_200(struct device *dev, struct device_attrib
 	p_als_low_calibration_adc = 0;
 
 	if ( g_bIsP01Attached )	{
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_store_resolution\n");
+		printk("[als_P01] al3010_store_resolution\n");
 
 		if ( (strict_strtoul(buf, 10, &val) < 0) )
 			return -EINVAL;
@@ -878,7 +878,7 @@ static ssize_t al3010_show_calibration_1000(struct device *dev, struct device_at
 		p0_calibration_data = AX_MicroP_readKDataOfLightSensor();
 		p0_shift_calibration_data = p0_calibration_data >> 32;
 
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_show_shift_calibration: %d\n", 
+		printk("[als_P01] al3010_show_shift_calibration: %d\n", 
 				p0_shift_calibration_data );
 		return sprintf(buf, "%d\n", (int)(p0_shift_calibration_data) );
 		
@@ -900,7 +900,7 @@ static int al3010_store_calibration_1000(struct device *dev, struct device_attri
 	p_als_high_calibration_adc = 0;
 
 	if ( g_bIsP01Attached )	{
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_calibration_final\n");
+		printk("[als_P01] al3010_calibration_final\n");
 		
 		if ( (strict_strtoul(buf, 10, &val) < 0) )
 			return -EINVAL;
@@ -932,7 +932,7 @@ static int al3010_store_calibration_1000(struct device *dev, struct device_attri
 
 		err = AX_MicroP_writeKDataOfLightSensor( p0_calibration_data );
 		if ( err == 0 )	{
-			printk(DBGMSK_PRX_G2"[als_P01] al3010 calibration success\n");
+			printk("[als_P01] al3010 calibration success\n");
 			return p_als_high_calibration_adc;			
 		}
 		else	{
@@ -958,7 +958,7 @@ static ssize_t al3010_show_mode(struct device *dev, struct device_attribute *att
 {
 	if ( g_AlsP01ProbeError == 0 && g_bIsP01Attached )	{
 		struct i2c_client *client = to_i2c_client(dev);
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_show_mode: %d\n", al3010_get_mode(client));
+		printk("[als_P01] al3010_show_mode: %d\n", al3010_get_mode(client));
 
 		return sprintf(buf, "%d\n", al3010_get_mode(client));
 	}else
@@ -971,12 +971,12 @@ static ssize_t al3010_store_mode(struct device *dev, struct device_attribute *at
 		struct i2c_client *client = to_i2c_client(dev);
 		unsigned long val;
 		int ret;
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_store_mode\n");
+		printk("[als_P01] al3010_store_mode\n");
 
 		if ((strict_strtoul(buf, 10, &val) < 0) || (val > 2))
 			return -EINVAL;
 
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_store_mode: %lu\n", val);
+		printk("[als_P01] al3010_store_mode: %lu\n", val);
 		ret = al3010_set_mode(client, val);
 		if (ret < 0)
 			return ret;
@@ -995,7 +995,7 @@ static ssize_t al3010_show_power_state(struct device *dev, struct device_attribu
 {
 	if ( g_AlsP01ProbeError == 0 && g_bIsP01Attached )	{
 		struct i2c_client *client = to_i2c_client(dev);
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_show_power_state: %d\n", al3010_get_power_state(client));
+		printk("[als_P01] al3010_show_power_state: %d\n", al3010_get_power_state(client));
 		return sprintf(buf, "%d\n", al3010_get_power_state(client));
 	}else
 		return 0;
@@ -1039,14 +1039,14 @@ static int al3010_show_lux(struct device *dev,	 struct device_attribute *attr, c
 	if ( g_AlsP01ProbeError == 0 && g_bIsP01Attached )	{
 		int lux = 0;
 		struct i2c_client *client = to_i2c_client(dev);
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_show_lux\n");
+		printk("[als_P01] al3010_show_lux\n");
 
 		/* No LUX data if not operational */
 		if (al3010_get_power_state(client) != 0x01)
 			return -EBUSY;
 
 		lux = al3010_get_adc_value(client);
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_show_lux: %d\n", lux );
+		printk("[als_P01] al3010_show_lux: %d\n", lux );
 
 		return sprintf(buf, "%d\n", lux);
 	}else
@@ -1077,7 +1077,7 @@ static int al3010_init_client(struct i2c_client *client)
 {
 	struct al3010_data *data = i2c_get_clientdata(client);
 	int i;
-	printk(DBGMSK_PRX_G2"[als_P01]++al3010_init_client\n");
+	printk("[als_P01]++al3010_init_client\n");
 
 	/* read all the registers once to fill the cache.
 	* if one of the reads fails, we consider the init failed */
@@ -1094,7 +1094,7 @@ static int al3010_init_client(struct i2c_client *client)
 	al3010_set_mode(client, 0);
 	//al3010_set_power_state(client, 0);
 
-	printk(DBGMSK_PRX_G2"[als_P01]--al3010_init_client\n");
+	printk("[als_P01]--al3010_init_client\n");
 
 	return 0;
 }
@@ -1130,7 +1130,7 @@ static void al3010_early_suspend(struct early_suspend *handler)
 	g_al3010_switch_earlysuspend = 1;
 	
 	if(1 == g_al3010_switch_on) {
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_early_suspend, turn off ambient\n");
+		printk("[als_P01] al3010_early_suspend, turn off ambient\n");
 		set_als_power_state_of_P01(0);
 		
 	}
@@ -1147,10 +1147,10 @@ static void al3010_late_resume(struct early_suspend *handler)
 	printk("[als_P01] ++al3010_late_resume, als:%d\n", g_al3010_switch_on);
 
 	if(1 == g_al3010_switch_earlysuspend) {
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_late_resume, P01 attached: %d\n", g_bIsP01Attached);
+		printk("[als_P01] al3010_late_resume, P01 attached: %d\n", g_bIsP01Attached);
 
 		if( g_bIsP01Attached && ( g_al3010_suspend_switch_on || g_al3010_switch_on )) {
-			printk(DBGMSK_PRX_G2"[als_P01] al3010_late_resume, resume ALS +++\n");
+			printk("[als_P01] al3010_late_resume, resume ALS +++\n");
 			queue_delayed_work(Al3010light_delay_workqueue, &Al3010light_resume_work, 150 );
 		}
 	}
@@ -1174,7 +1174,7 @@ static int al3010_suspend(struct i2c_client *client, pm_message_t mesg)
 	g_al3010_switch_earlysuspend = 1;
 	
 	if(1 == g_al3010_switch_on) {
-		printk(DBGMSK_PRX_G2"[als_P01] al3010_suspend, turn off ambient\n");
+		printk("[als_P01] al3010_suspend, turn off ambient\n");
 		set_als_power_state_of_P01(0);
 		
 	}
@@ -1209,7 +1209,7 @@ static void lightsensor_attached_pad(struct work_struct *work)
 #ifndef CONFIG_EEPROM_NUVOTON
 	int g_microp_ver = 0;
 #endif	
-	printk(DBGMSK_PRX_G2"[als_P01] lightsensor_attached_pad()++\n");	
+	printk("[als_P01] lightsensor_attached_pad()++\n");	
 
 	/*Get calibration data*/
 	p0_calibration_data = AX_MicroP_readKDataOfLightSensor();
@@ -1278,7 +1278,7 @@ static void lightsensor_attached_pad(struct work_struct *work)
 			queue_delayed_work(Al3010light_delay_workqueue, &Al3010light_resume_work, 500 );
 	}
 
-	printk(DBGMSK_PRX_G2"[als_P01] lightsensor_attached_pad()--\n");
+	printk("[als_P01] lightsensor_attached_pad()--\n");
 
 	return;
 }
@@ -1286,13 +1286,13 @@ EXPORT_SYMBOL(lightsensor_attached_pad);
 
 int lightsensor_detached_pad(void)
 {
-	printk(DBGMSK_PRX_G2"[als_P01] lightsensor_detached_pad()++\n");
+	printk("[als_P01] lightsensor_detached_pad()++\n");
 
 	//turn al3010 off
 	if( g_al3010_switch_on ) {
 		set_als_power_state_of_P01(0);
 		//g_cm36283_light = g_al3010_light;
-		//printk(DBGMSK_PRX_G2"[als_P01] lightsensor_detached_pad, switch to cm36238 : %d lux\n", g_cm36283_light);
+		//printk("[als_P01] lightsensor_detached_pad, switch to cm36238 : %d lux\n", g_cm36283_light);
 		g_al3010_switch_on = false;
 		if ( g_ASUS_hwID >= A91_SR5 )
 			g_HAL_als_switch_on = false;
@@ -1300,7 +1300,7 @@ int lightsensor_detached_pad(void)
 
 	g_bIsP01Attached = false;
 
-	printk(DBGMSK_PRX_G2"[als_P01] lightsensor_detached_pad()--\n");
+	printk("[als_P01] lightsensor_detached_pad()--\n");
 
 	return 0;
 }
@@ -1310,12 +1310,12 @@ static int lightsensor_pad_mp_event(struct notifier_block *this, unsigned long e
 {
 	switch (event) {
 		case P01_ADD:
-			printk(DBGMSK_PRX_G2"[als_P01][MicroP] P01_ADD \r\n");                
+			printk("[als_P01][MicroP] P01_ADD \r\n");                
 			queue_delayed_work(al3010light_workqueue, &al3010_attached_P02_work, HZ );
 			return NOTIFY_DONE;
 
 		case P01_REMOVE:
-			printk(DBGMSK_PRX_G2"[als_P01][MicroP] P01_REMOVE \r\n");
+			printk("[als_P01][MicroP] P01_REMOVE \r\n");
 			lightsensor_detached_pad();
 			return NOTIFY_DONE;
 
@@ -1330,7 +1330,7 @@ static int lightsensor_pad_mp_event(struct notifier_block *this, unsigned long e
 				if ( !al3010_interrupt_busy )
 					queue_work(al3010light_workqueue ,&al3010_ISR_work);
 				else
-					printk(DBGMSK_PRX_G2"[als_P01] Inerrupt busy \r\n");
+					printk("[als_P01] Inerrupt busy \r\n");
 			}
 			return NOTIFY_DONE;
 		default:
@@ -1406,10 +1406,10 @@ static int __devinit al3010_probe(struct i2c_client *client, const struct i2c_de
 	register_microp_notifier(&lightsensor_pad_mp_notifier);
 	notify_register_microp_notifier(&lightsensor_pad_mp_notifier, "al3010");
 
-	printk(DBGMSK_PRX_G2"[als_P01] al3010_init--\n");
+	printk("[als_P01] al3010_init--\n");
 
 	/*......................................Driver prob port......................................*/
-	printk(DBGMSK_PRX_G2"[als_P01]++al3010_probe\n");
+	printk("[als_P01]++al3010_probe\n");
 
 	g_al3010_data_as = kzalloc(sizeof(struct al3010_data), GFP_KERNEL);
 	if (!g_al3010_data_as)	{
@@ -1439,7 +1439,7 @@ static int __devinit al3010_probe(struct i2c_client *client, const struct i2c_de
 	
 	mutex_init(&g_al3010_data_as->lock);
 
-	printk(DBGMSK_PRX_G2"[als_P01]++al3010_probe: create_group\n");
+	printk("[als_P01]++al3010_probe: create_group\n");
 	/* register sysfs hooks */
 	err = sysfs_create_group(&client->dev.kobj, &al3010_attr_group);
 	if (err)
@@ -1448,7 +1448,7 @@ static int __devinit al3010_probe(struct i2c_client *client, const struct i2c_de
 	err = dev_info(&client->dev, "driver version %s enabled\n", DRIVER_VERSION);
 
 	if (err)
-		printk(DBGMSK_PRX_G2"[als_P01] ambientdl create sysfile fail.\n");
+		printk("[als_P01] ambientdl create sysfile fail.\n");
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	register_early_suspend( &al3010_early_suspend_desc );

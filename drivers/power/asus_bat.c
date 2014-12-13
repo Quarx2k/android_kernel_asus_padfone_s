@@ -51,9 +51,6 @@ struct notifier_block bat_fb_notif;
 //ASUS_BSP +++ Josh_Liao "sw gauge v2"
 #include "../power/gauge/test_gauge.h"
 //ASUS_BSP --- Josh_Liao "sw gauge v2"
-//ASUS_BSP Eason_Chang add event log +++
-#include <linux/asusdebug.h>
-//ASUS_BSP Eason_Chang add event log ---
 //ASUS_BSP Eason_Chang in Pad setChg +++
 #ifdef CONFIG_CHARGER_ASUS
 static bool IsInPadSetChg= false;
