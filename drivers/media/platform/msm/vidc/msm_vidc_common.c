@@ -1866,7 +1866,6 @@ exit:
 	return rc;
 }
 
-#if 0
 static void msm_vidc_print_running_insts(struct msm_vidc_core *core)
 {
 	struct msm_vidc_inst *temp;
@@ -1885,7 +1884,6 @@ static void msm_vidc_print_running_insts(struct msm_vidc_core *core)
 		mutex_unlock(&temp->lock);
 	}
 }
-#endif
 
 static int msm_vidc_load_resources(int flipped_state,
 	struct msm_vidc_inst *inst)
@@ -1917,7 +1915,6 @@ static int msm_vidc_load_resources(int flipped_state,
 	num_mbs_per_sec += msm_comm_get_load(inst->core, MSM_VIDC_ENCODER);
 	mutex_unlock(&inst->core->sync_lock);
 
-	#if 0
 	if (num_mbs_per_sec > inst->core->resources.max_load) {
 		dprintk(VIDC_ERR, "HW is overloaded, needed: %d max: %d\n",
 			num_mbs_per_sec, inst->core->resources.max_load);
@@ -1926,7 +1923,6 @@ static int msm_vidc_load_resources(int flipped_state,
 		msm_comm_recover_from_session_error(inst);
 		return -EBUSY;
 	}
-	#endif
 
 	hdev = inst->core->device;
 	if (IS_ALREADY_IN_STATE(flipped_state, MSM_VIDC_LOAD_RESOURCES)) {
@@ -3425,7 +3421,6 @@ static int msm_vidc_load_supported(struct msm_vidc_inst *inst)
 		num_mbs_per_sec += msm_comm_get_load(inst->core,
 			MSM_VIDC_ENCODER);
 		mutex_unlock(&inst->core->sync_lock);
-		#if 0
 		if (num_mbs_per_sec > inst->core->resources.max_load) {
 			dprintk(VIDC_ERR,
 				"H/w is overloaded. needed: %d max: %d\n",
@@ -3436,7 +3431,6 @@ static int msm_vidc_load_supported(struct msm_vidc_inst *inst)
 			mutex_unlock(&inst->sync_lock);
 			return -EINVAL;
 		}
-		#endif
 	}
 	return 0;
 }
