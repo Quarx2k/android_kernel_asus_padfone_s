@@ -118,6 +118,20 @@ static inline int get_cpu_load(unsigned int cpu)
 #endif
 
 /*
+ * Wrapper function which returns the current cpu load
+ */
+static inline int get_load(int cpu)
+{
+	int load;
+#ifndef SMART_LOAD_CALC
+	load = get_cpu_load(cpu);
+#else
+	load = cpufreq_quick_get_util(cpu);
+#endif
+	return load;
+}
+
+/*
  * Returns the average load for all currently onlined cpus
  */
 
@@ -130,11 +144,7 @@ static inline int get_load_for_all_cpu(void)
 	for_each_online_cpu(cpu) {
 
 		hot_data->cpu_load_stats[cpu] = 0;
-#ifndef SMART_LOAD_CALC
-		hot_data->cpu_load_stats[cpu] = get_cpu_load(cpu);
-#else
-		hot_data->cpu_load_stats[cpu] = cpufreq_quick_get_util(cpu);
-#endif
+		hot_data->cpu_load_stats[cpu] = get_load(cpu);
 		load = load + hot_data->cpu_load_stats[cpu];
 	}
 	put_online_cpus();
@@ -165,11 +175,7 @@ static inline void calculate_load_for_cpu(int cpu)
 {
 	int avg_load, cpu_load;
 
-#ifndef SMART_LOAD_CALC
-	cpu_load = get_cpu_load(cpu);
-#else
-	cpu_load = cpufreq_quick_get_util(cpu);
-#endif
+	cpu_load = get_load(cpu);
 	avg_load = get_load_for_all_cpu();
 
 	/* CPU is stressed */
@@ -227,11 +233,9 @@ static inline void put_cpu_down(int cpu)
 
 		if (!cpu_online(j))
 			continue;
-#ifndef SMART_LOAD_CALC
-		cpu_load = get_cpu_load(j);
-#else
-		cpu_load = cpufreq_quick_get_util(j);
-#endif
+
+		cpu_load = get_load(j);
+
 		if (cpu_load < lowest_load) {
 			lowest_load = cpu_load;
 			target_cpu = j;	
