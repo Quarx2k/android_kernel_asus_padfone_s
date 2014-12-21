@@ -17,8 +17,7 @@
  */
 
 //+++ ASUS_BSP : modify from msm8974pro.dtsi
-///include/ "msm8974.dtsi"
-/include/ "msm8974-asus-pf500kl-pr.dtsi"
+/include/ "msm8974.dtsi"
 //+++ ASUS_BSP : modify from msm8974pro.dtsi
 
 /include/ "msm8974-v2-iommu.dtsi"
