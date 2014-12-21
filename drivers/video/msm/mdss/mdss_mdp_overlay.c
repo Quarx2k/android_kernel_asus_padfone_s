@@ -53,12 +53,6 @@ struct sd_ctrl_req {
 	unsigned int enable;
 } __attribute__ ((__packed__));
 
-//ASUS_BSP: Louis +++
-#include <linux/of_gpio.h>
-#include "video/msm_hdmi_modes.h"
-extern int MdpBoostUp;
-//ASUS_BSP: Louis ---
-
 static atomic_t ov_active_panels = ATOMIC_INIT(0);
 static int mdss_mdp_overlay_free_fb_pipe(struct msm_fb_data_type *mfd);
 static int mdss_mdp_overlay_fb_parse_dt(struct msm_fb_data_type *mfd);
@@ -806,6 +800,7 @@ static void mdss_mdp_overlay_cleanup(struct msm_fb_data_type *mfd)
 	list_for_each_entry_safe(pipe, tmp, &mdp5_data->pipes_cleanup,
 				cleanup_list) {
 		list_move(&pipe->cleanup_list, &destroy_pipes);
+
 		/* make sure pipe fetch has been halted before freeing buffer */
 		if (mdss_mdp_pipe_fetch_halt(pipe)) {
 			/*
@@ -1015,11 +1010,6 @@ static void mdss_mdp_overlay_update_pm(struct mdss_overlay_private *mdp5_data)
 	if (!mdp5_data->cpu_pm_hdl)
 		return;
 
-    //Mickey+++, double check if mdp5_data->ctl is null
-    if (mdp5_data->ctl == NULL)
-        return;
-    //Mickey---
-
 	if (mdss_mdp_display_wakeup_time(mdp5_data->ctl, &wakeup_time))
 		return;
 
@@ -1217,15 +1207,6 @@ commit_fail:
 	mutex_unlock(&mdp5_data->ov_lock);
 	if (ctl->shared_lock)
 		mutex_unlock(ctl->shared_lock);
-
-    //ASUS_BSP: Louis +++
-    if (MdpBoostUp > 0) {
-        MdpBoostUp--;
-        if (MdpBoostUp == 0) {
-            mdss_set_mdp_max_clk(0);
-        }
-    }
-    //ASUS_BSP: Louis ---
 
 	return ret;
 }
@@ -1596,7 +1577,7 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd,
 		return;
 
 	if (!fbi->fix.smem_start || fbi->fix.smem_len == 0 ||
-	     mdp5_data->borderfill_enable) {
+			mdp5_data->borderfill_enable) {
 		mfd->mdp.kickoff_fnc(mfd, NULL);
 		return;
 	}
@@ -2751,11 +2732,9 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 		mdss_mdp_overlay_kickoff(mfd, NULL);
 	}
 
-	__mdss_mdp_overlay_free_list_purge(mfd);//Mickey+++, free buffer list before turn off mdp
-
 	rc = mdss_mdp_ctl_stop(mdp5_data->ctl);
 	if (rc == 0) {
-		//__mdss_mdp_overlay_free_list_purge(mfd);//Mickey+++, move up to prevent unmap iommu while iommu dettached
+		__mdss_mdp_overlay_free_list_purge(mfd);
 		mdss_mdp_ctl_notifier_unregister(mdp5_data->ctl,
 				&mfd->mdp_sync_pt_data.notifier);
 
