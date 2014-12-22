@@ -53,7 +53,6 @@
 #include <mach/msm_memtypes.h>
 
 #include "mdss_fb.h"
-#include <linux/gpio.h> //+++ ASUS BSP jacob add
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -61,32 +60,9 @@
 #define MDSS_FB_NUM 2
 #endif
 
+extern void qpnp_wled_ctrl(bool enable); //Quarx Asus
+
 #define MAX_FBI_LIST 32
-
-extern ktime_t wakeup_starttime;
-static int phone_resume_time_mask = 0;
-module_param_named(debug_mask, phone_resume_time_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
-
-
-#ifdef CONFIG_EEPROM_NUVOTON
-extern int AX_MicroP_setPWMValue(uint8_t value);
-int is_pad_power_off=0;
-#define ASUS_P92L_GPIO 75
-#endif
-
-//+++ ASUS_BSP: Louis
-extern void qpnp_wled_ctrl(bool enable);
-int g_padfone_state = 0;    //0:phone mode, 1:hdmi tv, 2:pad mode
-
-#ifdef CONFIG_ASUS_HDMI 
-extern int display_commit_cnt;
-#endif
-
-#ifdef CONFIG_ASUS_CAMERA_STS
-extern bool get_camera_status(void);
-#endif
-//--- ASUS_BSP: Louis
-
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
 
@@ -475,15 +451,7 @@ static void mdss_fb_remove_sysfs(struct msm_fb_data_type *mfd)
 static void mdss_fb_shutdown(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = platform_get_drvdata(pdev);
-//ASUS BSP Wei +++
-#ifdef CONFIG_EEPROM_NUVOTON
-	if(gpio_get_value(ASUS_P92L_GPIO)){
-		is_pad_power_off=1;
-		AX_MicroP_setPWMValue(0);	
-		msleep(500);
-	}
-#endif
-//ASUS BSP Wei ---
+
 	mfd->shutdown_pending = true;
 	lock_fb_info(mfd->fbi);
 	mdss_fb_release_all(mfd->fbi, true);
@@ -526,7 +494,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->ext_ad_ctrl = -1;
 	mfd->bl_level = 0;
 	mfd->bl_scale = 1024;
-	mfd->bl_min_lvl = 10;  //asus bsp jacob modify
+	mfd->bl_min_lvl = 0;
 	mfd->fb_imgType = MDP_RGBA_8888;
 
 	mfd->pdev = pdev;
@@ -857,15 +825,6 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	} else {
 		mfd->unset_bl_level = 0;
 	}
-#ifdef CONFIG_ASUS_HDMI
-/*ASUS jacob add for do not set backlight via mdss_fb in pad mode */
-	if(g_padfone_state == 2)
-		return;
-#else
-	if (gpio_get_value_cansleep(75))
-		return;
-/*ASUS jacob add for do not set backlight via mdss_fb in pad mode */
-#endif
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
@@ -977,13 +936,6 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 				mdss_fb_release_fences(mfd);
 			mfd->op_enable = true;
 			complete(&mfd->power_off_comp);
-
-#ifdef CONFIG_ASUS_HDMI 
-            //ASUS_BSP: Louis ++
-            if (display_commit_cnt == 0)
-                display_commit_cnt = 5;
-            //ASUS_BSP: Louis --
-#endif
 		}
 		break;
 	}
@@ -1930,12 +1882,7 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 	if (!ret)
 		mdss_fb_update_backlight(mfd);
 
-    //ASUS_BSP: Louis, enable wled after overlay or pan display case ++
-    if ((g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) && g_padfone_state != 2 &&
-        !g_Recovery && !g_Charger_mode) {
-        qpnp_wled_ctrl(1);
-    }
-    //ASUS_BSP: Louis --
+	qpnp_wled_ctrl(1); //Quarx //Asus
 
 	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed)
 		mdss_fb_signal_timeline(sync_pt_data);
@@ -2480,13 +2427,6 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	int ret = -ENOSYS;
 	struct mdp_buf_sync buf_sync;
 	struct msm_sync_pt_data *sync_pt_data = NULL;
-	//ASUS_BSP: Louis +++
-    struct mdss_panel_data *pdata;
-    static int bl_level = 0, bl_level_old = 0;
-    #ifdef CONFIG_ASUS_CAMERA_STS
-    bool asus_camera_status = false;
-    //ASUS_BSP: Louis ---
-    #endif
 
 	if (!info || !info->par)
 		return -EINVAL;
@@ -2552,38 +2492,6 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	case MSMFB_DISPLAY_COMMIT:
 		ret = mdss_fb_display_commit(info, argp);
 		break;
-
-    //ASUS_BSP: Louis +++
-    case MSMFB_PADFONE_STATE:
-		ret = copy_to_user(argp, &g_padfone_state, sizeof(g_padfone_state));
-        if (ret)
-            printk("GET Padfone state failed (%d)\n", ret);
-        break;
-
-    case MSMFB_BL_CTRL:
-        ret = copy_from_user(&bl_level, argp, sizeof(bl_level));
-        if (ret) {
-            printk(KERN_ERR "%s: copy from user failed \n",
-                __func__);
-            return ret;
-        }
-        if (bl_level != bl_level_old) {
-            bl_level_old = bl_level;
-            pdata = dev_get_platdata(&mfd->pdev->dev);
-            pdata->set_backlight(pdata, bl_level);
-        }
-        break;
-
-#ifdef CONFIG_ASUS_CAMERA_STS
-    case MSMFB_CAMERA_STS:
-        asus_camera_status = get_camera_status();
-        printk("[Display] Get Camera status(%d)\n", asus_camera_status);
-        ret = copy_to_user(argp, &asus_camera_status, sizeof(asus_camera_status));
-        if (ret)
-            printk("GET Camera state failed (%d)\n", ret);
-        break;
-#endif
-	//ASUS_BSP: Louis ---
 
 	default:
 		if (mfd->mdp.ioctl_handler)
