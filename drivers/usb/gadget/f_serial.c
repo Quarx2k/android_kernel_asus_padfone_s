@@ -285,11 +285,7 @@ static struct usb_descriptor_header *gser_ss_function[] = {
 /* string descriptors: */
 
 static struct usb_string gser_string_defs[] = {
-	//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
-	//[0].s = "Generic Serial",
-	[0].s = "Qualcomm HS-USB Android Modem",
-	[1].s = "Qualcomm HS-USB NMEA",
-	//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
+	[0].s = "Generic Serial",
 	{  } /* end of list */
 };
 
@@ -936,16 +932,13 @@ int gser_bind_config(struct usb_configuration *c, u8 port_num)
 	 * distinguish instances ...
 	 */
 
-	//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
 	/* maybe allocate device-global string ID */
-	if (gser_string_defs[port_num].id == 0) {
+	if (gser_string_defs[0].id == 0) {
 		status = usb_string_id(c->cdev);
 		if (status < 0)
 			return status;
-		gser_string_defs[port_num].id = status;
-		gser_interface_desc.iInterface = status;
+		gser_string_defs[0].id = status;
 	}
-	//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
 
 	/* allocate and initialize one new instance */
 	gser = kzalloc(sizeof *gser, GFP_KERNEL);
