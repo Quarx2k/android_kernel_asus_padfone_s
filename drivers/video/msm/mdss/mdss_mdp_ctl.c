@@ -22,7 +22,8 @@
 
 #include "mdss_fb.h"
 #include "mdss_mdp.h"
-#include "mdss_mdp_trace.h"
+
+#include <trace/mdss_mdp_trace.h>
 #include "mdss_debug.h"
 
 static inline u64 fudge_factor(u64 val, u32 numer, u32 denom)
