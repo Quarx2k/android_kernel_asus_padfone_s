@@ -77,10 +77,9 @@ static int gdsc_enable(struct regulator_dev *rdev)
 		ret = readl_tight_poll_timeout(sc->gdscr, regval,
 					regval & PWR_ON_MASK, TIMEOUT_US);
 		if (ret) {
-			dev_warn(&rdev->dev, "%s enable taking longer than %dus\n", 
-                sc->rdesc.name, TIMEOUT_US); 
-            readl_tight_poll(sc->gdscr, regval, regval & PWR_ON_MASK); 
-            dev_warn(&rdev->dev, "%s enabled\n", sc->rdesc.name); 
+			dev_err(&rdev->dev, "%s enable timed out\n",
+				sc->rdesc.name);
+			return ret;
 		}
 	} else {
 		for (i = 0; i < sc->clock_count; i++)
@@ -136,7 +135,7 @@ static int gdsc_disable(struct regulator_dev *rdev)
 		sc->resets_asserted = true;
 	}
 
-	return 0; 
+	return ret;
 }
 
 static struct regulator_ops gdsc_ops = {

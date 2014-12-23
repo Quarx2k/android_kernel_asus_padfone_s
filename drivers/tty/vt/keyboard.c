@@ -486,9 +486,7 @@ static void fn_caps_toggle(struct vc_data *vc)
 	if (rep)
 		return;
 
-	//ASUS_BSP+++ "workaround for BT keyboard caps lock cannot suspend"
-	//chg_vc_kbd_led(kbd, VC_CAPSLOCK);
-	//ASUS_BSP--- "workaround for BT keyboard caps lock cannot suspend"
+	chg_vc_kbd_led(kbd, VC_CAPSLOCK);
 }
 
 static void fn_caps_on(struct vc_data *vc)

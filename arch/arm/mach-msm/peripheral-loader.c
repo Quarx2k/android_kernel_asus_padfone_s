@@ -48,7 +48,6 @@
 
 #define PIL_IMAGE_INFO_BASE	(MSM_IMEM_BASE + 0x94c)
 
-
 /**
  * proxy_timeout - Override for proxy vote timeouts
  * -1: Use driver-specified timeout
@@ -526,7 +525,8 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 	int num = seg->num;
 
 	if (seg->filesz) {
-		snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d", desc->name, num);
+		snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d",
+				desc->name, num);
 		ret = request_firmware_direct(fw_name, desc->dev, seg->paddr,
 					      seg->filesz);
 		if (ret < 0) {
@@ -624,9 +624,7 @@ int pil_boot(struct pil_desc *desc)
 	pil_release_mmap(desc);
 
 	down_read(&pil_pm_rwsem);
-
 	snprintf(fw_name, sizeof(fw_name), "%s.mdt", desc->name);
-
 	ret = request_firmware(&fw, fw_name, desc->dev);
 	if (ret) {
 		pil_err(desc, "Failed to locate %s\n", fw_name);

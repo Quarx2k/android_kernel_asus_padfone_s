@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,12 +25,11 @@
 #include <linux/platform_device.h>
 #include <linux/of_platform.h>
 #include <linux/cpu_pm.h>
-#include <linux/remote_spinlock.h>
+#include <linux/sched.h>
 #include <asm/uaccess.h>
 #include <asm/suspend.h>
 #include <asm/cacheflush.h>
 #include <asm/outercache.h>
-#include <mach/remote_spinlock.h>
 #include <mach/scm.h>
 #include <mach/msm_bus.h>
 #include <mach/jtag.h>
@@ -41,10 +40,10 @@
 #include "scm-boot.h"
 #include "spm.h"
 #include "pm-boot.h"
+#include "clock.h"
 
 #define CREATE_TRACE_POINTS
 #include <mach/trace_msm_low_power.h>
-#include <linux/sched.h>
 
 #define SCM_CMD_TERMINATE_PC	(0x2)
 #define SCM_CMD_CORE_HOTPLUGGED (0x10)
@@ -55,11 +54,6 @@
 #define SCLK_HZ (32768)
 
 #define MAX_BUF_SIZE  512
-
-
-extern ktime_t ktime_get_v2(void);
-unsigned int pwrcs_time, pm_pwrcs_ret=0;
-
 
 static int msm_pm_debug_mask = 1;
 module_param_named(
@@ -123,11 +117,6 @@ static bool msm_no_ramp_down_pc;
 static struct msm_pm_sleep_status_data *msm_pm_slp_sts;
 DEFINE_PER_CPU(struct clk *, cpu_clks);
 static struct clk *l2_clk;
-
-static int cpu_count;
-static DEFINE_SPINLOCK(cpu_cnt_lock);
-#define SCM_HANDOFF_LOCK_ID "S:7"
-static remote_spinlock_t scm_handoff_lock;
 
 static void (*msm_pm_disable_l2_fn)(void);
 static void (*msm_pm_enable_l2_fn)(void);
@@ -490,29 +479,8 @@ static bool msm_pm_pc_hotplug(void)
 static int msm_pm_collapse(unsigned long unused)
 {
 	uint32_t cpu = smp_processor_id();
-	enum msm_pm_l2_scm_flag flag = MSM_SCM_L2_ON;
 
-	spin_lock(&cpu_cnt_lock);
-	cpu_count++;
-	if (cpu_count == num_online_cpus())
-		flag = msm_pm_get_l2_flush_flag();
-
-	pr_debug("cpu:%d cores_in_pc:%d L2 flag: %d\n",
-			cpu, cpu_count, flag);
-
-	/*
-	 * The scm_handoff_lock will be release by the secure monitor.
-	 * It is used to serialize power-collapses from this point on,
-	 * so that both Linux and the secure context have a consistent
-	 * view regarding the number of running cpus (cpu_count).
-	 *
-	 * It must be acquired before releasing cpu_cnt_lock.
-	 */
-	remote_spin_lock_rlock_id(&scm_handoff_lock,
-				  REMOTE_SPINLOCK_TID_START + cpu);
-	spin_unlock(&cpu_cnt_lock);
-
-	if (flag == MSM_SCM_L2_OFF) {
+	if (msm_pm_get_l2_flush_flag() == MSM_SCM_L2_OFF) {
 		flush_cache_all();
 		if (msm_pm_flush_l2_fn)
 			msm_pm_flush_l2_fn();
@@ -524,7 +492,8 @@ static int msm_pm_collapse(unsigned long unused)
 
 	msm_pc_inc_debug_count(cpu, MSM_PC_ENTRY_COUNTER);
 
-	scm_call_atomic1(SCM_SVC_BOOT, SCM_CMD_TERMINATE_PC, flag);
+	scm_call_atomic1(SCM_SVC_BOOT, SCM_CMD_TERMINATE_PC,
+				msm_pm_get_l2_flush_flag());
 
 	msm_pc_inc_debug_count(cpu, MSM_PC_FALLTHRU_COUNTER);
 
@@ -566,12 +535,6 @@ static bool __ref msm_pm_spm_power_collapse(
 	collapsed = save_cpu_regs ?
 		!cpu_suspend(0, msm_pm_collapse) : msm_pm_pc_hotplug();
 
-	if (save_cpu_regs) {
-		spin_lock(&cpu_cnt_lock);
-		cpu_count--;
-		BUG_ON(cpu_count > num_online_cpus());
-		spin_unlock(&cpu_cnt_lock);
-	}
 	msm_jtag_restore_state();
 
 	if (collapsed) {
@@ -786,8 +749,6 @@ int msm_cpu_pm_enter_sleep(enum msm_pm_sleep_mode mode, bool from_idle)
 	int64_t time;
 	bool collapsed = 1;
 	int exit_stat = -1;
-	int64_t elapsed_time64;
-	unsigned int elapsed_time;	
 
 	if (MSM_PM_DEBUG_IDLE & msm_pm_debug_mask)
 		pr_info("CPU%u: %s: mode %d\n",
@@ -796,26 +757,16 @@ int msm_cpu_pm_enter_sleep(enum msm_pm_sleep_mode mode, bool from_idle)
 		pr_info("CPU%u: %s mode:%d\n",
 			smp_processor_id(), __func__, mode);
 
-	time = ktime_to_ns(ktime_get_v2());
+	time = sched_clock();
 	if (execute[mode])
 		exit_stat = execute[mode](from_idle);
-	time = ktime_to_ns(ktime_get_v2()) - time;
+	time = sched_clock() - time;
 	if (from_idle)
 		msm_pm_ftrace_lpm_exit(smp_processor_id(), mode, collapsed);
 	else
 		exit_stat = MSM_PM_STAT_SUSPEND;
 	if (exit_stat >= 0)
 		msm_pm_add_stat(exit_stat, time);
-
-	if (!from_idle){
-		elapsed_time64 = time;
-		do_div(elapsed_time64, NSEC_PER_SEC / 100);
-		elapsed_time = elapsed_time64;
-
-		pr_info("[PM]Suspended for %d.%03d seconds\n", elapsed_time/100,elapsed_time % 100);
-		pwrcs_time=elapsed_time;
-		pm_pwrcs_ret=1;			
-	}
 	do_div(time, 1000);
 	return collapsed;
 }
@@ -828,7 +779,7 @@ int msm_pm_wait_cpu_shutdown(unsigned int cpu)
 		return 0;
 	if (!msm_pm_slp_sts[cpu].base_addr)
 		return 0;
-	while (1) {
+	while (timeout--) {
 		/*
 		 * Check for the SPM of the core being hotplugged to set
 		 * its sleep state.The SPM sleep state indicates that the
@@ -839,9 +790,10 @@ int msm_pm_wait_cpu_shutdown(unsigned int cpu)
 		if (acc_sts & msm_pm_slp_sts[cpu].mask)
 			return 0;
 		udelay(100);
-		WARN(++timeout == 20, "CPU%u didn't collapse in 2 ms\n", cpu);
 	}
 
+	pr_info("%s(): Timed out waiting for CPU %u SPM to enter sleep state",
+		__func__, cpu);
 	return -EBUSY;
 }
 
@@ -1232,13 +1184,6 @@ static int msm_cpu_pm_probe(struct platform_device *pdev)
 	} else {
 		msm_pc_debug_counters = 0;
 		msm_pc_debug_counters_phys = 0;
-	}
-
-	ret = remote_spin_lock_init(&scm_handoff_lock, SCM_HANDOFF_LOCK_ID);
-	if (ret) {
-		pr_err("%s: Failed initializing scm_handoff_lock (%d)\n",
-			__func__, ret);
-		return ret;
 	}
 
 	if (pdev->dev.of_node) {

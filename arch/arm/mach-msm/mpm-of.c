@@ -51,14 +51,6 @@ enum {
 	MSM_NR_IRQS_SET,
 };
 
-#define MAX_MPM_PENDING_IRQ_COUNT 16
-#define MSM_MPM_REG_PENDING_WIDTH 2
-struct mpm_pending_irq {
-	unsigned long pending;
-	unsigned int mpm_irq[MAX_MPM_PENDING_IRQ_COUNT];
-	unsigned int apps_irq[MAX_MPM_PENDING_IRQ_COUNT];
-};
-
 struct mpm_irqs_a2m {
 	struct irq_domain *domain;
 	struct device_node *parent;
@@ -89,9 +81,6 @@ static unsigned int msm_mpm_irqs_m2a[MSM_MPM_NR_MPM_IRQS];
 #define SCLK_HZ (32768)
 #define ARCH_TIMER_HZ (19200000)
 static struct msm_mpm_device_data msm_mpm_dev_data;
-
-struct mpm_pending_irq resume_mpm_pending_irq[MSM_MPM_REG_PENDING_WIDTH];
-int mpm_pending_cont[MSM_MPM_REG_PENDING_WIDTH] = {0};
 
 static struct clk *xo_clk;
 static bool xo_enabled;
@@ -543,8 +532,6 @@ void msm_mpm_exit_sleep(bool from_idle)
 	unsigned long pending;
 	int i;
 	int k;
-	static bool mpm_flag[MSM_MPM_REG_PENDING_WIDTH] = {true, true};
-	unsigned long temp;
 
 	if (!msm_mpm_is_initialized()) {
 		pr_err("%s(): MPM not initialized\n", __func__);
@@ -553,7 +540,6 @@ void msm_mpm_exit_sleep(bool from_idle)
 
 	for (i = 0; i < MSM_MPM_REG_WIDTH; i++) {
 		pending = msm_mpm_read(MSM_MPM_REG_STATUS, i);
-		temp = pending;
 
 		if (MSM_MPM_DEBUG_PENDING_IRQ & msm_mpm_debug_mask)
 			pr_info("%s: pending.%d: 0x%08lx", __func__,
@@ -566,20 +552,6 @@ void msm_mpm_exit_sleep(bool from_idle)
 			struct irq_desc *desc = apps_irq ?
 				irq_to_desc(apps_irq) : NULL;
 
-			if(i < MSM_MPM_REG_PENDING_WIDTH){
-				if(mpm_irq != 0 && apps_irq != 0){
-					if(mpm_flag[i]){
-						pr_info("[PM]MPM pending.%d: 0x%08lx, mpm_irq: %d, apps_irq: %d\n", i, pending, mpm_irq, apps_irq);
-						resume_mpm_pending_irq[i].pending = pending;
-						resume_mpm_pending_irq[i].mpm_irq[mpm_pending_cont[i]] = mpm_irq;
-						resume_mpm_pending_irq[i].apps_irq[mpm_pending_cont[i]] = apps_irq;				
-						mpm_pending_cont[i]++;
-					}
-				}
-				if(mpm_pending_cont[i] >= MAX_MPM_PENDING_IRQ_COUNT)
-					mpm_pending_cont[i] = MAX_MPM_PENDING_IRQ_COUNT - 1;
-			}
-			
 			if (desc && !irqd_is_level_type(&desc->irq_data)) {
 				irq_set_pending(apps_irq);
 				if (from_idle) {
@@ -591,17 +563,14 @@ void msm_mpm_exit_sleep(bool from_idle)
 
 			k = find_next_bit(&pending, 32, k + 1);
 		}
-
-		mpm_flag[i] = (temp != 0) ? false : true;
-		
 	}
 }
 static void msm_mpm_sys_low_power_modes(bool allow)
 {
 	if (allow) {
 		if (xo_enabled) {
-			xo_enabled = false;
 			clk_disable_unprepare(xo_clk);
+			xo_enabled = false;
 		}
 	} else {
 		if (!xo_enabled) {
@@ -609,8 +578,8 @@ static void msm_mpm_sys_low_power_modes(bool allow)
 			 * than having to deal with not being able to wakeup
 			 * from a non-monitorable interrupt
 			 */
-			xo_enabled = true;
 			BUG_ON(clk_prepare_enable(xo_clk));
+			xo_enabled = true;
 		}
 	}
 }

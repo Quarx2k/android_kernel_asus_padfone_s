@@ -181,17 +181,4 @@ void vcs_remove_sysfs(int index);
 extern bool vgacon_text_force(void);
 #endif
 
-
-#define MAX_MPM_PENDING_IRQ_COUNT 16
-#define MSM_MPM_REG_PENDING_WIDTH 2
-struct mpm_pending_irq {
-	unsigned long pending;
-	unsigned int mpm_irq[MAX_MPM_PENDING_IRQ_COUNT];
-	unsigned int apps_irq[MAX_MPM_PENDING_IRQ_COUNT];
-};
-
-extern int pm_new_state, gpio_irq_cnt, gpio_resume_irq[8], gic_irq_cnt, gic_resume_irq[8];
-extern struct mpm_pending_irq resume_mpm_pending_irq[MSM_MPM_REG_PENDING_WIDTH];
-extern int mpm_pending_cont[MSM_MPM_REG_PENDING_WIDTH];
-extern unsigned int pwrcs_time, pm_pwrcs_ret;
 #endif /* _LINUX_CONSOLE_H */

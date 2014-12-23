@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -594,7 +594,6 @@ static unsigned int krait_power_get_mode(struct regulator_dev *rdev)
 	return kvreg->mode;
 }
 
-#include <mach/msm_rtb.h>
 static void __switch_to_using_bhs(void *info)
 {
 	struct krait_power_vreg *kvreg = info;
@@ -651,7 +650,6 @@ static void __switch_to_using_bhs(void *info)
 	}
 
 	kvreg->mode = HS_MODE;
-	uncached_logk(LOGK_CTXID, (void *)0xAAAAAAAA);
 	pr_debug("%s using BHS\n", kvreg->name);
 }
 
@@ -705,16 +703,13 @@ static void __switch_to_using_ldo(void *info)
 	}
 
 	kvreg->mode = LDO_MODE;
-	uncached_logk(LOGK_CTXID, (void *)0xBBBBBBBB);
 	pr_debug("%s using LDO\n", kvreg->name);
 }
 
 static int switch_to_using_ldo(struct krait_power_vreg *kvreg)
 {
-	int uV = kvreg->uV - kvreg->ldo_delta_uV;
-	int ldo_uV = DIV_ROUND_UP(uV, KRAIT_LDO_STEP) * KRAIT_LDO_STEP;
-
-	if (kvreg->mode == LDO_MODE && get_krait_ldo_uv(kvreg) == ldo_uV)
+	if (kvreg->mode == LDO_MODE
+		&& get_krait_ldo_uv(kvreg) == kvreg->uV - kvreg->ldo_delta_uV)
 		return 0;
 
 	return smp_call_function_single(kvreg->cpu_num,
@@ -830,7 +825,7 @@ static int configure_ldo_or_hs_all(struct krait_power_vreg *from, int vmax)
 	return rc;
 }
 
-#define SLEW_RATE 1500
+#define SLEW_RATE 2395
 static int krait_voltage_increase(struct krait_power_vreg *from,
 							int vmax)
 {

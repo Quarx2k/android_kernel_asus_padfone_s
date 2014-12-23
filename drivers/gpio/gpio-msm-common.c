@@ -33,11 +33,6 @@
 #include <mach/mpm.h>
 #include "gpio-msm-common.h"
 
-bool measure_phone_wakeup_time;
-bool measure_pad_wakeup_time;
-
-int gpio_irq_cnt, gpio_resume_irq[8];
-
 #ifdef CONFIG_GPIO_MSM_V3
 enum msm_tlmm_register {
 	SDC4_HDRV_PULL_CTL = 0x0, /* NOT USED */
@@ -53,14 +48,6 @@ enum msm_tlmm_register {
 	SDC1_HDRV_PULL_CTL = 0x20a0,
 };
 #endif
-
-enum {
-	DEBUG_PHONE = 1U << 0,
-	DEBUG_PAD = 1U << 1
-};
-static int stress_test_mask = 0;
-module_param_named(debug_mask, stress_test_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
-
 
 static int tlmm_msm_summary_irq, nr_direct_connect_irqs;
 
@@ -446,16 +433,9 @@ static int msm_gpio_suspend(void)
 void msm_gpio_show_resume_irq(void)
 {
 	unsigned long irq_flags;
-	int i, j, irq, intstat;
+	int i, irq, intstat;
 	int ngpio = msm_gpio.gpio_chip.ngpio;
-	int gpiopin;
-	static unsigned long stress_test_count = 0;
-	static unsigned long stress_test_count_pad = 0;
 
-	for(j = 0; j < 8; j++)
-		gpio_resume_irq[j] = 0;
-
-	gpio_irq_cnt=0;
 	if (!msm_show_resume_irq_mask)
 		return;
 
@@ -464,34 +444,11 @@ void msm_gpio_show_resume_irq(void)
 		intstat = __msm_gpio_get_intr_status(i);
 		if (intstat) {
 			irq = msm_gpio_to_irq(&msm_gpio.gpio_chip, i);
-			gpiopin = msm_irq_to_gpio(&msm_gpio.gpio_chip, irq);
-			if(gpiopin == 28){
-				measure_phone_wakeup_time = true;
-			
-				stress_test_count++;
-				if(stress_test_mask & DEBUG_PHONE)
-					printk("[PM]Suspend/Resume phone power key trigger count: %ld\n", stress_test_count);
-				if(stress_test_count >= (1 << 30))
-					stress_test_count = 0;
-			}else if(gpiopin == 9){
-				measure_pad_wakeup_time = true;
-			
-				stress_test_count_pad++;
-				if(stress_test_mask & DEBUG_PAD)
-					printk("[PM]Suspend/Resume pad power key trigger count: %ld\n", stress_test_count_pad);
-				if(stress_test_count_pad >= (1 << 30))
-					stress_test_count_pad = 0;				
-			}			
-			pr_warning("[PM]GPIO: %d resume triggered\n", gpiopin);
-			if(gpio_irq_cnt < 8)
-				gpio_resume_irq[gpio_irq_cnt]=gpiopin;
-			gpio_irq_cnt++;
+			pr_warning("%s: %d triggered\n",
+				__func__, irq);
 		}
 	}
 	spin_unlock_irqrestore(&tlmm_lock, irq_flags);
-	
-	if(gpio_irq_cnt >= 8)
-		gpio_irq_cnt = 7;		
 }
 
 static void msm_gpio_resume(void)
@@ -582,12 +539,6 @@ int msm_gpio_install_direct_irq(unsigned gpio, unsigned irq,
 	return 0;
 }
 EXPORT_SYMBOL(msm_gpio_install_direct_irq);
-
-int get_tlmm_msm_summary_irq(void)
-{
-	return tlmm_msm_summary_irq;
-}
-EXPORT_SYMBOL(get_tlmm_msm_summary_irq);
 
 /*
  * This lock class tells lockdep that GPIO irqs are in a different

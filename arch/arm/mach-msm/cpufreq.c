@@ -45,8 +45,6 @@ struct cpufreq_suspend_t {
 
 static DEFINE_PER_CPU(struct cpufreq_suspend_t, cpufreq_suspend);
 
-struct cpufreq_freqs debug_cpu_freqs[4];
-
 static int set_cpu_freq(struct cpufreq_policy *policy, unsigned int new_freq,
 			unsigned int index)
 {
@@ -61,11 +59,6 @@ static int set_cpu_freq(struct cpufreq_policy *policy, unsigned int new_freq,
 	freqs.new = new_freq;
 	freqs.cpu = policy->cpu;
 	
-	//update CPU frequency switching log 
-	debug_cpu_freqs[policy->cpu].cpu = policy->cpu; 
-	debug_cpu_freqs[policy->cpu].old = policy->cur; 
-	debug_cpu_freqs[policy->cpu].new = new_freq; 
-
 	/*
 	 * Put the caller into SCHED_FIFO priority to avoid cpu starvation
 	 * while increasing frequencies
