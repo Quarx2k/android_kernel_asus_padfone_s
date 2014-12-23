@@ -214,7 +214,8 @@ static inline void put_cpu_down(int cpu)
 	int target_cpu = cpu; 
 	int cpu_load = 0;
 	int lowest_load = 100;
-	int j;
+	int parent_load;
+	int j, i;
 
 	/* Prevent fast on-/offlining */ 
 	if (time_is_after_jiffies(hot_data->timestamp + (HZ * hot_data->min_online_time)))	
@@ -235,6 +236,19 @@ static inline void put_cpu_down(int cpu)
 			continue;
 
 		cpu_load = get_load(j);
+
+		/* 
+		 * Check if the "child" cpus are more busy then their "parents"
+		 */
+		for (i = 0; i < 2; i++) {
+			parent_load = get_load(i);
+			if (cpu_load >= parent_load &&
+				cpufreq_quick_get(j) >= cpufreq_quick_get(i)) {
+				if (hot_data->debug)						
+					pr_info("[Hot-Plug]: Preventing CPU%u from offlining\n", j);
+				return;
+			}
+		}
 
 		if (cpu_load < lowest_load) {
 			lowest_load = cpu_load;
