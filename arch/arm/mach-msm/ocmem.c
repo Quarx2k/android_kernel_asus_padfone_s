@@ -710,7 +710,7 @@ static int ocmem_zone_init(struct platform_device *pdev)
 				client_names[part->id], zone->z_start,
 				zone->z_end - 1, part->p_size/SZ_1K);
 	}
-#ifdef CONFIG_MSM_OCMEM_DEBUG
+
 	if (!debugfs_create_file("zones", S_IRUGO, pdata->debug_node,
 					NULL, &zones_show_fops)) {
 		dev_err(dev, "Unable to create debugfs node for zones\n");
@@ -728,7 +728,7 @@ static int ocmem_zone_init(struct platform_device *pdev)
 		dev_err(dev, "Unable to create debugfs node for timing\n");
 		return -EBUSY;
 	}
-#endif
+
 	dev_dbg(dev, "Total active zones = %d\n", active_zones);
 	return 0;
 }
@@ -764,7 +764,6 @@ static int ocmem_init_gfx_mpu(struct platform_device *pdev)
 
 static int __devinit ocmem_debugfs_init(struct platform_device *pdev)
 {
-#ifdef CONFIG_MSM_OCMEM_DEBUG
 	struct dentry *debug_dir = NULL;
 	struct ocmem_plat_data *pdata = platform_get_drvdata(pdev);
 
@@ -775,7 +774,6 @@ static int __devinit ocmem_debugfs_init(struct platform_device *pdev)
 	}
 
 	pdata->debug_node =  debug_dir;
-#endif 
 	return 0;
 }
 
