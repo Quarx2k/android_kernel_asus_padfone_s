@@ -29,9 +29,6 @@
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
 //ASUS_BSP: Louis +++
-#ifdef CONFIG_ASUS_HDMI
-extern int g_padfone_state;
-#endif
 extern struct mdss_panel_data *g_mdss_pdata;
 extern int g_mdss_dsi_block;
 #ifdef CONFIG_A86_BACKLIGHT
@@ -39,34 +36,8 @@ extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
 #endif
 extern void asus_mdss_mdp_clk_ctl(bool enable);
 extern void qpnp_wled_ctrl(bool enable);
-#ifdef CONFIG_P05_NOVATEK_CM
-extern void nvt71890_cabc_set(bool bOn);
-#endif
-
 int A91_lcd_id = 0; // 0:sharp; 1:innolux
-
-void sharp_set_cabc(int mode);
-int g_displayOn = false;
 static struct mutex cmd_mutex;
-static bool CABC_MOVING = true;
-static char a86_bl_val[3] = {0x51, 0x01, 0x00};
-static char a86_bl_init_val[3] = {0x51, 0x01, 0x00};	// jacob add for skip abnormal backlight value
-static char a86_ctrl_display[2] = {0x53, 0x2C};     //enable dimming ctrl bit
-static char cabc_ctrl[2] = {0x55, 0x3}; //moving mode
-
-static char a90_bl_val[2] = {0x51, 0x64};
-static char a90_bl_init_val[2] = {0x51, 0x35};	// jacob add for skip abnormal backlight value
-
-static struct dsi_cmd_desc renesas_brightness_set = {
-    {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(a86_bl_val)},
-    a86_bl_val
-};
-static struct dsi_cmd_desc nvt_brightness_set = {
-    {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(a90_bl_val)},
-    a90_bl_val
-};
-
-//ASUS_BSP: Louis ---
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -169,8 +140,7 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
-//ASUS_BSP: Louis ++
-#if 0
+#ifndef CONFIG_A86_BACKLIGHT
 static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
 static struct dsi_cmd_desc backlight_cmd = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
@@ -194,8 +164,60 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
+#else 
+static char a86_bl_val[3] = {0x51, 0x01, 0x00};
+static char a86_bl_init_val[3] = {0x51, 0x01, 0x00};	// jacob add for skip abnormal backlight value
+
+static struct dsi_cmd_desc renesas_brightness_set = {
+    {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(a86_bl_val)},
+    a86_bl_val
+};
+
+int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
+{
+    struct dcs_cmd_req cmdreq;
+
+    if (value == 0) {
+        return 0;
+    }
+
+    if (A91_lcd_id == SHARP_DISP) {
+		value *= 4;
+		a86_bl_val[1] = value/256;
+		a86_bl_val[2] = value%256;
+	
+		if (value > 7*4) {
+	    		memcpy(a86_bl_init_val,a86_bl_val,sizeof(a86_bl_val));
+		}
+    }
+
+    mutex_lock(&cmd_mutex);
+
+    if (!g_mdss_dsi_block && g_mdss_pdata->panel_info.panel_power_on) {
+        memset(&cmdreq, 0, sizeof(cmdreq));
+        cmdreq.cmds_cnt = 1;
+        cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+        cmdreq.rlen = 0;
+        cmdreq.cb = NULL;
+        cmdreq.cmds = &renesas_brightness_set;
+
+        mdss_set_tx_power_mode(0, g_mdss_pdata);
+
+        asus_mdss_mdp_clk_ctl(1);
+        mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+        asus_mdss_mdp_clk_ctl(0);
+
+        mdss_set_tx_power_mode(1, g_mdss_pdata);
+    }
+    else {
+        printk("[Display] Set bk fail due to dsi_block(%d), panel_power(%d)\n", g_mdss_dsi_block, g_mdss_pdata->panel_info.panel_power_on);
+    }
+
+    mutex_unlock(&cmd_mutex);
+
+    return 0;
+}
 #endif
-//ASUS_BSP: Louis --
 
 void mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 {
@@ -207,12 +229,6 @@ void mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		pr_err("%s: Invalid input data\n", __func__);
 		return;
 	}
-
-    //ASUS_BSP: Louis +++
-    if (pdata->panel_info.panel_sleep_mode) {
-        return;
-    }
-    //ASUS_BSP: Louis ---
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
@@ -346,12 +362,11 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		mdss_dsi_panel_bklt_pwm(ctrl_pdata, bl_level);
 		break;
 	case BL_DCS_CMD:
-        //ASUS_BSP: Louis +++
-		//mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
-#ifdef CONFIG_A86_BACKLIGHT
-        asus_set_bl_brightness(ctrl_pdata, bl_level);
+#ifndef CONFIG_A86_BACKLIGHT
+		mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
+#else
+		asus_set_bl_brightness(ctrl_pdata, bl_level);
 #endif
-        //ASUS_BSP: Louis ---
 		break;
 	default:
 		pr_err("%s: Unknown bl_ctrl configuration\n",
@@ -360,86 +375,12 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	}
 }
 
-//ASUS_BSP: Louis +++
-int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
-{
-    struct dcs_cmd_req cmdreq;
-
-    if (value == 0) {
-        return 0;
-    }
-    if (A91_lcd_id == SHARP_DISP) {
-		value *= 4;
-		a86_bl_val[1] = value/256;
-		a86_bl_val[2] = value%256;
-	
-		if (value > 7*4) {
-	    	memcpy(a86_bl_init_val,a86_bl_val,sizeof(a86_bl_val));
-		}
-    }
-    else{
-    	a90_bl_val[1] = value;
-
-		if (value > 7) {
-            a90_bl_init_val[1] = value;
-		}
-    }
-
-    if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
-        if (value <= 150 && CABC_MOVING == true) {   //turn off cabc once duty < 15 %
-            sharp_set_cabc(0);
-            CABC_MOVING = false;
-        }
-        else if (value > 150 && CABC_MOVING == false) {
-            sharp_set_cabc(3);
-            CABC_MOVING = true;
-        }
-    }
-
-    mutex_lock(&cmd_mutex);
-
-    if (!g_mdss_dsi_block && g_mdss_pdata->panel_info.panel_power_on) {
-
-        memset(&cmdreq, 0, sizeof(cmdreq));
-        cmdreq.cmds_cnt = 1;
-        cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
-        cmdreq.rlen = 0;
-        cmdreq.cb = NULL;
-
-        if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
-            cmdreq.cmds = &nvt_brightness_set;
-          //  printk("[BL] Set nvt brightness (%d)\n", a90_bl_val[1]);
-        }
-        else {
-            cmdreq.cmds = &renesas_brightness_set;
-           // printk("[BL] Set renesas brightness (%d)\n", (a86_bl_val[1]*256 + a86_bl_val[2]));
-        }
-
-        mdss_set_tx_power_mode(0, g_mdss_pdata);
-
-        asus_mdss_mdp_clk_ctl(1);
-        mdss_dsi_cmdlist_put(ctrl, &cmdreq);
-        asus_mdss_mdp_clk_ctl(0);
-
-        mdss_set_tx_power_mode(1, g_mdss_pdata);
-    }
-    else {
-        printk("[Display] Set bk fail due to dsi_block(%d), panel_power(%d)\n", g_mdss_dsi_block, g_mdss_pdata->panel_info.panel_power_on);
-    }
-
-    mutex_unlock(&cmd_mutex);
-
-    return 0;
-}
-//ASUS_BSP: Louis ---
-
 extern int himax_ts_suspend(void);
 extern int himax_ts_resume(void);
 static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 {
 	struct mipi_panel_info *mipi;
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
-    int indx = 0;   //ASUS_BSP: Louis
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -452,58 +393,8 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 
 	pr_debug("%s: ctrl=%p ndx=%d\n", __func__, ctrl, ctrl->ndx);
 
-    //+++ ASUS_BSP: Louis
-    printk("[Display] A91 display on ++\n");
-    mutex_lock(&cmd_mutex);
-
-    if (pdata->panel_info.type == MIPI_VIDEO_PANEL)
-        indx = 2;   // add for video dtsi VBP / VFP
-
-    if (A91_lcd_id) {
-        if (!g_Recovery && !g_Charger_mode)
-             ctrl->on_cmds.cmds[523+indx].payload[1] = a90_bl_init_val[1];
-        else
-            ctrl->on_cmds.cmds[523+indx].payload[1] = 0x0;
-        printk("[BL] bk %x : %d \n", ctrl->on_cmds.cmds[523+indx].payload[0],
-                                         ctrl->on_cmds.cmds[523+indx].payload[1]);
-
-        if (!CABC_MOVING)
-            ctrl->on_cmds.cmds[525+indx].payload[1] = 0x0;
-    }
-    else {
-        if (!g_Recovery && !g_Charger_mode) {
-	         memcpy(ctrl->on_cmds.cmds[4].payload,a86_bl_init_val,sizeof(a86_bl_init_val));
-        }
-        else {
-            ctrl->on_cmds.cmds[4].payload[1] = 0x0;
-            ctrl->on_cmds.cmds[4].payload[2] = 0x0;
-        }
-        printk("[BL] bk %x : %d \n", ctrl->on_cmds.cmds[4].payload[0],
-                                         ctrl->on_cmds.cmds[4].payload[1]*256 +
-                                                ctrl->on_cmds.cmds[4].payload[2]);
-    }
-
-	himax_ts_resume();
-
 	if (ctrl->on_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
-
-    g_displayOn = true;
-
-    //ASUS_BSP: Louis, enable wled after overlay or pan display case ++
-#ifdef CONFIG_ASUS_HDMI
-    if ((g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) && g_padfone_state != 2) {
-#else
-    if ((g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1)) {
-#endif
-        if (g_Recovery || g_Charger_mode)
-            qpnp_wled_ctrl(1);
-    }
-    //ASUS_BSP: Louis --
-
-    mutex_unlock(&cmd_mutex);
-    printk("[Display] A91 display on --\n");
-    //--- ASUS_BSP: Louis
 
 	pr_debug("%s:-\n", __func__);
 	return 0;
@@ -526,317 +417,17 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 
 	mipi  = &pdata->panel_info.mipi;
 
-    //+++ ASUS_BSP: Louis
-    printk("[Display] A91 display off ++\n");
-    mutex_lock(&cmd_mutex);
-
-    if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
-        qpnp_wled_ctrl(0);
-    }
-
-	himax_ts_suspend();
-
 	if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds);
 
-    g_displayOn = false;
-
-    mutex_unlock(&cmd_mutex);
-    printk("[Display] A91 display off --\n");
-    //--- ASUS_BSP: Louis
-    
 	pr_debug("%s:-\n", __func__);
 	return 0;
-}
-
-//ASUS_BSP:Louis "send display off in HS" ++
-int asus_mipi_display_off(void)
-{
-    int ret = 0;
-
-    ret = mdss_dsi_panel_off(g_mdss_pdata);
-    if(ret) {
-        printk("[Display] %s: Fail\n", __func__);
-    }
-
-    return ret;
-}
-EXPORT_SYMBOL(asus_mipi_display_off);
-//ASUS_BSP:Louis "send display off in HS" --
-
-//Louis "Add file node in /proc/driver/" +++
-static struct dsi_cmd_desc a86_cabc_cmd[] = {
-    { {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(a86_ctrl_display)}, a86_ctrl_display},
-    { {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(cabc_ctrl)}, cabc_ctrl},
-};
-
-void sharp_set_cabc(int mode)
-{
-    struct dcs_cmd_req cmdreq;
-    struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
-
-    ctrl_pdata = container_of(g_mdss_pdata, struct mdss_dsi_ctrl_pdata,
-                panel_data);
-
-    mutex_lock(&cmd_mutex);
-
-    if (!g_mdss_dsi_block && g_mdss_pdata->panel_info.panel_power_on) {
-
-        cabc_ctrl[1] = cabc_ctrl[1] & 0xf0;
-        cabc_ctrl[1] += mode;
-        printk("[Display][CABC] write cabc mode = 0x%x\n", cabc_ctrl[1]);
-
-        memset(&cmdreq, 0, sizeof(cmdreq));
-        cmdreq.cmds = a86_cabc_cmd;
-        cmdreq.cmds_cnt = ARRAY_SIZE(a86_cabc_cmd);
-        cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
-        cmdreq.rlen = 0;
-        cmdreq.cb = NULL;
-
-        asus_mdss_mdp_clk_ctl(1);
-        mdss_dsi_cmdlist_put(ctrl_pdata, &cmdreq);
-        asus_mdss_mdp_clk_ctl(0);
-    }
-    else {
-        printk("CABC Set Fail: mode=%d\n", mode);
-    }
-
-    mutex_unlock(&cmd_mutex);
 }
 
 #include <linux/syscalls.h>
 #include <linux/proc_fs.h>
 #include <linux/file.h>
 #include <linux/uaccess.h>
-
-#define SHARP_CABC_PROC_FILE   "driver/cabc"
-#define DUMP_LCD_REGISTER      "driver/panel_reg"
-#define RENESAS_REG_FILE       "/data/data/a86_panel_reg.txt"
-
-static struct proc_dir_entry *cabc_proc_file;
-static mm_segment_t oldfs;
-
-static void initKernelEnv(void)
-{
-    oldfs = get_fs();
-    set_fs(KERNEL_DS);
-}
-
-static void deinitKernelEnv(void)
-{
-    set_fs(oldfs);
-}
-
-static ssize_t cabc_proc_write(struct file *filp, const char *buff, size_t len, loff_t *off)
-{
-    char messages[256];
-
-    memset(messages, 0, sizeof(messages));
-
-    if (len > 256)
-        len = 256;
-    if (copy_from_user(messages, buff, len))
-        return -EFAULT;
-
-    initKernelEnv();
-
-    if (!gpio_get_value_cansleep(75)) {
-        if(strncmp(messages, "0", 1) == 0)  //off
-            sharp_set_cabc(0);
-        else if(strncmp(messages, "1", 1) == 0) //ui
-            sharp_set_cabc(1);
-        else if(strncmp(messages, "2", 1) == 0) //still
-            sharp_set_cabc(2);
-        else if(strncmp(messages, "3", 1) == 0) //moving
-            sharp_set_cabc(3);
-    }
-    else {
-        if(strncmp(messages, "0", 1) == 0) {
-#ifdef CONFIG_P05_NOVATEK_CM
-            nvt71890_cabc_set(0);
-#endif
-        }
-        else {
-#ifdef CONFIG_P05_NOVATEK_CM
-            nvt71890_cabc_set(1);
-#endif
-        }
-    }
-
-    deinitKernelEnv(); 
-    return len;
-}
-
-static struct file_operations cabc_proc_ops = {
-    .write = cabc_proc_write,
-};
-
-static void create_cabc_proc_file(void)
-{
-    cabc_proc_file = create_proc_entry(SHARP_CABC_PROC_FILE, 0666, NULL);
-
-    if (cabc_proc_file) {
-        cabc_proc_file->proc_fops = &cabc_proc_ops;
-    }
-}
-
-//////////////////  dump panel reg  //////////////////
-static char dsi_num_err_r[2] = {0x05, 0x00};
-static char power_mode_r[2] = {0x0A, 0x00};
-static char addr_mode_r[2] = {0x0B, 0x00};
-static char pixel_mode_r[2] = {0x0C, 0x00};
-static char display_mode_r[2] = {0x0D, 0x00};
-static char signal_mode_r[2] = {0x0E, 0x00};
-static char self_diagnostic_r[2] = {0x0F, 0x00};
-static char memory_start_r[2] = {0x2E, 0x00};
-static char bl_value_r[2] = {0x52, 0x00}; 
-static char init_cabc1_r[2] = {0x54, 0x00};
-static char IE_CABC_r[2] = {0x56, 0x00}; 
-static char CABC_min_bl_r[2] = {0x5F, 0x0};
-static char id1[2] = {0xDA, 0x0};
-static char id2[2] = {0xDB, 0x0};
-static char id3[2] = {0xDC, 0x0};
-
-static struct dsi_cmd_desc dump_panel_reg_cmd[] = {
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(dsi_num_err_r)}, dsi_num_err_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(power_mode_r)}, power_mode_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(addr_mode_r)}, addr_mode_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(pixel_mode_r)}, pixel_mode_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(display_mode_r)}, display_mode_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(signal_mode_r)}, signal_mode_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(self_diagnostic_r)}, self_diagnostic_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(memory_start_r)}, memory_start_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(bl_value_r)}, bl_value_r},
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(init_cabc1_r)}, init_cabc1_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(IE_CABC_r)}, IE_CABC_r},
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(CABC_min_bl_r)}, CABC_min_bl_r },
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(id1)}, id1},
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(id2)}, id2},
-    { {DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(id3)}, id3},
-};
-
-static bool write_lcd_reg_val(char addr, int value)
-{
-    struct file *fp = NULL; 
-    loff_t pos_lsts = 0;
-    char write_dumpval[2];
-    mm_segment_t old_fs;
-
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
-
-    fp = filp_open(RENESAS_REG_FILE, O_RDWR|O_CREAT|O_APPEND, 0644);
-    if(IS_ERR_OR_NULL(fp)) {
-        printk("[Display] write lcd register open (%s) fail\n", RENESAS_REG_FILE);
-        return false;
-    }
-    sprintf(write_dumpval, "0x%x: 0x%x\n", addr, value);
-    fp->f_op->write(fp, write_dumpval, strlen(write_dumpval), &pos_lsts);
-
-    pos_lsts = 0;
-
-    set_fs(old_fs);
-    filp_close(fp, NULL);
-
-    return true;
-}
-
-static u32 dump_regval = 0; 
-static void dump_novatek_register_cb(int len)
-{
-    dump_regval = len;
-    //printk("%s: dump_regval=%x\n", __func__, dump_regval);
-}
-
-static u32 dump_asus_panel_register(void)
-{
-    struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
-    struct dcs_cmd_req cmdreq;
-    int i;
-    char addr;
-    char *rbuffer;
-
-    ctrl_pdata = container_of(g_mdss_pdata, struct mdss_dsi_ctrl_pdata,
-                panel_data);
-
-    mutex_lock(&cmd_mutex);
-
-    for(i=0; i < ARRAY_SIZE(dump_panel_reg_cmd); i++)
-    {
-        memset(&cmdreq, 0, sizeof(cmdreq));
-        rbuffer = kmalloc(sizeof(ctrl_pdata->rx_buf.len), GFP_KERNEL);
-
-        cmdreq.cmds = &dump_panel_reg_cmd[i];
-        cmdreq.cmds_cnt = 1;
-        cmdreq.flags = CMD_REQ_RX | CMD_REQ_COMMIT;
-        cmdreq.rlen = 3;
-        cmdreq.rbuf = rbuffer;
-        cmdreq.cb = dump_novatek_register_cb;   //wait for call back
-
-        asus_mdss_mdp_clk_ctl(1);
-        mdss_dsi_cmdlist_put(ctrl_pdata, &cmdreq);
-        asus_mdss_mdp_clk_ctl(0);
-
-        addr = (char) (dump_panel_reg_cmd[i].payload)[0];
-
-        write_lcd_reg_val(addr, dump_regval);
-
-        printk("[Display] reg: addr (0x%x) = (0x%x)\n" ,addr , *(cmdreq.rbuf));
-    }
-
-    mutex_unlock(&cmd_mutex);
-
-    return 0;
-}
-//////////////////  dump panel reg  //////////////////
-
-static ssize_t lcd_proc_write(struct file *filp, const char __user *buff, 
-                unsigned long len, void *data)
-{
-    char messages[256];
-
-    memset(messages, 0, sizeof(messages));
-
-    if (len > 256)
-        len = 256;
-    if (copy_from_user(messages, buff, len))
-        return -EFAULT;
-
-    initKernelEnv();
-
-    if(strncmp(messages, "on", 2) == 0) {
-        dump_asus_panel_register();
-    }
-
-    deinitKernelEnv(); 
-    return len;
-}
-
-static ssize_t lcd_status_read(char *page, char **start, off_t off, int count,
-                int *eof, void *data)
-{
-    ssize_t ret;
-
-    if (off > 0) {
-        /* we have finished to read, return 0 */
-        ret  = 0;
-    } else {
-        /* read panel state, return panel on/off state */
-    }
-
-    return ret;
-}
-
-static void create_lcd_proc_file(void)
-{
-    struct proc_dir_entry *lcd_proc_file = create_proc_entry(DUMP_LCD_REGISTER, 0666, NULL);
-
-    if (lcd_proc_file) {
-        lcd_proc_file->read_proc = lcd_status_read;
-        lcd_proc_file->write_proc = lcd_proc_write;
-    }
-}
-//Louis "Add file node in /proc/driver/"---
 
 static void mdss_dsi_parse_lane_swap(struct device_node *np, char *dlane_swap)
 {
@@ -1424,11 +1015,6 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
 
-    //ASUS_BSP: Louis +++
-    pinfo->panel_sleep_mode = of_property_read_bool(np,
-                    "asus,panel-sleep-mode");
-    //ASUS_BSP: Louis ---
-
 	return 0;
 
 error:
@@ -1472,26 +1058,11 @@ int mdss_dsi_panel_init(struct device_node *node,
 		pr_info("%s:%d Continuous splash flag not found.\n",
 				__func__, __LINE__);
 		ctrl_pdata->panel_data.panel_info.cont_splash_enabled = 0;
-        ctrl_pdata->panel_data.panel_info.disable_pad_splash = false;   //ASUS_BSP: Louis +++
 	} else {
 		pr_info("%s:%d Continuous splash flag enabled.\n",
 				__func__, __LINE__);
 
 		ctrl_pdata->panel_data.panel_info.cont_splash_enabled = 1;
-        if (gpio_get_value_cansleep(75)) {
-            pr_info(" %s: bootup in pad, disable Continuous splash\n", __func__);
-            ctrl_pdata->panel_data.panel_info.disable_pad_splash = true;
-            ctrl_pdata->panel_data.panel_info.cont_splash_enabled = 0;
-        }
-        else {
-            if (g_panel_connect == false){
-            pr_info(" %s: bootup in phone but panel is not connected , disable Continuous splash\n", __func__);
-            ctrl_pdata->panel_data.panel_info.cont_splash_enabled = 0;}
-            else{
-            pr_info(" %s: bootup in phone, enable Continuous splash\n", __func__);
-            ctrl_pdata->panel_data.panel_info.disable_pad_splash = false;}
-        }
-        //ASUS_BSP: Louis ---
 	}
 
 	partial_update_enabled = of_property_read_bool(node,
@@ -1510,17 +1081,12 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->off = mdss_dsi_panel_off;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
 
-	//ASUS_BSP: Louis ++
 	mutex_init(&cmd_mutex);
-    create_cabc_proc_file();
-    create_lcd_proc_file();
-    A91_lcd_id = gpio_get_value(LCD_ID_DETECT);
-    if (g_panel_connect == false){
-       printk("[Display]Panel is not connected, config as Sharp video mode panel prevent from system hang\n");
-       A91_lcd_id = 0;
-    }
-    printk("[Display] LCD_ID(%d)\n", A91_lcd_id);
-    //ASUS_BSP: Louis --
-
+	A91_lcd_id = gpio_get_value(LCD_ID_DETECT);
+	if (g_panel_connect == false){
+		printk("[Display]Panel is not connected, config as Sharp video mode panel prevent from system hang\n");
+		A91_lcd_id = 0;
+	}	
+	printk("[Display] LCD_ID(%d)\n", A91_lcd_id);
 	return 0;
 }
