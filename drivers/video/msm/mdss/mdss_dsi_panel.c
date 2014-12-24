@@ -200,13 +200,7 @@ int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
         cmdreq.cb = NULL;
         cmdreq.cmds = &renesas_brightness_set;
 
-        mdss_set_tx_power_mode(0, g_mdss_pdata);
-
-        asus_mdss_mdp_clk_ctl(1);
         mdss_dsi_cmdlist_put(ctrl, &cmdreq);
-        asus_mdss_mdp_clk_ctl(0);
-
-        mdss_set_tx_power_mode(1, g_mdss_pdata);
     }
     else {
         printk("[Display] Set bk fail due to dsi_block, panel_power(%d)\n", g_mdss_pdata->panel_info.panel_power_on);
