@@ -90,13 +90,7 @@ void mdss_dsi_ctrl_init(struct mdss_dsi_ctrl_pdata *ctrl)
 		ctrl->ndx = DSI_CTRL_1;
 	}
 
-	ctrl->panel_mode = ctrl->panel_data.panel_info.mipi.mode;
-
 	ctrl_list[ctrl->ndx] = ctrl;	/* keep it */
-
-	if (ctrl->shared_pdata.broadcast_enable)
-		if (ctrl->ndx == DSI_CTRL_1)
-			ctrl->flags |= DSI_FLAG_CLOCK_MASTER;
 
 	if (mdss_register_irq(ctrl->dsi_hw))
 		pr_err("%s: mdss_register_irq failed.\n", __func__);
@@ -121,22 +115,6 @@ void mdss_dsi_ctrl_init(struct mdss_dsi_ctrl_pdata *ctrl)
 						"mdss_dsi_event");
 		dsi_event.inited  = 1;
 	}
-}
-
-struct mdss_dsi_ctrl_pdata *mdss_dsi_ctrl_slave(
-				struct mdss_dsi_ctrl_pdata *ctrl)
-{
-	int ndx;
-	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
-
-	/* only two controllers */
-	ndx = ctrl->ndx;
-	ndx += 1;
-	ndx %= DSI_CTRL_MAX;
-	sctrl = ctrl_list[ndx];
-
-	return sctrl;
-
 }
 
 void mdss_dsi_clk_req(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
@@ -268,6 +246,8 @@ void mdss_dsi_host_init(struct mipi_panel_info *pinfo,
 				panel_data);
 
 	pinfo->rgb_swap = DSI_RGB_SWAP_RGB;
+
+	ctrl_pdata->panel_mode = pinfo->mode;
 
 	if (pinfo->mode == DSI_VIDEO_MODE) {
 		data = 0;
@@ -876,7 +856,7 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 		MIPI_OUTP((ctrl->ctrl_base) + 0x0004, data);
 	}
 
-	if (rlen <= 2) {
+	if (rlen == 0) {
 		short_response = 1;
 		rx_byte = 4;
 	} else {
@@ -1012,7 +992,6 @@ end:
 }
 
 #define DMA_TX_TIMEOUT 200
-//#define DSI_CMD_DEBUG 1	//ASUS_BSP: Louis +++
 
 static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 					struct dsi_buf *tp)
@@ -1020,12 +999,10 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	int len, ret = 0;
 	int domain = MDSS_IOMMU_DOMAIN_UNSECURE;
 	char *bp;
-
-	unsigned long size;
-	dma_addr_t addr;
-	bool addr_map_iommu = false;
+	unsigned long size, addr;
 
 	bp = tp->data;
+
 	len = ALIGN(tp->len, 4);
 	size = ALIGN(tp->len, SZ_4K);
 
@@ -1034,9 +1011,6 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 		int ret = msm_iommu_map_contig_buffer(tp->dmap,
 					mdss_get_iommu_domain(domain), 0,
 					size, SZ_4K, 0, &(addr));
-
-        addr_map_iommu = true;   //ASUS_BSP: Louis +++
-
 		if (IS_ERR_VALUE(ret)) {
 			pr_err("unable to map dma memory to iommu(%d)\n", ret);
 			return -ENOMEM;
@@ -1069,21 +1043,14 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	ret = wait_for_completion_timeout(&ctrl->dma_comp,
 				msecs_to_jiffies(DMA_TX_TIMEOUT));
-	if (ret == 0) {
-        printk("[Display] %s: DCS command timeout\n", __func__); //ASUS_BSP: Louis +++
+	if (ret == 0)
 		ret = -ETIMEDOUT;
-    }
 	else
 		ret = tp->len;
 
-	if (is_mdss_iommu_attached() && addr_map_iommu) //ASUS_BSP:  Louis +++
+	if (is_mdss_iommu_attached())
 		msm_iommu_unmap_contig_buffer(addr,
 			mdss_get_iommu_domain(domain), 0, size);
-    //ASUS_BSP: Louis +++
-    else if (!is_mdss_iommu_attached() && addr_map_iommu) {
-        printk("%s: not unmap buffer due to iommu not attached\n", __func__);
-    }
-    //ASUS_BSP: Louis ---
 
 	return ret;
 }
@@ -1344,11 +1311,11 @@ static int dsi_event_thread(void *data)
 		}
 
 		if (todo & DSI_EV_MDP_BUSY_RELEASE) {
-			spin_lock_irqsave(&ctrl->mdp_lock, flag);
+			spin_lock(&ctrl->mdp_lock);
 			ctrl->mdp_busy = false;
 			mdss_dsi_disable_irq_nosync(ctrl, DSI_MDP_TERM);
 			complete(&ctrl->mdp_comp);
-			spin_unlock_irqrestore(&ctrl->mdp_lock, flag);
+			spin_unlock(&ctrl->mdp_lock);
 
 			/* enable dsi error interrupt */
 			mdss_dsi_err_intr_ctrl(ctrl, DSI_INTR_ERROR_MASK, 1);
@@ -1490,15 +1457,13 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 			u32 isr0;
 			isr0 = MIPI_INP(left_ctrl_pdata->ctrl_base
 						+ 0x0110);/* DSI_INTR_CTRL */
-			if (isr0 & DSI_INTR_CMD_DMA_DONE)
-				MIPI_OUTP(left_ctrl_pdata->ctrl_base + 0x0110,
-					DSI_INTR_CMD_DMA_DONE);
+			MIPI_OUTP(left_ctrl_pdata->ctrl_base + 0x0110, isr0);
 		}
 
-	pr_debug("%s: ndx=%d isr=%x\n", __func__, ctrl->ndx, isr);
+	pr_debug("%s: isr=%x", __func__, isr);
 
 	if (isr & DSI_INTR_ERROR) {
-		pr_err("%s: ndx=%d isr=%x\n", __func__, ctrl->ndx, isr);
+		pr_err("%s: isr=%x %x", __func__, isr, (int)DSI_INTR_ERROR);
 		mdss_dsi_error(ctrl);
 	}
 
