@@ -30,7 +30,6 @@ DEFINE_LED_TRIGGER(bl_led_trigger);
 
 //ASUS_BSP: Louis +++
 extern struct mdss_panel_data *g_mdss_pdata;
-extern int g_mdss_dsi_block;
 #ifdef CONFIG_A86_BACKLIGHT
 extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
 #endif
@@ -193,7 +192,7 @@ int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
 
     mutex_lock(&cmd_mutex);
 
-    if (!g_mdss_dsi_block && g_mdss_pdata->panel_info.panel_power_on) {
+    if (g_mdss_pdata->panel_info.panel_power_on) {
         memset(&cmdreq, 0, sizeof(cmdreq));
         cmdreq.cmds_cnt = 1;
         cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
@@ -210,7 +209,7 @@ int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
         mdss_set_tx_power_mode(1, g_mdss_pdata);
     }
     else {
-        printk("[Display] Set bk fail due to dsi_block(%d), panel_power(%d)\n", g_mdss_dsi_block, g_mdss_pdata->panel_info.panel_power_on);
+        printk("[Display] Set bk fail due to dsi_block, panel_power(%d)\n", g_mdss_pdata->panel_info.panel_power_on);
     }
 
     mutex_unlock(&cmd_mutex);

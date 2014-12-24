@@ -29,12 +29,6 @@
 #define MDP_INTR_MASK_INTF_VSYNC(intf_num) \
 	(1 << (2 * (intf_num - MDSS_MDP_INTF0) + MDSS_MDP_IRQ_INTF_VSYNC))
 
-//ASUS_BSP: Louis ++
-extern void qpnp_wled_ctrl(bool enable);
-extern int MdpBoostUp;
-int g_mdss_dsi_block = 0;
-//ASUS_BSP: Louis --
-
 /* intf timing settings */
 struct intf_timing_params {
 	u32 width;
@@ -316,7 +310,6 @@ static int mdss_mdp_video_stop(struct mdss_mdp_ctl *ctl)
 	}
 
 	if (ctx->timegen_en) {
-        g_mdss_dsi_block = 1;   //ASUS_BSP: Louis ++
 		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_BLANK, NULL);
 		if (rc == -EBUSY) {
 			pr_debug("intf #%d busy don't turn off\n",
@@ -342,7 +335,6 @@ static int mdss_mdp_video_stop(struct mdss_mdp_ctl *ctl)
 
 		mdss_mdp_irq_disable(MDSS_MDP_IRQ_INTF_UNDER_RUN,
 			ctl->intf_num);
-		g_mdss_dsi_block = 0;   //ASUS_BSP: Louis ++
 	}
 
 	list_for_each_entry_safe(handle, tmp, &ctx->vsync_handlers, list)
@@ -404,8 +396,6 @@ static int mdss_mdp_video_pollwait(struct mdss_mdp_ctl *ctl)
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 
 	if (rc == 0) {
-		pr_info("vsync poll successful! rc=%d status=0x%x, mask=0x%x, intf_num(%d)\n",
-				rc, status, mask, ctl->intf_num);    //ASUS_BSP: Louis, add log
 		ctx->poll_cnt++;
 		if (status) {
 			struct mdss_mdp_vsync_handler *tmp;
@@ -417,9 +407,6 @@ static int mdss_mdp_video_pollwait(struct mdss_mdp_ctl *ctl)
 				tmp->vsync_handler(ctl, vsync_time);
 			spin_unlock_irqrestore(&ctx->vsync_lock, flags);
 		}
-	} else {
-		pr_warn("vsync poll timed out! rc=%d status=0x%x mask=0x%x, intf_num(%d)\n",
-				rc, status, mask, ctl->intf_num);   //Louis +++
 	}
 
 	return rc;
@@ -670,13 +657,6 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 	}
 
 	if (!ctx->timegen_en) {
-        //ASUS_BSP: Louis ++
-        g_mdss_dsi_block = 1;
-        if (g_Charger_mode || g_Recovery) {
-            qpnp_wled_ctrl(0);
-        }
-        //ASUS_BSP: Louis --
-
 		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_UNBLANK, NULL);
 		if (rc) {
 			pr_warn("intf #%d unblank error (%d)\n",
@@ -685,8 +665,6 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 			ctx->wait_pending = 0;
 			return rc;
 		}
-
-		pr_info("enabling timing gen for intf=%d\n", ctl->intf_num);    //Louis ++
 
 		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 
@@ -697,34 +675,12 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 		rc = wait_for_completion_timeout(&ctx->vsync_comp,
 				usecs_to_jiffies(VSYNC_TIMEOUT_US));
 
-        //ASUS_BSP: Louis +++ ,"trying to recover vsync timeout while turn on hdmi pwr"
-        if (rc == 0 && ctl->intf_num == 4) {
-            printk("[Display] timeout enable timegen on intf(%d) !!\n", ctl->intf_num);
-
-            mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 0);
-            msleep(20);
-            mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
-            mdss_mdp_irq_disable(MDSS_MDP_IRQ_INTF_UNDER_RUN, ctl->intf_num);
-            msleep(16);
-
-            mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
-
-            mdss_mdp_irq_enable(MDSS_MDP_IRQ_INTF_UNDER_RUN, ctl->intf_num);
-            mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 1);
-            wmb();
-
-            rc = wait_for_completion_timeout(&ctx->vsync_comp,
-                    usecs_to_jiffies(VSYNC_TIMEOUT_US));
-        }
-        //ASUS_BSP: Louis ---
-
 		WARN(rc == 0, "timeout (%d) enabling timegen on ctl=%d\n",
 				rc, ctl->num);
 
 		ctx->timegen_en = true;
 		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_ON, NULL);
 		WARN(rc, "intf %d panel on error (%d)\n", ctl->intf_num, rc);
-		g_mdss_dsi_block = 0;   //ASUS_BSP: Louis ++
 	}
 
 	return 0;
