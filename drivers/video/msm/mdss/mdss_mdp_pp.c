@@ -403,8 +403,6 @@ static inline void pp_sts_set_split_bits(u32 *sts, u32 bits);
 
 static u32 last_sts, last_state;
 
-//extern bool asus_padstation_exist_realtime(void); //ASUS_BSP: Louis+++
-
 int mdss_mdp_csc_setup_data(u32 block, u32 blk_idx, u32 tbl_idx,
 				   struct mdp_csc_cfg *data)
 {
@@ -2355,13 +2353,7 @@ int mdss_mdp_limited_lut_igc_config(struct mdss_mdp_ctl *ctl)
 		return -EINVAL;
 
 	config.len = IGC_LUT_ENTRIES;
-	//ASUS_BSP: Louis, "disable igc in pad mode for correct gamma curve 2.2" +++
-	//if (asus_padstation_exist_realtime()) {
-	//	config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_DISABLE;
-	//} else {
-		config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
-	//}
-	//ASUS_BSP: Louis ---
+	config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
 	config.block = (ctl->mfd->index) + MDP_LOGICAL_BLOCK_DISP_0;
 	config.c0_c1_data = igc_limited;
 	config.c2_data = igc_limited;
@@ -2468,8 +2460,6 @@ igc_config_exit:
 	return ret;
 }
 
-//ASUS_BSP: Louis, our rgb stage number is fixed, and parsing by our binary +++
-#if 0
 static void pp_update_gc_one_lut(char __iomem *addr,
 		struct mdp_ar_gc_lut_data *lut_data,
 		uint8_t num_stages)
@@ -2506,42 +2496,6 @@ static void pp_update_gc_one_lut(char __iomem *addr,
 		writel_relaxed(lut_data[idx].offset, addr);
 	}
 }
-#else
-static void pp_update_gc_one_lut(char __iomem *addr,
-        struct mdp_ar_gc_lut_data *lut_data,
-        uint8_t num_stages)
-{
-    int i, start_idx;
-
-    //ASUS_BSP:Louis, "using previous segments to replace RGB 255 stage" +++
-    for (i = 0; i < GC_LUT_SEGMENTS; i++) {
-        if (lut_data[i].x_start == 0xfff) {
-            lut_data[i].slope = lut_data[i-1].slope;
-            lut_data[i].offset = lut_data[i-1].offset;
-        }
-    }
-    //ASUS_BSP:Louis "using previous segments to replace RGB 255 stage" ---
-
-    start_idx = (readl_relaxed(addr) >> 16) & 0xF;
-    for (i = start_idx; i < GC_LUT_SEGMENTS; i++)
-        writel_relaxed(lut_data[i].x_start, addr);
-    for (i = 0; i < start_idx; i++)
-        writel_relaxed(lut_data[i].x_start, addr);
-    addr += 4;
-    start_idx = (readl_relaxed(addr) >> 16) & 0xF;
-    for (i = start_idx; i < GC_LUT_SEGMENTS; i++)
-        writel_relaxed(lut_data[i].slope, addr);
-    for (i = 0; i < start_idx; i++)
-        writel_relaxed(lut_data[i].slope, addr);
-    addr += 4;
-    start_idx = (readl_relaxed(addr) >> 16) & 0xF;
-    for (i = start_idx; i < GC_LUT_SEGMENTS; i++)
-        writel_relaxed(lut_data[i].offset, addr);
-    for (i = 0; i < start_idx; i++)
-        writel_relaxed(lut_data[i].offset, addr);
-}
-#endif
-//ASUS_BSP: Louis ---
 
 static void pp_update_argc_lut(char __iomem *addr,
 				struct mdp_pgc_lut_data *config)
@@ -2552,6 +2506,7 @@ static void pp_update_argc_lut(char __iomem *addr,
 	addr += 0x10;
 	pp_update_gc_one_lut(addr, config->b_data, config->num_b_stages);
 }
+
 static void pp_read_gc_one_lut(char __iomem *addr,
 		struct mdp_ar_gc_lut_data *gc_data)
 {

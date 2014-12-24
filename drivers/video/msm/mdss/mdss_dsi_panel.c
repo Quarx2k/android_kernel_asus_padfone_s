@@ -32,12 +32,12 @@ DEFINE_LED_TRIGGER(bl_led_trigger);
 #ifdef CONFIG_ASUS_HDMI
 extern int g_padfone_state;
 #endif
+extern void asus_mdss_mdp_clk_ctl(bool enable);
 extern struct mdss_panel_data *g_mdss_pdata;
 extern int g_mdss_dsi_block;
 #ifdef CONFIG_A86_BACKLIGHT
 extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
 #endif
-extern void asus_mdss_mdp_clk_ctl(bool enable);
 extern void qpnp_wled_ctrl(bool enable);
 #ifdef CONFIG_P05_NOVATEK_CM
 extern void nvt71890_cabc_set(bool bOn);
