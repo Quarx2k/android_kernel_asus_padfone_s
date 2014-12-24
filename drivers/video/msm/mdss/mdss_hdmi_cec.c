@@ -925,8 +925,6 @@ void *hdmi_cec_init(struct hdmi_cec_init_data *init_data)
 {
 	struct hdmi_cec_ctrl *cec_ctrl = NULL;
 
-	goto exit;		//ASUS BSP wei A86 do not support CEC
-	
 	if (!init_data) {
 		DEV_ERR("%s: Invalid input\n", __func__);
 		goto error;
