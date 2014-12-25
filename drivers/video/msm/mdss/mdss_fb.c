@@ -2323,8 +2323,7 @@ static int mdss_fb_display_commit(struct fb_info *info,
 		pr_err("%s:copy_from_user failed", __func__);
 		return ret;
 	}
-	ret = mdss_fb_pan_display_ex(info, &disp_commit);
-	
+	ret = mdss_fb_pan_display_ex(info, &disp_commit);	
 	return ret;
 }
 

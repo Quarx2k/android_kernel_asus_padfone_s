@@ -4753,8 +4753,7 @@ static int is_valid_calib_ctrl_addr(char __iomem *ptr)
 			break;
 		}
 
-		for (stage = 0; stage < (mdss_res->nmixers_intf +
-					 mdss_res->nmixers_wb); stage++)
+		for (stage = 0; stage < mdss_res->nmixers_intf; stage++)
 			if (ptr == base + MDSS_MDP_REG_CTL_LAYER(stage)) {
 				ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 				goto End;
@@ -4939,8 +4938,7 @@ static int is_valid_calib_mixer_addr(char __iomem *ptr)
 	int stage = 0;
 	struct mdss_mdp_mixer *mixer;
 
-	for (counter = 0; counter < (mdss_res->nmixers_intf +
-					mdss_res->nmixers_wb); counter++) {
+	for (counter = 0; counter < mdss_res->nmixers_intf; counter++) {
 		mixer = mdss_res->mixer_intf + counter;
 		base = mixer->base;
 
