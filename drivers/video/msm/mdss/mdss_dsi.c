@@ -619,6 +619,9 @@ int mdss_dsi_cont_splash_on(struct mdss_panel_data *pdata)
 	pr_debug("%s+: ctrl=%p ndx=%d\n", __func__,
 				ctrl_pdata, ctrl_pdata->ndx);
 
+	WARN((ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT),
+		"Incorrect Ctrl state=0x%x\n", ctrl_pdata->ctrl_state);
+
 	mdss_dsi_sw_reset(pdata);
 	mdss_dsi_host_init(mipi, pdata);
 	mdss_dsi_op_mode_config(mipi->mode, pdata);
