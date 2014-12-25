@@ -2406,7 +2406,6 @@ igc_config_exit:
 	mutex_unlock(&mdss_pp_mutex);
 	return ret;
 }
-
 static void pp_update_gc_one_lut(char __iomem *addr,
 		struct mdp_ar_gc_lut_data *lut_data,
 		uint8_t num_stages)
@@ -2443,7 +2442,6 @@ static void pp_update_gc_one_lut(char __iomem *addr,
 		writel_relaxed(lut_data[idx].offset, addr);
 	}
 }
-
 static void pp_update_argc_lut(char __iomem *addr,
 				struct mdp_pgc_lut_data *config)
 {
@@ -2453,7 +2451,6 @@ static void pp_update_argc_lut(char __iomem *addr,
 	addr += 0x10;
 	pp_update_gc_one_lut(addr, config->b_data, config->num_b_stages);
 }
-
 static void pp_read_gc_one_lut(char __iomem *addr,
 		struct mdp_ar_gc_lut_data *gc_data)
 {
