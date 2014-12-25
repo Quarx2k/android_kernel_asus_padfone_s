@@ -1886,23 +1886,13 @@ void mdss_mdp_set_roi(struct mdss_mdp_ctl *ctl,
 	 * 1) dual DSI panels
 	 * 2) non-cmd mode panels
 	*/
-	//Mickey+++, double check if panel data is null while system shuting-down
-	if (ctl->panel_data != NULL) {
-        if (!temp_roi.w || !temp_roi.h || ctl->mixer_right ||
-                (ctl->panel_data->panel_info.type != MIPI_CMD_PANEL) ||
-                !ctl->panel_data->panel_info.partial_update_enabled) {
-            temp_roi = (struct mdss_mdp_img_rect)
-                    {0, 0, ctl->mixer_left->width,
-                        ctl->mixer_left->height};
-        }
-	} else {
-	    if (!temp_roi.w || !temp_roi.h || ctl->mixer_right) {
-            temp_roi = (struct mdss_mdp_img_rect)
-                    {0, 0, ctl->mixer_left->width,
-                        ctl->mixer_left->height};
-	    }
+	if (!temp_roi.w || !temp_roi.h || ctl->mixer_right ||
+			(ctl->panel_data->panel_info.type != MIPI_CMD_PANEL) ||
+			!ctl->panel_data->panel_info.partial_update_enabled) {
+		temp_roi = (struct mdss_mdp_img_rect)
+				{0, 0, ctl->mixer_left->width,
+					ctl->mixer_left->height};
 	}
-	//Mickey---
 
 	ctl->roi_changed = 0;
 	if (((temp_roi.x != ctl->roi.x) ||
