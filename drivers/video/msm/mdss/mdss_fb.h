@@ -86,7 +86,6 @@ struct disp_info_notify {
 	struct mutex lock;
 	int value;
 	int is_suspend;
-	int ref_count;
 };
 
 struct msm_sync_pt_data {
