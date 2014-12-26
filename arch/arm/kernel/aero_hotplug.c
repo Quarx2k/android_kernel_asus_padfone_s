@@ -301,11 +301,6 @@ static inline void suspend_func(struct work_struct *work)
 {	 
 	int cpu;
 
-	/* cancel the hotplug work when the screen is off and flush the WQ */
-	flush_workqueue(wq);
-	cancel_delayed_work_sync(&decide_hotplug);
-	cancel_work_sync(&resume);
-
 	if (hot_data->battery_saver) {
 		for_each_online_cpu(cpu) 
 			if (cpu)
@@ -323,8 +318,6 @@ static inline void resume_func(struct work_struct *work)
 	/* Online only the second core */
 	if (hot_data->battery_saver)
 		set_cpu_up(1);
-
-	cancel_work_sync(&suspend);
 
 	/* Resetting Counters */
 	hot_data->counter[0] = 0;
@@ -471,7 +464,7 @@ int __init aero_hotplug_init(void)
 	hot_data->online_cpus = num_online_cpus();
 	hot_data->possible_cpus = num_possible_cpus();
 
-	wq = create_singlethread_workqueue("aero_hotplug_workqueue");
+	wq = alloc_workqueue("aero_hotplug_workqueue", WQ_FREEZABLE, 1);
     
 	if (!wq)
 		return -ENOMEM;
@@ -482,7 +475,7 @@ int __init aero_hotplug_init(void)
 	INIT_WORK(&suspend, suspend_func);
 #endif
 	INIT_DELAYED_WORK(&decide_hotplug, decide_hotplug_func);
-	queue_delayed_work_on(0, wq, &decide_hotplug, msecs_to_jiffies(20000));
+	queue_delayed_work_on(0, wq, &decide_hotplug, msecs_to_jiffies(30000));
 	
 	return 0;
 }
