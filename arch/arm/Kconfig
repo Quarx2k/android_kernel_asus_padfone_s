@@ -2371,6 +2371,7 @@ config CPU_FREQ_S3C24XX_DEBUGFS
 
 config AERO_HOTPLUG
 	bool "Aero simple CPU Hotplug driver"
+	depends on WQ_POWER_EFFICIENT_DEFAULT
 	help
 	  Enable a simple hotplug driver with low latency mode
 	  and fundamental low battery drainage.
