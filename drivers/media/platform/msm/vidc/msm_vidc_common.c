@@ -14,7 +14,6 @@
 #include <linux/jiffies.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/workqueue.h>
 #include <asm/div64.h>
 #include <mach/subsystem_restart.h>
 
@@ -41,6 +40,7 @@
 
 static void msm_comm_generate_session_error(struct msm_vidc_inst *inst);
 static void msm_comm_generate_sys_error(struct msm_vidc_inst *inst);
+static void handle_session_error(enum command_response cmd, void *data);
 
 static bool is_turbo_requested(struct msm_vidc_core *core,
 		enum session_type type)
@@ -430,17 +430,17 @@ void msm_vidc_queue_v4l2_event(struct msm_vidc_inst *inst, int event_type)
 
 static void msm_comm_generate_max_clients_error(struct msm_vidc_inst *inst)
 {
+	enum command_response cmd = SESSION_ERROR;
+	struct msm_vidc_cb_cmd_done response = {0};
+
 	if (!inst) {
 		dprintk(VIDC_ERR, "%s: invalid input parameters\n", __func__);
 		return;
 	}
-	mutex_lock(&inst->sync_lock);
-	inst->session = NULL;
-	inst->state = MSM_VIDC_CORE_INVALID;
-	msm_vidc_queue_v4l2_event(inst, V4L2_EVENT_MSM_VIDC_MAX_CLIENTS);
-	dprintk(VIDC_WARN,
-			"%s: Too many clients\n", __func__);
-	mutex_unlock(&inst->sync_lock);
+	dprintk(VIDC_ERR, "%s: Too many clients\n", __func__);
+	response.session_id = (u32) inst;
+	response.status = VIDC_ERR_MAX_CLIENTS;
+	handle_session_error(cmd, (void *)&response);
 }
 
 static void handle_session_init_done(enum command_response cmd, void *data)
@@ -838,19 +838,30 @@ static void handle_session_error(enum command_response cmd, void *data)
 
 	hdev = inst->core->device;
 	dprintk(VIDC_WARN, "Session error received for session %p\n", inst);
+	change_inst_state(inst, MSM_VIDC_CORE_INVALID);
 
-	mutex_lock(&inst->sync_lock);
-	inst->state = MSM_VIDC_CORE_INVALID;
-
+	mutex_lock(&inst->lock);
 	dprintk(VIDC_DBG, "cleaning up inst: %p\n", inst);
 	rc = call_hfi_op(hdev, session_clean, inst->session);
 	if (rc)
 		dprintk(VIDC_ERR, "Session (%p) clean failed: %d\n", inst, rc);
 
 	inst->session = NULL;
-	mutex_unlock(&inst->sync_lock);
+	mutex_unlock(&inst->lock);
 
-	msm_vidc_queue_v4l2_event(inst, V4L2_EVENT_MSM_VIDC_SYS_ERROR);
+	if (response->status == VIDC_ERR_MAX_CLIENTS) {
+		dprintk(VIDC_WARN,
+			"send max clients reached error to client: %p\n",
+			inst);
+		msm_vidc_queue_v4l2_event(inst,
+			V4L2_EVENT_MSM_VIDC_MAX_CLIENTS);
+	} else {
+		dprintk(VIDC_ERR,
+			"send session error to client: %p\n",
+			inst);
+		msm_vidc_queue_v4l2_event(inst,
+			V4L2_EVENT_MSM_VIDC_SYS_ERROR);
+	}
 }
 
 struct sys_err_handler_data {
@@ -1561,49 +1572,12 @@ void msm_comm_scale_clocks_and_bus(struct msm_vidc_inst *inst)
 		dprintk(VIDC_WARN,
 				"Failed to scale DDR bus. Performance might be impacted\n");
 	}
-	if (core->resources.has_ocmem) {
+	if (core->resources.ocmem_size) {
 		if (msm_comm_scale_bus(core, inst->session_type,
 					OCMEM_MEM))
 			dprintk(VIDC_WARN,
 					"Failed to scale OCMEM bus. Performance might be impacted\n");
 	}
-}
-
-static int msm_comm_unset_ocmem(struct msm_vidc_core *core)
-{
-	int rc = 0;
-	struct hfi_device *hdev;
-
-	if (!core || !core->device) {
-		dprintk(VIDC_ERR, "%s invalid parameters", __func__);
-		return -EINVAL;
-	}
-	hdev = core->device;
-
-	if (core->state == VIDC_CORE_INVALID) {
-		dprintk(VIDC_ERR,
-				"Core is in bad state. Cannot unset ocmem\n");
-		return -EIO;
-	}
-
-	init_completion(
-		&core->completions[SYS_MSG_INDEX(RELEASE_RESOURCE_DONE)]);
-
-	rc = call_hfi_op(hdev, unset_ocmem, hdev->hfi_device_data);
-	if (rc) {
-		dprintk(VIDC_INFO, "Failed to unset OCMEM on driver\n");
-		goto release_ocmem_failed;
-	}
-	rc = wait_for_completion_timeout(
-		&core->completions[SYS_MSG_INDEX(RELEASE_RESOURCE_DONE)],
-		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
-	if (!rc) {
-		dprintk(VIDC_ERR, "%s: Wait interrupted or timeout: %d\n",
-			__func__, SYS_MSG_INDEX(RELEASE_RESOURCE_DONE));
-		rc = -EIO;
-	}
-release_ocmem_failed:
-	return rc;
 }
 
 static int msm_comm_init_core_done(struct msm_vidc_inst *inst)
@@ -1669,6 +1643,7 @@ static int msm_comm_init_core(struct msm_vidc_inst *inst)
 			goto fail_load_fw;
 		}
 		core->state = VIDC_CORE_LOADED;
+		dprintk(VIDC_DBG, "Firmware downloaded\n");
 	}
 	mutex_unlock(&core->lock);
 
@@ -1706,7 +1681,6 @@ fail_scale_bus:
 
 static int msm_vidc_deinit_core(struct msm_vidc_inst *inst)
 {
-	int rc = 0;
 	struct msm_vidc_core *core;
 	struct hfi_device *hdev;
 
@@ -1730,38 +1704,27 @@ static int msm_vidc_deinit_core(struct msm_vidc_inst *inst)
 
 	mutex_lock(&core->lock);
 	if (list_empty(&core->instances)) {
-		if (core->state > VIDC_CORE_INIT) {
-			if (core->resources.has_ocmem) {
-				if (inst->state != MSM_VIDC_CORE_INVALID)
-					msm_comm_unset_ocmem(core);
-				call_hfi_op(hdev, free_ocmem,
-						hdev->hfi_device_data);
-			}
-			dprintk(VIDC_DBG, "Calling vidc_hal_core_release\n");
-			rc = call_hfi_op(hdev, core_release,
-					hdev->hfi_device_data);
-			if (rc) {
-				dprintk(VIDC_ERR,
-					"Failed to release core, id = %d\n",
-					core->id);
-				goto exit;
-			}
-		}
+		cancel_delayed_work(&core->fw_unload_work);
 
-		core->state = VIDC_CORE_UNINIT;
+		/*
+		* Delay unloading of firmware. This is useful
+		* in avoiding firmware download delays in cases where we
+		* will have a burst of back to back video playback sessions
+		* e.g. thumbnail generation.
+		*/
+		schedule_delayed_work(&core->fw_unload_work,
+			msecs_to_jiffies(core->state == VIDC_CORE_INVALID ?
+					0 : msm_vidc_firmware_unload_delay));
 
-		call_hfi_op(hdev, unload_fw, hdev->hfi_device_data);
-		if (core->resources.has_ocmem)
-			msm_comm_unvote_buses(core, DDR_MEM|OCMEM_MEM);
-		else
-			msm_comm_unvote_buses(core, DDR_MEM);
+		dprintk(VIDC_DBG, "firmware unload delayed by %u ms\n",
+			core->state == VIDC_CORE_INVALID ?
+			0 : msm_vidc_firmware_unload_delay);
 	}
 
 core_already_uninited:
 	change_inst_state(inst, MSM_VIDC_CORE_UNINIT);
-exit:
 	mutex_unlock(&core->lock);
-	return rc;
+	return 0;
 }
 
 int msm_comm_force_cleanup(struct msm_vidc_inst *inst)
@@ -1912,7 +1875,6 @@ static int msm_vidc_load_resources(int flipped_state,
 	int rc = 0;
 	struct hfi_device *hdev;
 	int num_mbs_per_sec = 0;
-	int height, width;
 
 	if (!inst || !inst->core || !inst->core->device) {
 		dprintk(VIDC_ERR, "%s invalid parameters", __func__);
@@ -1949,29 +1911,7 @@ static int msm_vidc_load_resources(int flipped_state,
 						inst, inst->state);
 		goto exit;
 	}
-	if (inst->core->resources.has_ocmem) {
-		height = max(inst->prop.height[CAPTURE_PORT],
-			inst->prop.height[OUTPUT_PORT]);
-		width = max(inst->prop.width[CAPTURE_PORT],
-			inst->prop.width[OUTPUT_PORT]);
-		rc = msm_comm_scale_bus(inst->core, inst->session_type,
-					OCMEM_MEM);
-		if (!rc) {
-			mutex_lock(&inst->core->lock);
-			rc = call_hfi_op(hdev, alloc_ocmem,
-					hdev->hfi_device_data,
-					inst->core->resources.has_ocmem);
-			mutex_unlock(&inst->core->lock);
-			if (rc) {
-				dprintk(VIDC_WARN,
-				"Failed to allocate OCMEM. Performance will be impacted\n");
-				msm_comm_unvote_buses(inst->core, OCMEM_MEM);
-			}
-		} else {
-			dprintk(VIDC_WARN,
-			"Failed to vote for OCMEM BW. Performance will be impacted\n");
-		}
-	}
+
 	rc = call_hfi_op(hdev, session_load_res, (void *) inst->session);
 	if (rc) {
 		dprintk(VIDC_ERR,
@@ -2605,13 +2545,6 @@ int msm_comm_qbuf(struct vb2_buffer *vb)
 			mutex_unlock(&inst->sync_lock);
 	} else {
 		int64_t time_usec = timeval_to_ns(&vb->v4l2_buf.timestamp);
-
-		rc = msm_vidc_check_session_supported(inst);
-		if (rc) {
-			dprintk(VIDC_ERR,
-				"%s: session not supported\n", __func__);
-			goto err_no_mem;
-		}
 		do_div(time_usec, NSEC_PER_USEC);
 		memset(&frame_data, 0 , sizeof(struct vidc_frame_data));
 		frame_data.alloc_len = vb->v4l2_planes[0].length;
@@ -2877,9 +2810,8 @@ int msm_comm_release_scratch_buffers(struct msm_vidc_inst *inst)
 				rc = wait_for_sess_signal_receipt(inst,
 					SESSION_RELEASE_BUFFER_DONE);
 				if (rc) {
-					mutex_lock(&inst->sync_lock);
-					inst->state = MSM_VIDC_CORE_INVALID;
-					mutex_unlock(&inst->sync_lock);
+					change_inst_state(inst,
+						MSM_VIDC_CORE_INVALID);
 					msm_comm_kill_session(inst);
 				}
 				mutex_lock(&inst->lock);
@@ -2947,9 +2879,8 @@ int msm_comm_release_persist_buffers(struct msm_vidc_inst *inst)
 				rc = wait_for_sess_signal_receipt(inst,
 					SESSION_RELEASE_BUFFER_DONE);
 				if (rc) {
-					mutex_lock(&inst->sync_lock);
-					inst->state = MSM_VIDC_CORE_INVALID;
-					mutex_unlock(&inst->sync_lock);
+					change_inst_state(inst,
+						MSM_VIDC_CORE_INVALID);
 					msm_comm_kill_session(inst);
 				}
 				mutex_lock(&inst->lock);
@@ -3537,20 +3468,14 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 				capability->height.min);
 			rc = -ENOTSUPP;
 		}
-		if (msm_vp8_low_tier &&
-			inst->fmts[OUTPUT_PORT]->fourcc == V4L2_PIX_FMT_VP8) {
-			capability->width.max = DEFAULT_WIDTH;
-			capability->width.max = DEFAULT_HEIGHT;
-		}
 		if (!rc && (inst->prop.width[CAPTURE_PORT] >
 			capability->width.max)) {
 			dprintk(VIDC_ERR,
-				"Unsupported width = %u supported max width = %u\n",
+				"Unsupported width = %u supported max width = %u",
 				inst->prop.width[CAPTURE_PORT],
 				capability->width.max);
 				rc = -ENOTSUPP;
 		}
-
 		if (!rc && (inst->prop.height[CAPTURE_PORT]
 			* inst->prop.width[CAPTURE_PORT] >
 			capability->width.max * capability->height.max)) {
@@ -3563,9 +3488,7 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 		}
 	}
 	if (rc) {
-		mutex_lock(&inst->sync_lock);
-		inst->state = MSM_VIDC_CORE_INVALID;
-		mutex_unlock(&inst->sync_lock);
+		change_inst_state(inst, MSM_VIDC_CORE_INVALID);
 		msm_vidc_queue_v4l2_event(inst,
 					V4L2_EVENT_MSM_VIDC_HW_OVERLOAD);
 		dprintk(VIDC_WARN,
@@ -3580,12 +3503,14 @@ static void msm_comm_generate_session_error(struct msm_vidc_inst *inst)
 	enum command_response cmd = SESSION_ERROR;
 	struct msm_vidc_cb_cmd_done response = {0};
 
+	dprintk(VIDC_WARN, "msm_comm_generate_session_error\n");
 	if (!inst || !inst->core) {
 		dprintk(VIDC_ERR, "%s: invalid input parameters\n", __func__);
 		return;
 	}
 
 	response.session_id = (u32)inst;
+	response.status = VIDC_ERR_FAIL;
 	handle_session_error(cmd, (void *)&response);
 }
 
@@ -3621,7 +3546,7 @@ int msm_comm_kill_session(struct msm_vidc_inst *inst)
 	 * the session send session_abort to firmware to clean up and release
 	 * the session, else just kill the session inside the driver.
 	 */
-	if (inst->state >= MSM_VIDC_OPEN_DONE ||
+	if (inst->state >= MSM_VIDC_OPEN_DONE &&
 			inst->state < MSM_VIDC_CLOSE_DONE) {
 		struct hfi_device *hdev = inst->core->device;
 		int abort_completion = SESSION_MSG_INDEX(SESSION_ABORT_DONE);
@@ -3735,4 +3660,46 @@ int msm_comm_smem_get_domain_partition(struct msm_vidc_inst *inst,
 	}
 	return msm_smem_get_domain_partition(inst->mem_client, flags,
 			buffer_type, domain_num, partition_num);
+}
+
+void msm_vidc_fw_unload_handler(struct work_struct *work)
+{
+	struct msm_vidc_core *core = NULL;
+	struct hfi_device *hdev = NULL;
+	int rc = 0;
+
+	core = container_of(work, struct msm_vidc_core, fw_unload_work.work);
+	if (!core || !core->device) {
+		dprintk(VIDC_ERR, "%s - invalid work or core handle\n",
+				__func__);
+		return;
+	}
+
+	hdev = core->device;
+
+	mutex_lock(&core->lock);
+	if (list_empty(&core->instances) &&
+		core->state != VIDC_CORE_UNINIT) {
+		if (core->state > VIDC_CORE_INIT) {
+			dprintk(VIDC_DBG, "Calling vidc_hal_core_release\n");
+			rc = call_hfi_op(hdev, core_release,
+					hdev->hfi_device_data);
+			if (rc) {
+				dprintk(VIDC_ERR,
+					"Failed to release core, id = %d\n",
+					core->id);
+				return;
+			}
+		}
+
+		core->state = VIDC_CORE_UNINIT;
+
+		call_hfi_op(hdev, unload_fw, hdev->hfi_device_data);
+		dprintk(VIDC_DBG, "Firmware unloaded\n");
+		if (core->resources.ocmem_size)
+			msm_comm_unvote_buses(core, DDR_MEM|OCMEM_MEM);
+		else
+			msm_comm_unvote_buses(core, DDR_MEM);
+	}
+	mutex_unlock(&core->lock);
 }

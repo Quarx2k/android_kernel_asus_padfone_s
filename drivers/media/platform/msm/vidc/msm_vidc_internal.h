@@ -20,6 +20,7 @@
 #include <linux/types.h>
 #include <linux/completion.h>
 #include <linux/wait.h>
+#include <linux/workqueue.h>
 #include <mach/msm_bus.h>
 #include <mach/msm_bus_board.h>
 #include <mach/ocmem.h>
@@ -214,6 +215,7 @@ struct msm_vidc_core {
 	struct msm_vidc_platform_resources resources;
 	u32 enc_codec_supported;
 	u32 dec_codec_supported;
+	struct delayed_work fw_unload_work;
 };
 
 struct msm_vidc_inst {
@@ -253,6 +255,7 @@ struct msm_vidc_inst {
 	enum buffer_mode_type buffer_mode_set[MAX_PORT_NUM];
 	struct list_head registered_bufs;
 	bool map_output_buffer;
+	struct v4l2_ctrl **ctrls;
 };
 
 extern struct msm_vidc_drv *vidc_driver;
@@ -272,7 +275,6 @@ struct msm_vidc_ctrl {
 	u32 step;
 	u32 menu_skip_mask;
 	const char * const *qmenu;
-	struct v4l2_ctrl *priv;
 };
 
 void handle_cmd_response(enum command_response cmd, void *data);
@@ -312,4 +314,5 @@ int qbuf_dynamic_buf(struct msm_vidc_inst *inst,
 			struct buffer_info *binfo);
 int unmap_and_deregister_buf(struct msm_vidc_inst *inst,
 			struct buffer_info *binfo);
+void msm_vidc_fw_unload_handler(struct work_struct *work);
 #endif
