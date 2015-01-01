@@ -2751,8 +2751,14 @@ int msm_venc_g_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 				inst->bufq[OUTPUT_PORT].vb2_bufq.
 				plane_sizes[i] =
 				f->fmt.pix_mp.plane_fmt[i].sizeimage;
+				inst->bufq[CAPTURE_PORT].vb2_bufq.
+				plane_sizes[i] =
+				f->fmt.pix_mp.plane_fmt[i].sizeimage;
 			} else if (f->type ==
 				V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+				inst->bufq[OUTPUT_PORT].vb2_bufq.
+				plane_sizes[i] =
+				f->fmt.pix_mp.plane_fmt[i].sizeimage;
 				inst->bufq[CAPTURE_PORT].vb2_bufq.
 				plane_sizes[i] =
 				f->fmt.pix_mp.plane_fmt[i].sizeimage;
