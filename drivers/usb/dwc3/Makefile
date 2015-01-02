@@ -1,4 +1,4 @@
-ccflags-$(CONFIG_USB_DWC3_DEBUG)	:= -DDEBUG
+ccflags-y := -DDEBUG
 ccflags-$(CONFIG_USB_DWC3_VERBOSE)	+= -DVERBOSE_DEBUG
 ccflags-y += -Idrivers/usb/host
 ccflags-y += -Idrivers/base/power

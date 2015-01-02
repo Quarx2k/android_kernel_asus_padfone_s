@@ -80,7 +80,6 @@ struct dwc3_charger {
 	enum dwc3_chg_type	chg_type;
 	unsigned		max_power;
 	bool			charging_disabled;
-
 	bool			skip_chg_detect;
 
 	/* start/stop charger detection, provided by external charger module */
@@ -105,6 +104,14 @@ enum dwc3_id_state {
 	DWC3_ID_FLOAT,
 };
 
+enum dwc3_usb_mode_type {
+	DWC3_USB_NONE = 0,
+	DWC3_USB_PERIPHERAL,
+	DWC3_USB_HOST,
+	DWC3_USB_OTG,
+	DWC3_USB_AUTO,
+};
+
 /* external transceiver that can perform connect/disconnect monitoring in LPM */
 struct dwc3_ext_xceiv {
 	enum dwc3_id_state	id;
@@ -123,4 +130,5 @@ struct dwc3_ext_xceiv {
 extern int dwc3_set_ext_xceiv(struct usb_otg *otg,
 				struct dwc3_ext_xceiv *ext_xceiv);
 
+extern int dp_registerCarkitInOutNotificaition(void (*callback)(int));
 #endif /* __LINUX_USB_DWC3_OTG_H */

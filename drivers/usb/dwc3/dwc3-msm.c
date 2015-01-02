@@ -52,6 +52,8 @@
 #include "gadget.h"
 #include "debug.h"
 
+static struct dwc3_msm *context;
+
 /* ADC threshold values */
 static int adc_low_threshold = 700;
 module_param(adc_low_threshold, int, S_IRUGO | S_IWUSR);
@@ -1501,6 +1503,38 @@ static void dwc3_msm_qscratch_reg_init(struct dwc3_msm *mdwc,
 		dwc3_msm_read_reg(mdwc->base, QSCRATCH_CTRL_REG);
 }
 
+void asus_dwc3_mode_switch(enum dwc3_usb_mode_type req_mode)
+{
+	struct dwc3_msm *mdwc = context;
+
+	switch (req_mode) {
+	case DWC3_USB_NONE:
+		printk("[usb_dwc3] switch to none mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		mdwc->ext_xceiv.bsv = false;
+		break;
+	case DWC3_USB_PERIPHERAL:
+		printk("[usb_dwc3] switch to peripheral mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		break;
+	case DWC3_USB_HOST:
+		printk("[usb_dwc3] switch to host mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_GROUND;
+		break;
+	case DWC3_USB_AUTO:
+		printk("[usb_dwc3] switch to peripheral mode (auto)\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		break;
+	default:
+		printk("[usb_dwc3] unknown mode!!! (%d)\r\n", req_mode);
+		goto out;
+	}
+
+	queue_delayed_work(system_nrt_wq,&mdwc->resume_work, 0);
+out:
+	return;
+}
+
 static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
@@ -2708,6 +2742,24 @@ unreg_chrdev:
 	return ret;
 }
 
+#ifdef CONFIG_SLIMPORT_ANX7808
+static void asus_dwc3_set_id_state(int online);
+#endif
+
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+#ifdef CONFIG_SLIMPORT_ANX7808
+static void asus_dwc3_set_id_state(int online)
+{
+	if (online) {
+		printk("[usb_dwc3] OTG ID in\n");
+		asus_dwc3_mode_switch(DWC3_USB_HOST);
+	} else {
+		printk("[usb_dwc3] OTG ID out\n");
+		asus_dwc3_mode_switch(DWC3_USB_PERIPHERAL);
+	}
+}
+#endif
+
 static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
@@ -2726,6 +2778,9 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, mdwc);
+
+	context = mdwc;
+
 	mdwc->dev = &pdev->dev;
 
 	INIT_LIST_HEAD(&mdwc->req_complete_list);
@@ -3131,7 +3186,9 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 		if (ret)
 			dev_err(&pdev->dev, "Fail to setup dwc3 setup cdev\n");
 	}
-
+#ifdef CONFIG_SLIMPORT_ANX7808
+	dp_registerCarkitInOutNotificaition(&asus_dwc3_set_id_state);
+#endif
 	device_init_wakeup(mdwc->dev, 1);
 	pm_stay_awake(mdwc->dev);
 	dwc3_msm_debugfs_init(mdwc);
