@@ -1966,9 +1966,10 @@ static void iCtach_flash_status_restore(void)
 static void iCatch_torch_off_work(struct work_struct *work)
 {
 	pr_info("%s E\n",__func__);
-       led_pmic_torch_enable(false,false);
+	if (g_flash_mode != 3) 
+		led_pmic_torch_enable(false,false);
        //led_pmic_flash_enable(true,true);
-       iCtach_flash_status_restore();
+	iCtach_flash_status_restore();
 	pr_info("%s X\n",__func__);
 	return;
 }
@@ -4368,22 +4369,23 @@ void iCatch_set_led_mode(int16_t mode)
     switch(mode)
     {
         case CAM_FLASH_MODE_ON: 
-            // pr_info("jim CAM_FLASH_MODE_ON");
+            pr_info("jim CAM_FLASH_MODE_ON");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x02);
             g_flash_mode = 1;
             break;
         case CAM_FLASH_MODE_OFF: 
-            // pr_info("jim CAM_FLASH_MODE_OFF");
+            pr_info("jim CAM_FLASH_MODE_OFF");
+            led_pmic_torch_enable(false, false);
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x01);
             g_flash_mode = 0;
             break;
         case CAM_FLASH_MODE_AUTO: 
-            // pr_info("jim CAM_FLASH_MODE_AUTO");
+            pr_info("jim CAM_FLASH_MODE_AUTO");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x00);
             g_flash_mode = 2;
             break;
         case CAM_FLASH_MODE_TORCH: 
-            // pr_info("jim CAM_FLASH_MODE_TORCH");
+            pr_info("jim CAM_FLASH_MODE_TORCH");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x04);
             g_flash_mode = 3;
             break;
