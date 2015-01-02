@@ -631,7 +631,6 @@ struct dwc3_request {
 
 	u8			epnum;
 	struct dwc3_trb		*trb;
-	struct dwc3_trb		*ztrb;
 	dma_addr_t		trb_dma;
 
 	unsigned		direction:1;

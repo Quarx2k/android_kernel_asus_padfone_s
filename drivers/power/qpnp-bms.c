@@ -28,11 +28,6 @@
 #include <linux/qpnp/power-on.h>
 #include <linux/of_batterydata.h>
 
-//ASUS_BSP lenter +++
-#include <linux/proc_fs.h>
-#include <linux/asus_bat.h>
-//ASUS_BSP lenter ---
-
 /* BMS Register Offsets */
 #define REVISION1			0x0
 #define REVISION2			0x1
@@ -317,21 +312,6 @@ static int discard_backup_fcc_data(struct qpnp_bms_chip *chip);
 static void backup_charge_cycle(struct qpnp_bms_chip *chip);
 
 static bool bms_reset;
-
-//ASUS_BSP lenter +++
-struct qpnp_bms_chip *g_qpnp_bms_chip;
-
-#ifdef CONFIG_PM_8941_CHARGER
-extern int pm8941_get_prop_batt_temp(void);
-extern int pm8941_get_prop_battery_voltage_now(void);
-//Eason don't calculate BMS actively, only read+++
-static int g_bms_fcc;
-static int g_bms_uuc;
-static int g_bms_ocv_charge;
-static int g_bms_cc;
-//Eason don't calculate BMS actively, only read---
-#endif
-//ASUS_BSP lenter ---
 
 static int qpnp_read_wrapper(struct qpnp_bms_chip *chip, u8 *val,
 			u16 base, int count)
@@ -980,15 +960,16 @@ static void reset_for_new_battery(struct qpnp_bms_chip *chip, int batt_temp)
 static int find_ocv_for_pc(struct qpnp_bms_chip *chip, int batt_temp, int pc)
 {
 	int new_pc;
+	int batt_temp_degc = batt_temp / 10;
 	int ocv_mv;
 	int delta_mv = 5;
 	int max_spin_count;
 	int count = 0;
 	int sign, new_sign;
 
-	ocv_mv = interpolate_ocv(chip->pc_temp_ocv_lut, batt_temp, pc);
+	ocv_mv = interpolate_ocv(chip->pc_temp_ocv_lut, batt_temp_degc, pc);
 
-	new_pc = interpolate_pc(chip->pc_temp_ocv_lut, batt_temp, ocv_mv);
+	new_pc = interpolate_pc(chip->pc_temp_ocv_lut, batt_temp_degc, ocv_mv);
 	pr_debug("test revlookup pc = %d for ocv = %d\n", new_pc, ocv_mv);
 	max_spin_count = 1 + (chip->max_voltage_uv - chip->v_cutoff_uv)
 						/ UV_PER_SPIN;
@@ -1019,7 +1000,7 @@ static int find_ocv_for_pc(struct qpnp_bms_chip *chip, int batt_temp, int pc)
 
 		ocv_mv = ocv_mv + delta_mv * sign;
 		new_pc = interpolate_pc(chip->pc_temp_ocv_lut,
-				batt_temp, ocv_mv);
+				batt_temp_degc, ocv_mv);
 		pr_debug("test revlookup pc = %d for ocv = %d\n",
 			new_pc, ocv_mv);
 		count++;
@@ -1039,29 +1020,17 @@ static int read_soc_params_raw(struct qpnp_bms_chip *chip,
 	mutex_lock(&chip->bms_output_lock);
 
 	lock_output_data(chip);
-	
+
 	rc = qpnp_read_wrapper(chip, (u8 *)&raw->last_good_ocv_raw,
 			chip->base + BMS1_OCV_FOR_SOC_DATA0, 2);
 	if (rc) {
-		unlock_output_data(chip);
-		mutex_unlock(&chip->bms_output_lock);
 		pr_err("Error reading ocv: rc = %d\n", rc);
 		return -ENXIO;
 	}
 
 	rc = read_cc_raw(chip, &raw->cc, CC);
-	if (rc) {
-		unlock_output_data(chip);
-		mutex_unlock(&chip->bms_output_lock);
-		pr_err("Failed to read raw cc data, rc = %d\n", rc);
-		return rc;
-	}
-	
 	rc = read_cc_raw(chip, &raw->shdw_cc, SHDW_CC);
 	if (rc) {
-		
-		unlock_output_data(chip);
-		mutex_unlock(&chip->bms_output_lock);
 		pr_err("Failed to read raw cc data, rc = %d\n", rc);
 		return rc;
 	}
@@ -1129,7 +1098,7 @@ static int calculate_pc(struct qpnp_bms_chip *chip, int ocv_uv,
 	int pc;
 
 	pc = interpolate_pc(chip->pc_temp_ocv_lut,
-			batt_temp, ocv_uv / 1000);
+			batt_temp / 10, ocv_uv / 1000);
 	pr_debug("pc = %u %% for ocv = %d uv batt_temp = %d\n",
 					pc, ocv_uv, batt_temp);
 	/* Multiply the initial FCC value by the scale factor. */
@@ -1252,6 +1221,7 @@ static int get_rbatt(struct qpnp_bms_chip *chip,
 		return rbatt_mohm;
 	}
 	/* Convert the batt_temp to DegC from deciDegC */
+	batt_temp = batt_temp / 10;
 	scalefactor = interpolate_scalingfactor(chip->rbatt_sf_lut,
 						batt_temp, soc_rbatt_mohm);
 	rbatt_mohm = (rbatt_mohm * scalefactor) / 100;
@@ -1295,6 +1265,7 @@ static int calculate_termination_uuc(struct qpnp_bms_chip *chip,
 	int unusable_uv, pc_unusable, uuc_uah;
 	int i = 0;
 	int ocv_mv;
+	int batt_temp_degc = batt_temp / 10;
 	int rbatt_mohm;
 	int delta_uv;
 	int prev_delta_uv = 0;
@@ -1303,7 +1274,7 @@ static int calculate_termination_uuc(struct qpnp_bms_chip *chip,
 
 	for (i = 0; i <= 100; i++) {
 		ocv_mv = interpolate_ocv(chip->pc_temp_ocv_lut,
-				batt_temp, i);
+				batt_temp_degc, i);
 		rbatt_mohm = get_rbatt(chip, i, batt_temp);
 		unusable_uv = (rbatt_mohm * uuc_iavg_ma)
 							+ (chip->v_cutoff_uv);
@@ -1340,6 +1311,7 @@ static int adjust_uuc(struct qpnp_bms_chip *chip,
 			int batt_temp)
 {
 	int new_unusable_mv, new_iavg_ma;
+	int batt_temp_degc = batt_temp / 10;
 	int max_percent_change;
 
 	max_percent_change = max(params->delta_time_s
@@ -1362,7 +1334,7 @@ static int adjust_uuc(struct qpnp_bms_chip *chip,
 
 	/* also find update the iavg_ma accordingly */
 	new_unusable_mv = interpolate_ocv(chip->pc_temp_ocv_lut,
-			batt_temp, chip->prev_pc_unusable);
+			batt_temp_degc, chip->prev_pc_unusable);
 	if (new_unusable_mv < chip->v_cutoff_uv/1000)
 		new_unusable_mv = chip->v_cutoff_uv/1000;
 
@@ -1634,19 +1606,6 @@ static void calculate_soc_params(struct qpnp_bms_chip *chip,
 	params->uuc_uah = calculate_unusable_charge_uah(chip, params,
 							batt_temp);
 	pr_debug("UUC = %uuAh\n", params->uuc_uah);
-
-	//Eason don't calculate BMS actively, only read+++
-#ifdef CONFIG_PM_8941_CHARGER
-	g_bms_fcc = params->fcc_uah;
-	g_bms_uuc = params->uuc_uah;
-	g_bms_ocv_charge = params->ocv_charge_uah;
-	g_bms_cc = params->cc_uah;
-#endif
-	//Eason don't calculate BMS actively, only read---
-	//ASUS_BSP Eason add BMS log+++
-	printk("[BAT][BMS]FCC:%d, OCV:%d, CC:%d, UUC:%d, temp:%d, rbatt:%d\n"
-			,params->fcc_uah, params->ocv_charge_uah, params->cc_uah, params->uuc_uah, batt_temp, params->rbatt_mohm);
-	//ASUS_BSP Eason add BMS log---
 }
 
 static int bound_soc(int soc)
@@ -2572,26 +2531,19 @@ static int recalculate_raw_soc(struct qpnp_bms_chip *chip)
 			batt_temp = (int)result.physical;
 
 			mutex_lock(&chip->last_ocv_uv_mutex);
-			rc = read_soc_params_raw(chip, &raw, batt_temp);
-			if(rc)
-			{		
-				soc = chip->calculated_soc;
-			}
-			else
-			{
-				calculate_soc_params(chip, &raw, &params, batt_temp);
-				if (!is_battery_present(chip)) {
-					pr_debug("battery gone\n");
-					soc = 0;
-				} else if (params.fcc_uah - params.uuc_uah <= 0) {
-					pr_debug("FCC = %duAh, UUC = %duAh forcing soc = 0\n",
-								params.fcc_uah,
-								params.uuc_uah);
-					soc = 0;
-				} else {
-					soc = calculate_raw_soc(chip, &raw,
-								&params, batt_temp);
-				}
+			read_soc_params_raw(chip, &raw, batt_temp);
+			calculate_soc_params(chip, &raw, &params, batt_temp);
+			if (!is_battery_present(chip)) {
+				pr_debug("battery gone\n");
+				soc = 0;
+			} else if (params.fcc_uah - params.uuc_uah <= 0) {
+				pr_debug("FCC = %duAh, UUC = %duAh forcing soc = 0\n",
+							params.fcc_uah,
+							params.uuc_uah);
+				soc = 0;
+			} else {
+				soc = calculate_raw_soc(chip, &raw,
+							&params, batt_temp);
 			}
 			mutex_unlock(&chip->last_ocv_uv_mutex);
 		}
@@ -2631,15 +2583,8 @@ static int recalculate_soc(struct qpnp_bms_chip *chip)
 			batt_temp = (int)result.physical;
 
 			mutex_lock(&chip->last_ocv_uv_mutex);
-			rc = read_soc_params_raw(chip, &raw, batt_temp);
-			if (rc) 
-			{
-				soc = chip->calculated_soc;
-			}
-			else
-			{
-				soc = calculate_state_of_charge(chip, &raw, batt_temp);
-			}
+			read_soc_params_raw(chip, &raw, batt_temp);
+			soc = calculate_state_of_charge(chip, &raw, batt_temp);
 			mutex_unlock(&chip->last_ocv_uv_mutex);
 		}
 	}
@@ -3180,7 +3125,7 @@ static void fcc_learning_config(struct qpnp_bms_chip *chip, bool start)
 
 	if (start) {
 		chip->start_pc = interpolate_pc(chip->pc_temp_ocv_lut,
-			batt_temp, raw.last_good_ocv_uv / 1000);
+			batt_temp / 10, raw.last_good_ocv_uv / 1000);
 		chip->start_cc_uah = calculate_cc(chip, raw.cc, CC, NORESET);
 		chip->start_real_soc = calculate_real_soc(chip,
 				batt_temp, &raw, chip->start_cc_uah);
@@ -3660,8 +3605,7 @@ static int set_battery_data(struct qpnp_bms_chip *chip)
 	} else if (chip->batt_type == BATT_OEM) {
 		batt_data = &oem_batt_data;
 	} else if (chip->batt_type == BATT_QRD_4V35_2000MAH) {
-		//batt_data = &ASUS_A86_2320mAh_data;//Eason use A86 bat table
-		batt_data = &ASUS_A91_2215mAh_data;//Eason use A91 bat table
+		batt_data = &QRD_4v35_2000mAh_data;
 	} else if (chip->batt_type == BATT_QRD_4V2_1300MAH) {
 		batt_data = &qrd_4v2_1300mah_data;
 	} else {
@@ -4205,149 +4149,6 @@ static int setup_die_temp_monitoring(struct qpnp_bms_chip *chip)
 	return 0;
 }
 
-//ASUS_BSP lenter +++
-static ssize_t bat_current_read_proc(char *page, char **start, off_t off, int count, 
-            	int *eof, void *data)
-{
-	int current_value;
-	
-	current_value = get_prop_bms_current_now(g_qpnp_bms_chip);
-	current_value = -current_value;
-	current_value = current_value/1000;
-	return sprintf(page, "%d\n", current_value);
-}
-
-void static create_bat_current_proc(void)
-{
-	struct proc_dir_entry *bat_current_proc_file = create_proc_entry("driver/bat_current", 0644, NULL);
-
-	if (bat_current_proc_file) {
-		bat_current_proc_file->read_proc = bat_current_read_proc;
-	}
-    else {
-		printk("[BAT]proc file create failed!\n");
-    }
-
-	return;
-}
-
-//Eason: A91 TLT add pad cap+++
-#ifdef CONFIG_EEPROM_NUVOTON
-#include <linux/microp_api.h>
-#include <linux/microp.h> 
-extern int uP_nuvoton_read_reg(int cmd, void *data);
-#endif
-extern int BatteryServiceReportPADCAP(void);
-#define PAD_BAT  0
-//Eason: A91 TLT add pad cap---
-#ifdef CONFIG_PM_8941_CHARGER
-//Eason: A91 get SWgauge percent now+++
-extern int get_temp_for_ASUSswgauge(void);
-extern int get_voltage_for_ASUSswgauge(void);
-extern int get_current_for_ASUSswgauge(void);
-extern int cal_SWgauge_capacity(void);
-//Eason: A91 get SWgauge percent now---
-static ssize_t pm8941_dump_read_proc(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-	int batt_temp;
-	//struct raw_soc_params raw;
-	//struct soc_params params;
-	#ifdef CONFIG_EEPROM_NUVOTON
-	//Eason: A91 TLT add pad cap+++
-	int P_gauge;
-	int16_t P_voltage;
-	int16_t P_current;
-
-
-	if(1==AX_MicroP_IsP01Connected())
-	{
-		P_gauge = AX_MicroP_readBattCapacity(PAD_BAT);
-		uP_nuvoton_read_reg(MICROP_GAUGE_VOLTAGE,&P_voltage);
-		uP_nuvoton_read_reg(MICROP_GAUGE_AVG_CURRENT,&P_current);
-	}else{
-		P_gauge = -1;
-		P_voltage = 1;
-		P_current = -1;
-	}
-	#endif		
-	//Eason: A91 TLT add pad cap---
-	
-	batt_temp = pm8941_get_prop_batt_temp();
-	//Eason don't calculate BMS actively, only read+++
-	//read_soc_params_raw(g_qpnp_bms_chip, &raw, batt_temp);
-	//calculate_soc_params(g_qpnp_bms_chip, &raw, &params, batt_temp);
-	//Eason don't calculate BMS actively, only read---
-	
-	return sprintf(page, "FCC(mAh): %d\n"
-						"RM(mAh): %d\n"
-						"SOC: %d\n"
-						"VOLT(mV): %d\n"
-						"AI(mA): %d\n"
-						"TEMP(degC): %d\n"
-						"BMS: %d\n"
-						"SWgauge: %d\n"
-						"Pad_Cap: %d\n"
-	#ifdef CONFIG_EEPROM_NUVOTON
-						"P_gauge: %d\n"
-						"P_voltage: %d\n"
-						"P_current: %d\n"
-	#endif
-						, g_bms_fcc - g_bms_uuc
-						, g_bms_ocv_charge - g_bms_cc - g_bms_uuc
-						, asus_bat_report_phone_capacity(100)
-						, get_voltage_for_ASUSswgauge()
-						, get_current_for_ASUSswgauge()
-						, batt_temp
-						, get_prop_bms_capacity(g_qpnp_bms_chip)
-						, cal_SWgauge_capacity()
-						, BatteryServiceReportPADCAP()
-	#ifdef CONFIG_EEPROM_NUVOTON
-						, P_gauge
-						, P_voltage
-						, P_current
-	#endif
-						);
-}
-
-void static create_pm8941_dump_proc_file(void)
-{
-	struct proc_dir_entry *PM8941Dump_proc_file = create_proc_entry("driver/bq27520_test_info_dump", 0444, NULL);
-
-	if (PM8941Dump_proc_file) {
-		PM8941Dump_proc_file->read_proc = pm8941_dump_read_proc;
-	}
-	else {
-		printk("[BAT][GAU][TI][Proc]PM8941_dump proc file create failed!\n");
-	}
-
-	return;
-}
-
-static ssize_t pm8941_temp_read_proc(char *page, char **start, off_t off, int count, 
-            	int *eof, void *data)
-{
-	int batt_temp;
-	
-	batt_temp = pm8941_get_prop_batt_temp();
-	return sprintf(page, "%d\n", batt_temp);
-}
-
-void static create_pm8941_temp_proc_file(void)
-{
-	struct proc_dir_entry *PM8941Temp_proc_file = create_proc_entry("driver/BatTemp", 0644, NULL);
-
-	if (PM8941Temp_proc_file) {
-		PM8941Temp_proc_file->read_proc = pm8941_temp_read_proc;
-	}
-	else {
-		printk("[BAT][GAU][TI][Proc]PM8941Temp proc file create failed!\n");
-	}
-
-	return;
-}
-#endif
-//ASUS_BSP lenter ---
-
 static int __devinit qpnp_bms_probe(struct spmi_device *spmi)
 {
 	struct qpnp_bms_chip *chip;
@@ -4534,21 +4335,6 @@ static int __devinit qpnp_bms_probe(struct spmi_device *spmi)
 	pr_info("probe success: soc =%d vbatt = %d ocv = %d r_sense_uohm = %u warm_reset = %d\n",
 			get_prop_bms_capacity(chip), vbatt, chip->last_ocv_uv,
 			chip->r_sense_uohm, warm_reset);
-
-	//ASUS_BSP lenter +++
-	g_qpnp_bms_chip = chip;
-	create_bat_current_proc();
-
-#ifdef CONFIG_PM_8941_CHARGER
-	if(A90_EVB0 != g_ASUS_hwID)
-	{
-		create_pm8941_dump_proc_file();
-		create_pm8941_temp_proc_file();
-	}	
-#endif
-
-	//ASUS_BSP lenter ---
-
 	return 0;
 
 unregister_dc:

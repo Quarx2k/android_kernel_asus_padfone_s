@@ -1905,7 +1905,7 @@ static struct platform_driver gpio_keys_device_driver = {
 };
 
 //ASUS_BSP+++ BennyCheng "speed up resume time by active microp earlier"
-extern void asus_dwc3_host_power_on_wq(void);
+//extern void asus_dwc3_host_power_on_wq(void);
 //ASUS_BSP--- BennyCheng "speed up resume time by active microp earlier"
 //ASUS BSP freddy++ for pad key porting
 static void Pad_keys_report_event(int button_code, int press)
@@ -1915,7 +1915,7 @@ static void Pad_keys_report_event(int button_code, int press)
 	if (press){     //press
                   if (button_code == PAD_KEY_POWER) {
                                 //ASUS_BSP+++ BennyCheng "speed up resume time by active microp earlier"
-                                asus_dwc3_host_power_on_wq();
+                               // asus_dwc3_host_power_on_wq();
                                 //ASUS_BSP--- BennyCheng "speed up resume time by active microp earlier"
 
                                 printk("[Gpio_keys]%s- p05 pwr key:%x,Resume sts= %x,keylock sts= %x\r\n",__func__,press,g_bResume,g_bpwr_key_lock_sts);
