@@ -2746,7 +2746,6 @@ unreg_chrdev:
 static void asus_dwc3_set_id_state(int online);
 #endif
 
-//ASUS_BSP+++ BennyCheng "add otg check at boot"
 #ifdef CONFIG_SLIMPORT_ANX7808
 static void asus_dwc3_set_id_state(int online)
 {
