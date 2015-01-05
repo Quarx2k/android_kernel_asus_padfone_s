@@ -82,6 +82,15 @@ endif
 	dtb-y += msm8974pro-ab-pm8941-pf500kl-er1.dtb
 	dtb-y += msm8974pro-ac-pm8941-pf500kl-er1.dtb
 	dtb-y += msm8974pro-ac-pm8941-pf500kl-er2_2.dtb
+	dtb-y += msm8974pro-ab-pm8941-a91-sr1.dtb
+	dtb-y += msm8974pro-ab-pm8941-a91-sr3.dtb
+	dtb-y += msm8974pro-ab-pm8941-a91-sr4.dtb
+	dtb-y += msm8974pro-ab-pm8941-a91-sr5.dtb
+	dtb-y += msm8974pro-ab-pm8941-a91-pr.dtb
+	dtb-y += msm8974pro-ab-pm8941-a91-mp.dtb
+	dtb-y += msm8974pro-ab-pm8941-a91-er1.dtb
+	dtb-y += msm8974pro-ab-pm8941-a90-evb0.dtb
+	dtb-y += msm8974pro-ab-pm8941-a90-evb.dtb
 #endif
 
 # APQ8084
