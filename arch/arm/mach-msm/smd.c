@@ -55,23 +55,6 @@
 #include "modem_notifier.h"
 #include "smem_private.h"
 
-//ASUS_BSP Daniel_Kuo +++ "antenna switch with the phone/pad mode"
-/*------------------------------*/
-#include <linux/proc_fs.h>
-//#include <linux/asusdebug.h>
-#include <linux/gpio.h>
-#include <linux/of.h>
-#include <linux/of_gpio.h>
-#include <linux/syscalls.h>
-/*------------------------------*/
-//ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
-
-//ASUS_BSP Daniel_Kuo+++ "for PG test in pad mod with Y-cable (20130322)"
-#include <linux/file.h>
-#include <asm/uaccess.h>
-//ASUS_BSP Daniel_Kuo--- "for PG test in pad mod with Y-cable (20130322)"
-
-
 #define SMD_VERSION 0x00020000
 #define SMSM_SNAPSHOT_CNT 64
 #define SMSM_SNAPSHOT_SIZE ((SMSM_NUM_ENTRIES + 1) * 4 + sizeof(uint64_t))
@@ -241,24 +224,6 @@ static inline void smd_write_intr(unsigned int val,
 
 #define SMD_LOOPBACK_CID 100
 
-
-
-//ASUS_BSP Daniel_Kuo+++ "antenna switch with the phone/pad mode"
-/*--------------------------------------------------*/
-static int g_padfone_plug_in = 0;
-static char g_rf_switch_status[10];
-static int g_ANT_GPIO_122 = 0;
-
-/*--------------------------------------------------*/
-//ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
-
-//ASUS_BSP Daniel_Kuo+++ "for PG test in pad mod with Y-cable (20130322)"
-
-static int has_PG_run = 0;
-module_param(has_PG_run, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-
-//ASUS_BSP Daniel_Kuo--- "for PG test in pad mod with Y-cable (20130322)"
-
 static LIST_HEAD(smd_ch_list_loopback);
 static void smd_fake_irq_handler(unsigned long arg);
 static void smsm_cb_snapshot(uint32_t use_wakelock);
@@ -273,38 +238,6 @@ static int smd_stream_write_avail(struct smd_channel *ch);
 static int smd_stream_read_avail(struct smd_channel *ch);
 
 static bool pid_is_on_edge(uint32_t edge_num, unsigned pid);
-
-//ASUS_BSP Daniel_Kuo+++ "antenna switch with the phone/pad mode"
-/*--------------------------------------------------------------------------------*/
-int PadFone_IN_OUT(int isin);
-void Check_antenna(void);
-void set_antenna_PHONE(void);
-void set_antenna_PADMAIN(void);
-static int rf_switch_read_proc(char *page, char **start, off_t off, int count, int *eof, void *data);
-static int rf_switch_write_proc(struct file *file, const char __user *buffer, unsigned long count, void *data);
-int Check_PG_Run(void);
-/*--------------------------------------------------------------------------------*/
-//ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
-
-//ASUS_BSP Daniel_Kuo+++ "for PG test in pad mod with Y-cable (20130322)"
-int Check_PG_Run(void)
-{
-    mm_segment_t oldfs;
-    oldfs = get_fs();
-    set_fs(KERNEL_DS);
-
-    if(sys_access("/data/.tmp/has_PG_run",0) != 0){ //+++ Daniel_Kuo Check whether the file exits (20140108)
-        printk("[smd]: filp_open fail.\n");
-    }
-    else {
-        has_PG_run = 1;
-        printk("[smd]: filp_open OK.\n");
-    }
-
-    set_fs(oldfs);
-    return 0;
-}
-//ASUS_BSP Daniel_Kuo--- "for PG test in pad mod with Y-cable (20130322)"
 
 static inline void smd_write_intr(unsigned int val,
 				const void __iomem *addr)
@@ -399,100 +332,6 @@ static inline void notify_rpm_smd(smd_channel_t *ch)
 		intr->out_base + intr->out_offset);
 	}
 }
-
-// ASUS_BSP+++ "log SMD wake up packet"
-#define QMI_RX_SVC_INDEX 4
-#define QMI_RX_TYPE_INDEX 6
-#define QMI_RX_MSG_INDEX 9
-static bool is_smsm_pm_suspend = false;
-
-struct smd_qmi_ch_type {
-	const char *name;
-	unsigned n;
-};
-
-static struct smd_qmi_ch_type smd_qmi_ch_tab[] = {
-	{ "DATA5_CNTL", -1},
-	{ "DATA6_CNTL", -1},
-	{ "DATA7_CNTL", -1},
-	{ "DATA8_CNTL", -1},
-	{ "DATA9_CNTL", -1},
-	{ "DATA12_CNTL", -1},
-	{ "DATA13_CNTL", -1},
-	{ "DATA14_CNTL", -1}
-};
-
-static const char *qmi_service_name_asus[] = {
-	"00", "WDS", "DMS", "NAS", "QOS",
-	"WMS", "06", "EAP", "ATCOP", "VOICE",
-	"CAT", "UIM", "PBM", "13", "14",
-	"15", "GPS", "SAR", "IMS_VIDEO", "19",
-	"CSD", "21", "22", "23", "THERMAL"
-};
-
-static const char *smd_type_name[] = {
-	"APPS_MODEM",
-	"APPS_QDSP",
-	"MODEM_QDSP",
-	"APPS_DSPS",
-	"MODEM_DSPS",
-	"QDSP_DSPS",
-	"APPS_WCNSS",
-	"MODEM_WCNSS",
-	"QDSP_WCNSS",
-	"DSPS_WCNSS",
-	"APPS_Q6FW",
-	"MODEM_Q6FW",
-	"QDSP_Q6FW",
-	"DSPS_Q6FW",
-	"WCNSS_Q6FW"
-};
-
-static void set_smd_qmi_ch_tab(const char* name, unsigned n)
-{
-	int i;
-	for (i = 0; i < sizeof(smd_qmi_ch_tab) / sizeof(*smd_qmi_ch_tab); ++i) {
-		if (!strcmp(smd_qmi_ch_tab[i].name, name)) {
-			smd_qmi_ch_tab[i].n = n;
-			break;
-		}
-	}
-}
-
-static void log_smd_pkt_out_of_suspend(smd_channel_t *ch, void *data, int size)
-{
-	int i;
-
-	if (!is_smsm_pm_suspend || ch->type >= SMD_APPS_RPM) {
-		return;
-	}
-	is_smsm_pm_suspend = false;
-	if (ch->type != SMD_APPS_MODEM) {
-		pr_info("[SMD]type=%s ch=%s\n", smd_type_name[ch->type], ch->name);
-		return ;
-	}
-	for (i = 0; i < sizeof(smd_qmi_ch_tab) / sizeof(*smd_qmi_ch_tab); ++i) {
-		if (smd_qmi_ch_tab[i].n == ch->n) {
-			u8 *buf = (u8 *)data;
-			if (size > QMI_RX_MSG_INDEX) {
-				u8 svc_id = buf[QMI_RX_SVC_INDEX];
-				if (svc_id < (sizeof(qmi_service_name_asus)/sizeof(*qmi_service_name_asus))) {
-					pr_info("[SMD]svc %s type %u msg %u\n", qmi_service_name_asus[svc_id],
-					        buf[QMI_RX_TYPE_INDEX], buf[QMI_RX_MSG_INDEX]);
-				}
-				else {
-					pr_info("[SMD]svc %u type %u msg %u\n", svc_id,
-					        buf[QMI_RX_TYPE_INDEX], buf[QMI_RX_MSG_INDEX]);
-				}
-			} else {
-				pr_info("[SMD]type=%s ch=%s\n", smd_type_name[ch->type], ch->name);
-			}
-			return;
-		}
-	}
-	pr_info("[SMD]type=%s ch=%s\n", smd_type_name[ch->type], ch->name);
-}
-// ASUS_BSP--- "log SMD wake up packet"
 
 static inline void notify_modem_smsm(void)
 {
@@ -604,7 +443,6 @@ static int smsm_pm_notifier(struct notifier_block *nb,
 {
 	switch (event) {
 	case PM_SUSPEND_PREPARE:
-		is_smsm_pm_suspend = true; // ASUS_BSP+ "log SMD wake up packet"
 		smsm_change_state(SMSM_APPS_STATE, SMSM_PROC_AWAKE, 0);
 		break;
 
@@ -1197,12 +1035,19 @@ static unsigned ch_read_buffer(struct smd_channel *ch, void **ptr)
 {
 	unsigned head = ch->half_ch->get_head(ch->recv);
 	unsigned tail = ch->half_ch->get_tail(ch->recv);
-	*ptr = (void *) (ch->recv_data + tail);
+	unsigned fifo_size = ch->fifo_size;
 
+	BUG_ON(fifo_size >= SZ_1M);
+	BUG_ON(head >= fifo_size);
+	BUG_ON(tail >= fifo_size);
+	BUG_ON(OVERFLOW_ADD_UNSIGNED(uintptr_t, (uintptr_t)ch->recv_data,
+								 tail));
+
+	*ptr = (void *) (ch->recv_data + tail);
 	if (tail <= head)
 		return head - tail;
 	else
-		return ch->fifo_size - tail;
+		return fifo_size - tail;
 }
 
 static int read_intr_blocked(struct smd_channel *ch)
@@ -1302,16 +1147,23 @@ static unsigned ch_write_buffer(struct smd_channel *ch, void **ptr)
 {
 	unsigned head = ch->half_ch->get_head(ch->send);
 	unsigned tail = ch->half_ch->get_tail(ch->send);
-	*ptr = (void *) (ch->send_data + head);
+	unsigned fifo_size = ch->fifo_size;
 
+	BUG_ON(fifo_size >= SZ_1M);
+	BUG_ON(head >= fifo_size);
+	BUG_ON(tail >= fifo_size);
+	BUG_ON(OVERFLOW_ADD_UNSIGNED(uintptr_t, (uintptr_t)ch->send_data,
+								head));
+
+	*ptr = (void *) (ch->send_data + head);
 	if (head < tail) {
 		return tail - head - SMD_FIFO_FULL_RESERVE;
 	} else {
 		if (tail < SMD_FIFO_FULL_RESERVE)
-			return ch->fifo_size + tail - head
+			return fifo_size + tail - head
 					- SMD_FIFO_FULL_RESERVE;
 		else
-			return ch->fifo_size - head;
+			return fifo_size - head;
 	}
 }
 
@@ -1957,7 +1809,6 @@ static int smd_alloc_channel(struct smd_alloc_elm *alloc_elm, int table_id,
 	ch->pdev.name = ch->name;
 	ch->pdev.id = ch->type;
 
-	set_smd_qmi_ch_tab(ch->name, ch->n); // ASUS_BSP+ "log SMD wake up packet"
 	SMD_INFO("smd_alloc_channel() '%s' cid=%d\n",
 		 ch->name, ch->n);
 
@@ -2316,27 +2167,23 @@ EXPORT_SYMBOL(smd_write_segment_avail);
 
 int smd_read(smd_channel_t *ch, void *data, int len)
 {
-	int size;
 	if (!ch) {
 		pr_err("%s: Invalid channel specified\n", __func__);
 		return -ENODEV;
 	}
-	size = ch->read(ch, data, len, 0);
-	log_smd_pkt_out_of_suspend(ch, data, size); // ASUS_BSP+ "log SMD wake up packet"
-	return size;
+
+	return ch->read(ch, data, len, 0);
 }
 EXPORT_SYMBOL(smd_read);
 
 int smd_read_user_buffer(smd_channel_t *ch, void *data, int len)
 {
-	int size;
 	if (!ch) {
 		pr_err("%s: Invalid channel specified\n", __func__);
 		return -ENODEV;
 	}
-	size = ch->read(ch, data, len, 1);
-	log_smd_pkt_out_of_suspend(ch, data, size); // ASUS_BSP+ "log SMD wake up packet"
-	return size;
+
+	return ch->read(ch, data, len, 1);
 }
 EXPORT_SYMBOL(smd_read_user_buffer);
 
@@ -3289,114 +3136,6 @@ int smsm_state_cb_deregister(uint32_t smsm_entry, uint32_t mask,
 }
 EXPORT_SYMBOL(smsm_state_cb_deregister);
 
-
-//ASUS_BSP Daniel_Kuo+++ "antenna switch with the phone/pad mode"
-/*--------------------------------------------------------------------------------*/
-
-int PadFone_IN_OUT(int isin)
-{
-    //PadFone is IN
-    if( isin ) {
-        g_padfone_plug_in = 1;
-    }
-    else { //PadFone is OUT
-        g_padfone_plug_in = 0;
-    }
-
-    printk("[smd]: g_padfone_plug_in=%d.\n", g_padfone_plug_in);
-
-    //ASUS_BSP Daniel_Kuo+++ "for PG test in pad mod with Y-cable (20130322)"
-    Check_PG_Run();
-    if( has_PG_run == 1 ) {
-        set_antenna_PHONE();
-        printk("[smd]: set_antenna_PHONE().\n");
-        return g_padfone_plug_in;
-    }
-    //ASUS_BSP Daniel_Kuo--- "for PG test in pad mod with Y-cable (20130322)"
-
-    Check_antenna();
-
-    return g_padfone_plug_in;
-}
-EXPORT_SYMBOL(PadFone_IN_OUT);
-
-
-void Check_antenna( void )
-{
-    if( g_padfone_plug_in == 1 ) {
-        set_antenna_PADMAIN();
-    }
-    else {
-        set_antenna_PHONE();
-    }
-}
-
-void set_antenna_PHONE( void )
-{
-  if(g_ASUS_hwID != A90_EVB0){    
-    if( g_ANT_GPIO_122 > 0 ) {
-	printk("[smd]: set_antenna_PHONE.\n");
-        gpio_direction_output(g_ANT_GPIO_122, 0);
-    }
-    else {
-        printk("[smd]: set_antenna_PHONE, RF_SW GPIO wrong.\n");
-    }
-  }
-    strcpy(g_rf_switch_status, "phone");
-}
-
-
-void set_antenna_PADMAIN( void )
-{
-  if(g_ASUS_hwID != A90_EVB0){ 
-    if( g_ANT_GPIO_122 > 0 ) {
-	printk("[smd]: set_antenna_PADMAIN.\n");
-        gpio_direction_output(g_ANT_GPIO_122, 1);
-    }
-    else {
-        printk("[smd]: set_antenna_PADMAIN, RF_SW GPIO wrong.\n");
-    }
-  }
-    strcpy(g_rf_switch_status, "pad_main");
-}
-
-static int rf_switch_read_proc(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-    int len = 0;
-
-    len = sprintf(page, "%s\n", g_rf_switch_status);
-    return len ;
-}
-
-static int rf_switch_write_proc(struct file *file, const char __user *buffer, unsigned long count, void *data)
-{
-    char buf[16];
-    unsigned long len = count;
-
-    if( len > 16 ) {
-        len = 16;
-    }
-
-    if( copy_from_user(buf, buffer, len) ) {
-        return -EFAULT;
-    }
-
-    if( strncmp(buf, "phone", 5) == 0 ) {
-        set_antenna_PHONE();
-    } 
-    else if( strncmp(buf, "pad_main", 8) == 0 ) {
-        set_antenna_PADMAIN();
-    }
-    else {
-        printk("[smd]: usage, echo {phone/pad_main} > /proc/rf_switch_status\n");
-    }
-
-    return len;
-}
-
-/*--------------------------------------------------------------------------------*/
-//ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
-
 static int restart_notifier_cb(struct notifier_block *this,
 				  unsigned long code,
 				  void *data);
@@ -3598,15 +3337,6 @@ int __init msm_smd_init(void)
 	int rc;
 	int i;
 
-    //ASUS_BSP Daniel_Kuo+++ "antenna switch with the phone/pad mode"
-    /*--------------------------------------------------*/
-    //struct device *smd_temp_dev = &pdev->dev;
-    //struct device_node *np = pdev->dev.of_node;
-	int ret;
-    struct proc_dir_entry *entry;
-    /*--------------------------------------------------*/
-    //ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
-
 	if (registered)
 		return 0;
 
@@ -3643,50 +3373,6 @@ int __init msm_smd_init(void)
 			__func__, rc);
 		return rc;
 	}
-
-    //ASUS_BSP Daniel_Kuo+++ "antenna switch with the phone/pad mode"
-    /*--------------------------------------------------------------------------------*/
-
-  if(g_ASUS_hwID != A90_EVB0){ 
-    //g_ANT_GPIO_122 = of_get_named_gpio(node, "qcom,ant_gpio_122", 0);
-    g_ANT_GPIO_122 = 122;
-    if( !gpio_is_valid(g_ANT_GPIO_122) ) {
-        printk("[smd]: gpio_is_valid fail, (g_ANT_GPIO_122=%d).\n", g_ANT_GPIO_122);
-    }
-    else {
-	    ret = gpio_request(g_ANT_GPIO_122, "ANT_GPIO_122");
-	    if( ret < 0 ) {
-		    printk("[smd]: gpio_request fail, (g_ANT_GPIO_122=%d).\n", g_ANT_GPIO_122);
-	    }
-        else {
-            printk("[smd]: g_ANT_GPIO_122=%d.\n", g_ANT_GPIO_122);
-        }
-
-	    ret = gpio_direction_output(g_ANT_GPIO_122, 1);
-	    if( ret < 0 ) {
-		 printk("[smd]:g_ANT_GPIO_122 output fail.\n");
-	    }
-            else {
-                 printk("[smd]:g_ANT_GPIO_122 output (1).\n");
-            }
-    }
-  }
-    strcpy(g_rf_switch_status, "phone");
-    Check_antenna();
-
-    entry = create_proc_entry("rf_switch_status", 0666, NULL);
-    if( entry == NULL ) {
-        printk("[smd]: create_proc_entry fail (rf_switch_status).\r\n");
-    }
-    else {
-        entry->read_proc = rf_switch_read_proc;
-        entry->write_proc = rf_switch_write_proc;
-    } 
-
-    /*--------------------------------------------------------------------------------*/
-    //ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
-
-
 	return 0;
 }
 
