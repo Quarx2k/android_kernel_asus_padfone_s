@@ -31,6 +31,8 @@
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 
+#include <trace/events/mmc.h>
+
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
@@ -44,10 +46,6 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 #include "sdio_ops.h"
-#include "mmc_config.h"
-
-#define CREATE_TRACE_POINTS
-#include <trace/events/mmc.h>
 
 static void mmc_clk_scaling(struct mmc_host *host, bool from_wq);
 
@@ -170,9 +168,35 @@ static inline void mmc_should_fail_request(struct mmc_host *host,
 
 #endif /* CONFIG_FAIL_MMC_REQUEST */
 
+static inline void
+mmc_clk_scaling_update_state(struct mmc_host *host, struct mmc_request *mrq)
+{
+	if (mrq) {
+		switch (mrq->cmd->opcode) {
+		case MMC_READ_SINGLE_BLOCK:
+		case MMC_READ_MULTIPLE_BLOCK:
+		case MMC_WRITE_BLOCK:
+		case MMC_WRITE_MULTIPLE_BLOCK:
+			host->clk_scaling.invalid_state = false;
+			break;
+		default:
+			host->clk_scaling.invalid_state = true;
+			break;
+		}
+	} else {
+		/*
+		 * force clock scaling transitions,
+		 * if other conditions are met
+		 */
+		host->clk_scaling.invalid_state = false;
+	}
+
+	return;
+}
+
 static inline void mmc_update_clk_scaling(struct mmc_host *host)
 {
-	if (host->clk_scaling.enable) {
+	if (host->clk_scaling.enable && !host->clk_scaling.invalid_state) {
 		host->clk_scaling.busy_time_us +=
 			ktime_to_us(ktime_sub(ktime_get(),
 					host->clk_scaling.start_busy));
@@ -241,6 +265,7 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 			pr_debug("%s:     %d bytes transferred: %d\n",
 				mmc_hostname(host),
 				mrq->data->bytes_xfered, mrq->data->error);
+			trace_mmc_blk_rw_end(cmd->opcode, cmd->arg, mrq->data);
 		}
 
 		if (mrq->stop) {
@@ -260,156 +285,6 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 
 EXPORT_SYMBOL(mmc_request_done);
 
-//ASUS_BSP +++ Gavin_Chang "mmc cmd statistics"
-#define INAND_CMD38_ARG_EXT_CSD  113
-#define INAND_CMD38_ARG_ERASE    0x00
-#define INAND_CMD38_ARG_TRIM     0x01
-#define INAND_CMD38_ARG_SECERASE 0x80
-#define INAND_CMD38_ARG_SECTRIM1 0x81
-#define INAND_CMD38_ARG_SECTRIM2 0x88
-
-/**
- *	mmc_do_cmd_stats - do mmc command statistics
- *	@card: MMC card to do command statistics
- *	@mrq: MMC request which request
- *
- */
-void mmc_do_cmd_stats(struct mmc_card	*card, struct mmc_request *mrq)
-{
-	u32 set;
-	u32 index;
-	u32 value;
-
-	if (!card || !card->cmd_stats || !mmc_card_mmc(card) || !card->cmd_stats->enabled) {
-		pr_debug("%s, not do cmd statistics\n", __func__);
-		return;
-	}
-
-	if (mrq->cmd->opcode > 60)
-		pr_err("%s: unknown cmd:%u", mmc_hostname(card->host), mrq->cmd->opcode );
-
-	if (mrq->sbc) {
-		card->cmd_stats->cmd_cnt[mrq->sbc->opcode]++;
-		if (MMC_SET_BLOCK_COUNT == mrq->sbc->opcode) {
-			if (mrq->sbc->arg & (1 << 29))
-				card->cmd_stats->do_data_tag_cnt++;
-				
-			if (mrq->sbc->arg & (1 << 31))
-				card->cmd_stats->do_rel_wr_cnt++;
-		}
-
-	}
-
-	card->cmd_stats->cmd_cnt[mrq->cmd->opcode]++;
-
-	if (mrq->stop) {
-		card->cmd_stats->cmd_cnt[mrq->stop->opcode]++;
-	}
-
-	if (MMC_READ_MULTIPLE_BLOCK == mrq->cmd->opcode || MMC_READ_SINGLE_BLOCK == mrq->cmd->opcode) {
-		if (mrq->data)
-			card->cmd_stats->rdata_sz += (mrq->data->blocks * mrq->data->blksz);
-	}
-
-	if (MMC_WRITE_MULTIPLE_BLOCK == mrq->cmd->opcode || MMC_WRITE_BLOCK == mrq->cmd->opcode) {
-		if (mrq->data)
-			card->cmd_stats->wdata_sz += (mrq->data->blocks * mrq->data->blksz);
-	}
-
-	if ( (MMC_STOP_TRANSMISSION == mrq->cmd->opcode || MMC_SEND_STATUS == mrq->cmd->opcode) && 
-	    (mrq->cmd->arg & 1)) {
-		card->cmd_stats->hpi_cnt++;
-	}	
-
-	if (MMC_ERASE == mrq->cmd->opcode) {
-		if (mrq->cmd->arg == MMC_ERASE_ARG)
-			card->cmd_stats->erase_cnt++;
-		else if (mrq->cmd->arg == MMC_TRIM_ARG)
-			card->cmd_stats->trim_cnt++;
-		else if (mrq->cmd->arg == MMC_DISCARD_ARG)
-			card->cmd_stats->discard_cnt++;
-	}
-
-	if (MMC_SWITCH == mrq->cmd->opcode) {
-		set = mrq->cmd->arg & 0x000000ff;
-		if (set == EXT_CSD_CMD_SET_NORMAL) {
-			index = (mrq->cmd->arg & 0x00ff0000) >> 16;
-			value = (mrq->cmd->arg & 0x0000ff00) >> 8;
-
-			switch (index) {
-			case EXT_CSD_FLUSH_CACHE:
-				card->cmd_stats->flush_cache_cnt++;
-				break;
-			case EXT_CSD_CACHE_CTRL:
-				if (value)
-					card->cmd_stats->cache_on_cnt++;
-				else
-					card->cmd_stats->cache_off_cnt++;
-				break;
-			case EXT_CSD_POWER_OFF_NOTIFICATION:
-				if (value == EXT_CSD_POWER_ON)
-					card->cmd_stats->pwr_on_cnt++;
-				else if (value == EXT_CSD_POWER_OFF_SHORT)
-					card->cmd_stats->pwr_off_short_cnt++;
-				else if (value == EXT_CSD_POWER_OFF_LONG)
-					card->cmd_stats->pwr_off_long_cnt++;
-				break;
-			case EXT_CSD_BKOPS_START:
-				card->cmd_stats->bkops_start_cnt++;	
-				break;
-			case EXT_CSD_SANITIZE_START:
-				card->cmd_stats->sanitize_cnt++;	
-				break;
-			case EXT_CSD_BOOT_WP:
-				card->cmd_stats->boot_wp_cnt++;
-				break;
-			case EXT_CSD_PART_CONFIG:
-				card->cmd_stats->part_cfg_cnt++;
-				break;
-			case EXT_CSD_POWER_CLASS:
-				card->cmd_stats->pwr_cls_cnt++;
-				break;
-			case EXT_CSD_BUS_WIDTH:
-				card->cmd_stats->bus_width_cnt++;
-				break;
-			case EXT_CSD_HS_TIMING:
-				card->cmd_stats->hs_timing_cnt++;
-				break;
-			case EXT_CSD_ERASE_GROUP_DEF:
-				card->cmd_stats->erase_grp_def_cnt++;
-				break;
-			case EXT_CSD_HPI_MGMT:
-				card->cmd_stats->hpi_mgmt_cnt++;
-				break;
-			case EXT_CSD_EXP_EVENTS_CTRL:
-				card->cmd_stats->exp_events_ctrl_cnt++;
-				break;
-			case INAND_CMD38_ARG_EXT_CSD:
-				if (value == INAND_CMD38_ARG_TRIM)
-					card->cmd_stats->cmd38_trim_cnt++;
-				else if (value == INAND_CMD38_ARG_ERASE)
-					card->cmd_stats->cmd38_erase_cnt++;
-				else if (value == INAND_CMD38_ARG_SECTRIM1)
-					card->cmd_stats->cmd38_sectrim1_cnt++;
-				else if (value == INAND_CMD38_ARG_SECERASE)
-					card->cmd_stats->cmd38_secerase_cnt++;				
-				else if (value == INAND_CMD38_ARG_SECTRIM2)
-					card->cmd_stats->cmd38_sectrim2_cnt++;
-				break;
-			case EXT_CSD_BKOPS_EN:
-				card->cmd_stats->bkops_en_cnt++;
-				break;
-			default:
-				break;
-			}
-
-		}
-	}
-
-
-}
-//ASUS_BSP --- Gavin_Chang "mmc cmd statistics"
-
 static void
 mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 {
@@ -417,10 +292,6 @@ mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 	unsigned int i, sz;
 	struct scatterlist *sg;
 #endif
-
-//ASUS_BSP +++ Gavin_Chang "mmc cmd statistics"
-	mmc_do_cmd_stats(host->card, mrq);
-//ASUS_BSP --- Gavin_Chang "mmc cmd statistics"
 
 	if (mrq->sbc) {
 		pr_debug("<%s: starting CMD%u arg %08x flags %08x>\n",
@@ -488,8 +359,11 @@ mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 		 * frequency will be done after current thread
 		 * releases host.
 		 */
-		mmc_clk_scaling(host, false);
-		host->clk_scaling.start_busy = ktime_get();
+		mmc_clk_scaling_update_state(host, mrq);
+		if (!host->clk_scaling.invalid_state) {
+			mmc_clk_scaling(host, false);
+			host->clk_scaling.start_busy = ktime_get();
+		}
 	}
 
 	host->ops->request(host, mrq);
@@ -742,8 +616,10 @@ static bool mmc_should_stop_curr_req(struct mmc_host *host)
 	    (host->areq->cmd_flags & REQ_FUA))
 		return false;
 
+	mmc_host_clk_hold(host);
 	remainder = (host->ops->get_xfer_remain) ?
 		host->ops->get_xfer_remain(host) : -1;
+	mmc_host_clk_release(host);
 	return (remainder > 0);
 }
 
@@ -768,6 +644,7 @@ static int mmc_stop_request(struct mmc_host *host)
 				mmc_hostname(host));
 		return -ENOTSUPP;
 	}
+	mmc_host_clk_hold(host);
 	err = host->ops->stop_request(host);
 	if (err) {
 		pr_err("%s: Call to host->ops->stop_request() failed (%d)\n",
@@ -802,6 +679,7 @@ static int mmc_stop_request(struct mmc_host *host)
 		goto out;
 	}
 out:
+	mmc_host_clk_release(host);
 	return err;
 }
 
@@ -824,11 +702,11 @@ static int mmc_wait_for_data_req_done(struct mmc_host *host,
 	struct mmc_context_info *context_info = &host->context_info;
 	bool pending_is_urgent = false;
 	bool is_urgent = false;
-	int err;
+	int err, ret;
 	unsigned long flags;
 
 	while (1) {
-		wait_io_event_interruptible(context_info->wait,
+		ret = wait_io_event_interruptible(context_info->wait,
 				(context_info->is_done_rcv ||
 				 context_info->is_new_req  ||
 				 context_info->is_urgent));
@@ -881,7 +759,7 @@ static int mmc_wait_for_data_req_done(struct mmc_host *host,
 				err = MMC_BLK_NEW_REQUEST;
 				break; /* return err */
 			}
-		} else {
+		} else if (context_info->is_urgent) {
 			/*
 			 * The case when block layer sent next urgent
 			 * notification before it receives end_io on
@@ -933,6 +811,11 @@ static int mmc_wait_for_data_req_done(struct mmc_host *host,
 				pending_is_urgent = true;
 				continue; /* wait for done/new/urgent event */
 			}
+		} else {
+			pr_warn("%s: mmc thread unblocked from waiting by signal, ret=%d\n",
+					mmc_hostname(host),
+					ret);
+			continue;
 		}
 	} /* while */
 	return err;
@@ -1050,7 +933,8 @@ struct mmc_async_req *mmc_start_req(struct mmc_host *host,
 			mmc_post_req(host, host->areq->mrq, 0);
 			host->areq = NULL;
 			if (areq) {
-				if (!(areq->cmd_flags & REQ_URGENT)) {
+				if (!(areq->cmd_flags &
+						MMC_REQ_NOREINSERT_MASK)) {
 					areq->reinsert_req(areq);
 					mmc_post_req(host, areq->mrq, 0);
 				} else {
@@ -2401,7 +2285,12 @@ static int mmc_do_erase(struct mmc_card *card, unsigned int from,
 	struct mmc_command cmd = {0};
 	unsigned int qty = 0;
 	unsigned long timeout;
+	unsigned int fr, nr;
 	int err;
+
+	fr = from;
+	nr = to - from + 1;
+	trace_mmc_blk_erase_start(arg, fr, nr);
 
 	/*
 	 * qty is used to calculate the erase timeout which depends on how many
@@ -2506,6 +2395,8 @@ static int mmc_do_erase(struct mmc_card *card, unsigned int from,
 	} while (!(cmd.resp[0] & R1_READY_FOR_DATA) ||
 		 (R1_CURRENT_STATE(cmd.resp[0]) == R1_STATE_PRG));
 out:
+
+	trace_mmc_blk_erase_end(arg, fr, nr);
 	return err;
 }
 
@@ -2587,15 +2478,9 @@ EXPORT_SYMBOL(mmc_can_erase);
 
 int mmc_can_trim(struct mmc_card *card)
 {
-//ASUS_BSP Gavin_Chang +++ turn off trim
-	if(MMC_CONFIG_SETTING_TRIM){
-		if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_GB_CL_EN)
-			return 1;
-		return 0;
-		}
-	else
-		return 0;
-//ASUS_BSP Gavin_Chang --- turn off trim
+	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_GB_CL_EN)
+		return 1;
+	return 0;
 }
 EXPORT_SYMBOL(mmc_can_trim);
 
@@ -2605,45 +2490,27 @@ int mmc_can_discard(struct mmc_card *card)
 	 * As there's no way to detect the discard support bit at v4.5
 	 * use the s/w feature support filed.
 	 */
-//ASUS_BSP Gavin_Chang +++ turn off discard
-	if(MMC_CONFIG_SETTING_DISCARD){
-		if (card->ext_csd.feature_support & MMC_DISCARD_FEATURE)
-			return 1;
-		return 0;
-	}
-	else
-		return 0;
-//ASUS_BSP Gavin_Chang --- turn off discard
+	if (card->ext_csd.feature_support & MMC_DISCARD_FEATURE)
+		return 1;
+	return 0;
 }
 EXPORT_SYMBOL(mmc_can_discard);
 
 int mmc_can_sanitize(struct mmc_card *card)
 {
-//ASUS_BSP Gavin_Chang +++ turn off sanitize
-	if(MMC_CONFIG_SETTING_SANITIZE){
-		if (!mmc_can_trim(card) && !mmc_can_erase(card))
-			return 0;
-		if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_SANITIZE)
-			return 1;
+	if (!mmc_can_trim(card) && !mmc_can_erase(card))
 		return 0;
-	}
-	else
-		return 0;
-//ASUS_BSP Gavin_Chang --- turn off sanitize
+	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_SANITIZE)
+		return 1;
+	return 0;
 }
 EXPORT_SYMBOL(mmc_can_sanitize);
 
 int mmc_can_secure_erase_trim(struct mmc_card *card)
 {
-//ASUS_BSP Gavin_Chang +++ turn off trim
-	if(MMC_CONFIG_SETTING_TRIM){
-		if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_ER_EN)
-			return 1;
-		return 0;
-	}
-	else
-		return 0;
-//ASUS_BSP Gavin_Chang --- turn off trim
+	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_ER_EN)
+		return 1;
+	return 0;
 }
 EXPORT_SYMBOL(mmc_can_secure_erase_trim);
 
@@ -3004,7 +2871,8 @@ static bool mmc_is_vaild_state_for_clk_scaling(struct mmc_host *host)
 	 * this mode.
 	 */
 	if (!card || (mmc_card_mmc(card) &&
-			card->part_curr == EXT_CSD_PART_CONFIG_ACC_RPMB))
+			card->part_curr == EXT_CSD_PART_CONFIG_ACC_RPMB)
+			|| host->clk_scaling.invalid_state)
 		goto out;
 
 	if (mmc_send_status(card, &status)) {
@@ -3382,7 +3250,8 @@ void mmc_rescan(struct work_struct *work)
 	mmc_release_host(host);
 	mmc_rpm_release(host, &host->class_dev);
  out:
-	if (extend_wakelock)
+	/* only extend the wakelock, if suspend has not started yet */
+	if (extend_wakelock && !host->rescan_disable)
 		wake_lock_timeout(&host->detect_wake_lock, HZ / 2);
 
 	if (host->caps & MMC_CAP_NEEDS_POLL)
@@ -3520,13 +3389,10 @@ EXPORT_SYMBOL(mmc_card_sleep);
 int mmc_card_can_sleep(struct mmc_host *host)
 {
 	struct mmc_card *card = host->card;
-	if(MMC_CONFIG_SETTING_SLEEP){
-		if (card && mmc_card_mmc(card) && card->ext_csd.rev >= 3)
-			return 1;
-		return 0;
-	}
-	else
-		return 0;
+
+	if (card && mmc_card_mmc(card) && card->ext_csd.rev >= 3)
+		return 1;
+	return 0;
 }
 EXPORT_SYMBOL(mmc_card_can_sleep);
 
@@ -3538,7 +3404,8 @@ int mmc_flush_cache(struct mmc_card *card)
 	struct mmc_host *host = card->host;
 	int err = 0, rc;
 
-	if (!(host->caps2 & MMC_CAP2_CACHE_CTRL))
+	if (!(host->caps2 & MMC_CAP2_CACHE_CTRL) ||
+	     (card->quirks & MMC_QUIRK_CACHE_DISABLE))
 		return err;
 
 	if (mmc_card_mmc(card) &&
@@ -3577,7 +3444,8 @@ int mmc_cache_ctrl(struct mmc_host *host, u8 enable)
 	int err = 0, rc;
 
 	if (!(host->caps2 & MMC_CAP2_CACHE_CTRL) ||
-			mmc_card_is_removable(host))
+			mmc_card_is_removable(host) ||
+			(card->quirks & MMC_QUIRK_CACHE_DISABLE))
 		return err;
 
 	if (card && mmc_card_mmc(card) &&
@@ -3768,15 +3636,14 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 			spin_unlock_irqrestore(&host->lock, flags);
 			break;
 		}
+
+		/* since its suspending anyway, disable rescan */
+		host->rescan_disable = 1;
 		spin_unlock_irqrestore(&host->lock, flags);
 
 		/* Wait for pending detect work to be completed */
 		if (!(host->caps & MMC_CAP_NEEDS_POLL))
 			flush_work(&host->detect.work);
-
-		spin_lock_irqsave(&host->lock, flags);
-		host->rescan_disable = 1;
-		spin_unlock_irqrestore(&host->lock, flags);
 
 		/*
 		 * In some cases, the detect work might be scheduled
@@ -3784,6 +3651,13 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		 * Cancel such the scheduled works.
 		 */
 		cancel_delayed_work_sync(&host->detect);
+
+		/*
+		 * It is possible that the wake-lock has been acquired, since
+		 * its being suspended, release the wakelock
+		 */
+		if (wake_lock_active(&host->detect_wake_lock))
+			wake_unlock(&host->detect_wake_lock);
 
 		if (!host->bus_ops || host->bus_ops->suspend)
 			break;

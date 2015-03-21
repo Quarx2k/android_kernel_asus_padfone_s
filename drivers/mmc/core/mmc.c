@@ -24,7 +24,6 @@
 #include "bus.h"
 #include "mmc_ops.h"
 #include "sd_ops.h"
-#include "mmc_config.h"
 
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
@@ -67,90 +66,16 @@ static const struct mmc_fixup mmc_fixups[] = {
 	MMC_FIXUP_EXT_CSD_REV(CID_NAME_ANY, CID_MANFID_HYNIX,
 			      0x014a, add_quirk, MMC_QUIRK_BROKEN_HPI, 5),
 
+	/*
+	 * Some Hynix cards exhibit data corruption over reboots if cache is
+	 * enabled. Disable cache for all versions until a class of cards that
+	 * show this behavior is identified.
+	 */
+	MMC_FIXUP("H8G2d", CID_MANFID_HYNIX, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_CACHE_DISABLE),
+
 	END_FIXUP
 };
-//ASUS_BSP +++ Gavin_Chang "emmc info for ATD"
-static struct {
-	u32 sec_cnt;
-	char *band_type;
-} emmc_stat_tbl[] = {
-	{ 0x1cce000, "KINGSTON_16G" },
-	{ 0x39f4000, "KINGSTON_32G" },
-	{ 0x1d9c000, "HYNIX_16G_H26M52002CKR" },
-	{ 0x3b84000, "HYNIX_32G_H26M64002BNR" },
-	{ 0x766c000, "HYNIX_64G_H26M78002ANR" },
-	{ 0x1d74000, "HYNIX_16G_H26M54001DQR" },
-	{ 0x3af4000, "HYNIX_32G_H26M68001CFR" },	
-	{ 0x1d5c000, "HYNIX_16G_H26M52002EQR_20nm" },
-	{ 0x3a40000, "HYNIX_32G_H26M64002DQR_20nm" },
-	{ 0x7480000, "HYNIX_64G_H26M78002BFR_20nm" },
-	{ 0x1d5a000, "SDIN8DE4-16G-Q" },
-	{ 0x3a3e000, "SDIN8DE4-32G-Q" },
-	{ 0xe68000, "KSI_8G_20nm" },
-	{ 0x1cd0000, "KSI_16G_20nm" },
-	{ 0x39a0000, "KSI_32G_20nm" },
-	{ 0x1de8000, "TOSHIBA_16G" },
-	{ 0x3b70000, "TOSHIBA_32G" },
-	{ 0x3b9c000, "ASINT_32G" }
-};
-
-#define EMMC_STAT_TBL_MAX	(sizeof(emmc_stat_tbl)/sizeof(emmc_stat_tbl[0]))
-
-static char whole_name[256] = {0};
-
-static char* asus_get_emmc_status(struct mmc_card *card)
-{
-	u32 i;
-	u32 ext_csd_sector_count;
-
-	ext_csd_sector_count = card->ext_csd.raw_sectors[0] << 0 |card->ext_csd.raw_sectors[1] << 8 | card->ext_csd.raw_sectors[2] << 16 |card->ext_csd.raw_sectors[3] << 24;
-
-	for (i = 0; i < EMMC_STAT_TBL_MAX; i++) {
-		if (ext_csd_sector_count == emmc_stat_tbl[i].sec_cnt) {
-			memset(whole_name, 0, sizeof(whole_name));
-			strcpy(whole_name, emmc_stat_tbl[i].band_type);
-			if (6 == card->ext_csd.rev)
-				strcat(whole_name, "-v4.5");
-			else if (5 == card->ext_csd.rev)
-				strcat(whole_name, "-v4.41");
-
-			return whole_name;
-		}
-	}
-
-	return "Unknown";
-}
-
-static int asus_get_emmc_prv(struct mmc_card *card)
-{
-	int prv;
-	u32 *resp = card->raw_cid;
-	prv = UNSTUFF_BITS(resp, 48, 8);
-	return prv;
-}
-//ASUS_BSP --- Gavin_Chang "emmc info for ATD"
-//ASUS_BSP +++ Gavin_Chang "Sandisk's eMMC health status feature"
-static char* asus_get_emmc_health(struct mmc_card *card)
-{
-	BUG_ON(!card);
-
-	if ((card->ext_csd.slc_health == 1) && (card->ext_csd.mlc_lp_health == 1) && (card->ext_csd.mlc_health == 1))
-		return "normal";
-	else if ((card->ext_csd.slc_health == 0) && (card->ext_csd.mlc_lp_health == 0) && (card->ext_csd.mlc_health == 0))
-		return "not supported";
-	else
-		return "abnormal";
-
-}
-//ASUS_BSP --- Gavin_Chang "Sandisk's eMMC health status feature"
-//ASUS_BSP +++ Gavin_Chang "add eMMC total size for AMAX"
-static char* asus_get_emmc_total_size(struct mmc_card *card)
-{
-	BUG_ON(!card);
- 
-	return card->mmc_total_size;
-}
-//ASUS_BSP --- Gavin_Chang "add eMMC total size for AMAX"
 
 /*
  * Given the decoded CSD structure, decode the raw CID to our CID structure.
@@ -354,10 +279,9 @@ static void mmc_select_card_type(struct mmc_card *card)
 	if ((caps2 & MMC_CAP2_HS200_1_8V_SDR &&
 			card_type & EXT_CSD_CARD_TYPE_SDR_1_8V) ||
 	    (caps2 & MMC_CAP2_HS200_1_2V_SDR &&
-			card_type & EXT_CSD_CARD_TYPE_SDR_1_2V)){
-		if(MMC_CONFIG_SETTING_HS200)
-			hs_max_dtr = MMC_HS200_MAX_DTR;
-	}
+			card_type & EXT_CSD_CARD_TYPE_SDR_1_2V))
+		hs_max_dtr = MMC_HS200_MAX_DTR;
+
 	if ((caps2 & MMC_CAP2_HS400_1_8V &&
 			card_type & EXT_CSD_CARD_TYPE_HS400_1_8V) ||
 	    (caps2 & MMC_CAP2_HS400_1_2V &&
@@ -404,14 +328,7 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 	/* fixup device after ext_csd revision field is updated */
 	mmc_fixup_device(card, mmc_fixups);
-	card->ext_csd.raw_fw_version[0] = ext_csd[254];
-	card->ext_csd.raw_fw_version[1] = ext_csd[255];
-	card->ext_csd.raw_fw_version[2] = ext_csd[256];
-	card->ext_csd.raw_fw_version[3] = ext_csd[257];
-	card->ext_csd.raw_fw_version[4] = ext_csd[258];
-	card->ext_csd.raw_fw_version[5] = ext_csd[259];
-	card->ext_csd.raw_fw_version[6] = ext_csd[260];
-	card->ext_csd.raw_fw_version[7] = ext_csd[261];
+
 	card->ext_csd.raw_sectors[0] = ext_csd[EXT_CSD_SEC_CNT + 0];
 	card->ext_csd.raw_sectors[1] = ext_csd[EXT_CSD_SEC_CNT + 1];
 	card->ext_csd.raw_sectors[2] = ext_csd[EXT_CSD_SEC_CNT + 2];
@@ -426,16 +343,6 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		/* Cards with density > 2GiB are sector addressed */
 		if (card->ext_csd.sectors > (2u * 1024 * 1024 * 1024) / 512)
 			mmc_card_set_blockaddr(card);
-//ASUS_BSP +++ Gavin_Chang "add eMMC total size for AMAX"	
-		if(card->ext_csd.sectors > 80000000)
-			sprintf(card->mmc_total_size, "64");
-		else if(card->ext_csd.sectors > 50000000)
-			sprintf(card->mmc_total_size, "32");
-		else if(card->ext_csd.sectors > 20000000)
-			sprintf(card->mmc_total_size, "16");
-		else
-			sprintf(card->mmc_total_size, "8");
-//ASUS_BSP --- Gavin_Chang "add eMMC total size for AMAX"
 	}
 
 	card->ext_csd.raw_card_type = ext_csd[EXT_CSD_CARD_TYPE];
@@ -493,13 +400,13 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		ext_csd[EXT_CSD_SEC_FEATURE_SUPPORT];
 	card->ext_csd.raw_trim_mult =
 		ext_csd[EXT_CSD_TRIM_MULT];
+	card->ext_csd.raw_partition_support = ext_csd[EXT_CSD_PARTITION_SUPPORT];
 	if (card->ext_csd.rev >= 4) {
 		/*
 		 * Enhanced area feature support -- check whether the eMMC
 		 * card has the Enhanced area enabled.  If so, export enhanced
 		 * area offset and size to user by adding sysfs interface.
 		 */
-		card->ext_csd.raw_partition_support = ext_csd[EXT_CSD_PARTITION_SUPPORT];
 		if ((ext_csd[EXT_CSD_PARTITION_SUPPORT] & 0x2) &&
 		    (ext_csd[EXT_CSD_PARTITION_ATTRIBUTE] & 0x1)) {
 			hc_erase_grp_sz =
@@ -588,8 +495,6 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	}
 
 	if (card->ext_csd.rev >= 5) {
-//ASUS_BSP Gavin_Chang +++ turn off HPI
-#if MMC_CONFIG_SETTING_HPI
 		/* check whether the eMMC card supports HPI */
 		if ((ext_csd[EXT_CSD_HPI_FEATURES] & 0x1) &&
 				!(card->quirks & MMC_QUIRK_BROKEN_HPI)) {
@@ -605,14 +510,11 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			card->ext_csd.out_of_int_time =
 				ext_csd[EXT_CSD_OUT_OF_INTERRUPT_TIME] * 10;
 		}
-#endif
-//ASUS_BSP Gavin_Chang --- turn off HPI
+
 		/*
 		 * check whether the eMMC card supports BKOPS.
 		 * If HPI is not supported then BKOPs shouldn't be enabled.
 		 */
-//ASUS_BSP Gavin_Chang +++ turn off BKOPS
-#if MMC_CONFIG_SETTING_BKOPS
 		if ((ext_csd[EXT_CSD_BKOPS_SUPPORT] & 0x1) &&
 		    card->ext_csd.hpi) {
 			card->ext_csd.bkops = 1;
@@ -630,7 +532,7 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 					card->ext_csd.bkops_en = 1;
 			}
 		}
-#endif
+
 		pr_info("%s: BKOPS_EN bit = %d\n",
 			mmc_hostname(card->host), card->ext_csd.bkops_en);
 
@@ -640,8 +542,6 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		/*
 		 * RPMB regions are defined in multiples of 128K.
 		 */
-//ASUS_BSP Gavin_Chang +++ turn off RPMB
-#if MMC_CONFIG_SETTING_RPMB
 		card->ext_csd.raw_rpmb_size_mult = ext_csd[EXT_CSD_RPMB_MULT];
 		if (ext_csd[EXT_CSD_RPMB_MULT]) {
 			mmc_part_add(card, ext_csd[EXT_CSD_RPMB_MULT] << 17,
@@ -649,8 +549,6 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 				"rpmb", 0, false,
 				MMC_BLK_DATA_AREA_RPMB);
 		}
-#endif
-//ASUS_BSP Gavin_Chang --- turn off RPMB
 	}
 
 	card->ext_csd.raw_erased_mem_count = ext_csd[EXT_CSD_ERASED_MEM_CONT];
@@ -661,24 +559,19 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 	/* eMMC v4.5 or later */
 	if (card->ext_csd.rev >= 6) {
-//ASUS_BSP Gavin_Chang +++ turn off DISCARD
-#if MMC_CONFIG_SETTING_DISCARD
 		card->ext_csd.feature_support |= MMC_DISCARD_FEATURE;
-#endif
-//ASUS_BSP Gavin_Chang --- turn off DISCARD
+
 		card->ext_csd.generic_cmd6_time = 10 *
 			ext_csd[EXT_CSD_GENERIC_CMD6_TIME];
 		card->ext_csd.power_off_longtime = 10 *
 			ext_csd[EXT_CSD_POWER_OFF_LONG_TIME];
-//ASUS_BSP Gavin_Chang +++ turn off CACHE
-#if MMC_CONFIG_SETTING_CACHE
+
 		card->ext_csd.cache_size =
 			ext_csd[EXT_CSD_CACHE_SIZE + 0] << 0 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 1] << 8 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 2] << 16 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 3] << 24;
-#endif
-//ASUS_BSP Gavin_Chang --- turn off CACHE
+
 		if (ext_csd[EXT_CSD_DATA_SECTOR_SIZE] == 1)
 			card->ext_csd.data_sector_size = 4096;
 		else
@@ -692,45 +585,12 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		} else {
 			card->ext_csd.data_tag_unit_size = 0;
 		}
-//ASUS_BSP Gavin_Chang +++ turn off PACKED CMD
-#if MMC_CONFIG_SETTING_PACKED
+
 		card->ext_csd.max_packed_writes =
 			ext_csd[EXT_CSD_MAX_PACKED_WRITES];
 		card->ext_csd.max_packed_reads =
 			ext_csd[EXT_CSD_MAX_PACKED_READS];
-#endif
-//ASUS_BSP Gavin_Chang --- turn off PACKED CMD
 	}
-
-
-
-
-//ASUS_BSP +++ Gavin_Chang  "Sandisk's eMMC health status feature"
-/* Only for Sandisk's eMMC, and 0 means not supported */
-	if (card->cid.manfid == 0x45) {
-		card->ext_csd.slc_health = ext_csd[EXT_CSD_SANDISK_SLC_HEALTH];
-		card->ext_csd.mlc_lp_health = ext_csd[EXT_CSD_SANDISK_MLC_LP_HEALTH];
-		card->ext_csd.mlc_health = ext_csd[EXT_CSD_SANDISK_MLC_HEALTH];
-		pr_info("%s: slc_health:%d, mlc_lp_health:%d, mlc_health:%d\n",
-			mmc_hostname(card->host), card->ext_csd.slc_health, card->ext_csd.mlc_lp_health, card->ext_csd.mlc_health);
-	} else {
-		card->ext_csd.slc_health = 0;
-		card->ext_csd.mlc_lp_health = 0;
-		card->ext_csd.mlc_health = 0;
-	}
-//ASUS_BSP --- Gavin_Chang  "Sandisk's eMMC health status feature"
-//ASUS_BSP +++ Gavin_Chang "Add eMMC 5.0 feature Device Life Time"
-	if (card->ext_csd.rev > 6){
-		card->ext_csd.device_life_time_type_A = ext_csd[EXT_CSD_DEVICE_LIFE_TIME_EST_TYP_A];
-		card->ext_csd.device_life_time_type_B = ext_csd[EXT_CSD_DEVICE_LIFE_TIME_EST_TYP_B];
-		pr_info("%s: device_life_time_type_A : 0x%02x  , ext_csd.device_life_time_type_B : 0x%02x\n",
-			mmc_hostname(card->host), card->ext_csd.device_life_time_type_A, card->ext_csd.device_life_time_type_B);
-	} else {
-		card->ext_csd.device_life_time_type_A = 0;
-		card->ext_csd.device_life_time_type_B = 0;
-	}
-		
-//ASUS_BSP --- Gavin_Chang "Add eMMC 5.0 feature Device Life Time"
 
 out:
 	return err;
@@ -823,34 +683,6 @@ MMC_DEV_ATTR(enhanced_area_size, "%u\n", card->ext_csd.enhanced_area_size);
 MMC_DEV_ATTR(raw_rpmb_size_mult, "%#x\n", card->ext_csd.raw_rpmb_size_mult);
 MMC_DEV_ATTR(rel_sectors, "%#x\n", card->ext_csd.rel_sectors);
 
-//ASUS_BSP +++ Gavin_Chang "emmc info for ATD"
-MMC_DEV_ATTR(emmc_prv, "0x%x\n", asus_get_emmc_prv(card));
-MMC_DEV_ATTR(emmc_status, "%s\n", asus_get_emmc_status(card));
-MMC_DEV_ATTR(emmc_size, "0x%02x%02x%02x%02x\n", card->ext_csd.raw_sectors[3], card->ext_csd.raw_sectors[2],
-	card->ext_csd.raw_sectors[1], card->ext_csd.raw_sectors[0]);
-MMC_DEV_ATTR(emmc_fw_version, "0x%02x%02x%02x%02x%02x%02x%02x%02x\n", card->ext_csd.raw_fw_version[7],
-	card->ext_csd.raw_fw_version[6],
-	card->ext_csd.raw_fw_version[5],
-	card->ext_csd.raw_fw_version[4],
-	card->ext_csd.raw_fw_version[3],
-	card->ext_csd.raw_fw_version[2],
-	card->ext_csd.raw_fw_version[1],
-	card->ext_csd.raw_fw_version[0]);
-//ASUS_BSP --- Gavin_Chang "emmc info for ATD"
-//ASUS_BSP +++ Gavin_Chang  "Sandisk's eMMC health status feature"
-MMC_DEV_ATTR(slc_health, "%d\n", card->ext_csd.slc_health);
-MMC_DEV_ATTR(mlc_lp_health, "%d\n", card->ext_csd.mlc_lp_health);
-MMC_DEV_ATTR(mlc_health, "%d\n", card->ext_csd.mlc_health);
-MMC_DEV_ATTR(emmc_health, "%s\n", asus_get_emmc_health(card));
-//ASUS_BSP --- Gavin_Chang  "Sandisk's eMMC health status feature"
-//ASUS_BSP +++ Gavin_Chang "Add eMMC 5.0 feature Device Life Time"
-MMC_DEV_ATTR(device_life_time_type_A, "0x%02x\n", card->ext_csd.device_life_time_type_A);
-MMC_DEV_ATTR(device_life_time_type_B, "0x%02x\n", card->ext_csd.device_life_time_type_B);
-//ASUS_BSP --- Gavin_Chang "Add eMMC 5.0 feature Device Life Time"
-//ASUS_BSP +++ Gavin_Chang "add eMMC total size for AMAX"
-MMC_DEV_ATTR(emmc_total_size, "%s\n", asus_get_emmc_total_size(card));
-//ASUS_BSP --- Gavin_Chang "add eMMC total size for AMAX"
-
 static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_cid.attr,
 	&dev_attr_csd.attr,
@@ -867,25 +699,6 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_enhanced_area_size.attr,
 	&dev_attr_raw_rpmb_size_mult.attr,
 	&dev_attr_rel_sectors.attr,
-//ASUS_BSP +++ Gavin_Chang "emmc info for ATD"
-	&dev_attr_emmc_prv.attr,
-	&dev_attr_emmc_status.attr,
-	&dev_attr_emmc_size.attr,
-	&dev_attr_emmc_fw_version.attr,
-//ASUS_BSP --- Gavin_Chang "emmc info for ATD"
-//ASUS_BSP +++ Gavin_Chang  "Sandisk's eMMC health status feature"
-	&dev_attr_slc_health.attr,
-	&dev_attr_mlc_lp_health.attr,
-	&dev_attr_mlc_health.attr,
-	&dev_attr_emmc_health.attr,
-//ASUS_BSP --- Gavin_Chang  "Sandisk's eMMC health status feature"
-//ASUS_BSP +++ Gavin_Chang "Add eMMC 5.0 feature Device Life Time"
-	&dev_attr_device_life_time_type_A.attr,
-	&dev_attr_device_life_time_type_B.attr,
-//ASUS_BSP --- Gavin_Chang "Add eMMC 5.0 feature Device Life Time"
-//ASUS_BSP +++ Gavin_Chang "add eMMC total size for AMAX"
-	&dev_attr_emmc_total_size.attr,
-//ASUS_BSP --- Gavin_Chang "add eMMC total size for AMAX"
 	NULL,
 };
 
@@ -941,9 +754,7 @@ static int mmc_select_powerclass(struct mmc_card *card,
 				EXT_CSD_PWR_CL_52_195 :
 				EXT_CSD_PWR_CL_DDR_52_195;
 		else if (host->ios.clock <= 200000000)
-			index = (bus_width <= EXT_CSD_BUS_WIDTH_8) ?
-				EXT_CSD_PWR_CL_200_195 :
-				EXT_CSD_PWR_CL_DDR_200_195;
+			index = EXT_CSD_PWR_CL_200_195;
 		break;
 	case MMC_VDD_27_28:
 	case MMC_VDD_28_29:
@@ -961,9 +772,9 @@ static int mmc_select_powerclass(struct mmc_card *card,
 				EXT_CSD_PWR_CL_52_360 :
 				EXT_CSD_PWR_CL_DDR_52_360;
 		else if (host->ios.clock <= 200000000)
-			index = (bus_width <= EXT_CSD_BUS_WIDTH_8) ?
-				EXT_CSD_PWR_CL_200_360 :
-				EXT_CSD_PWR_CL_DDR_200_360;
+			index = (bus_width == EXT_CSD_DDR_BUS_WIDTH_8) ?
+				EXT_CSD_PWR_CL_DDR_200_360 :
+				EXT_CSD_PWR_CL_200_360;
 		break;
 	default:
 		pr_warning("%s: Voltage range not supported "
@@ -1320,12 +1131,7 @@ static int mmc_select_hs400(struct mmc_card *card, u8 *ext_csd)
 	mmc_set_timing(host, MMC_TIMING_LEGACY);
 	mmc_set_clock(host, MMC_HIGH_26_MAX_DTR);
 
-	err = mmc_select_hs(card, ext_csd);
-	if (err)
-		goto out;
-	mmc_card_clr_highspeed(card);
-
-	/* Switch to 8-bit DDR mode */
+	/* Switch to 8-bit HighSpeed DDR mode */
 	err = mmc_select_hsddr(card, ext_csd);
 	if (err)
 		goto out;
@@ -1509,18 +1315,7 @@ static int mmc_select_bus_speed(struct mmc_card *card, u8 *ext_csd)
 out:
 	return err;
 }
-static int mmc_can_poweroff_notify(const struct mmc_card *card)
-{
-//ASUS_BAP Gavin_Chang +++ turn off PON
-	if(MMC_CONFIG_SETTING_PON){
-		return card &&
-			mmc_card_mmc(card) &&
-			(card->ext_csd.power_off_notification == EXT_CSD_POWER_ON);
-	}
-	else
-		return 0;
-//ASUS_BAP Gavin_Chang --- turn off PON
-}
+
 /*
  * Handle the detection and initialisation of a card.
  *
@@ -1671,8 +1466,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	 * If enhanced_area_en is TRUE, host needs to enable ERASE_GRP_DEF
 	 * bit.  This bit will be lost every time after a reset or power off.
 	 */
-//ASUS_BSP Gavin_Chang +++ turn off enhanced area 
-#if MMC_CONFIG_SETTING_ENHANCED_AREA
 	if (card->ext_csd.enhanced_area_en ||
 	    (card->ext_csd.rev >= 3 && (host->caps2 & MMC_CAP2_HC_ERASE_SZ))) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
@@ -1701,8 +1494,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			mmc_set_erase_size(card);
 		}
 	}
-#endif
-//ASUS_BSP Gavin_Chang --- turn off enhanced area 
+
 	/*
 	 * Ensure eMMC user default partition is enabled
 	 */
@@ -1721,8 +1513,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	 * If the host supports the power_off_notify capability then
 	 * set the notification byte in the ext_csd register of device
 	 */
-//ASUS_BSP Gavin_Chang +++ turn off PON
-#if MMC_CONFIG_SETTING_PON
 	if ((host->caps2 & MMC_CAP2_POWEROFF_NOTIFY) &&
 	    (card->ext_csd.rev >= 6)) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
@@ -1739,8 +1529,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		if (!err)
 			card->ext_csd.power_off_notification = EXT_CSD_POWER_ON;
 	}
-#endif
-//ASUS_BSP Gavin_Chang --- turn off PON
 
 	/*
 	 * Activate highest bus speed mode supported by both host and card.
@@ -1752,8 +1540,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	/*
 	 * Enable HPI feature (if supported)
 	 */
-//ASUS_BSP Gavin_Chang +++ turn off HPI
-#if MMC_CONFIG_SETTING_HPI
 	if (card->ext_csd.hpi) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				EXT_CSD_HPI_MGMT, 1,
@@ -1767,17 +1553,15 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		} else
 			card->ext_csd.hpi_en = 1;
 	}
-#endif
-//ASUS_BSP Gavin_Chang --- turn off HPI
+
 	/*
 	 * If cache size is higher than 0, this indicates
 	 * the existence of cache and it can be turned on.
 	 * If HPI is not supported then cache shouldn't be enabled.
 	 */
-//ASUS_BSP Gavin_Chang +++ turn off CACHE
-#if MMC_CONFIG_SETTING_CACHE
 	if ((host->caps2 & MMC_CAP2_CACHE_CTRL) &&
-	    (card->ext_csd.cache_size > 0) && card->ext_csd.hpi_en) {
+	    (card->ext_csd.cache_size > 0) && card->ext_csd.hpi_en &&
+	    ((card->quirks & MMC_QUIRK_CACHE_DISABLE) == 0)) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				EXT_CSD_CACHE_CTRL, 1,
 				card->ext_csd.generic_cmd6_time);
@@ -1797,11 +1581,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			card->ext_csd.cache_ctrl = 1;
 		}
 	}
-#endif
-//ASUS_BSP Gavin_Chang --- turn off CACHE
 
-//ASUS_BSP Gavin_Chang +++ turn off PACKED CMD
-#if MMC_CONFIG_SETTING_PACKED
 	if ((host->caps2 & MMC_CAP2_PACKED_WR &&
 			card->ext_csd.max_packed_writes > 0) ||
 	    (host->caps2 & MMC_CAP2_PACKED_RD &&
@@ -1822,8 +1602,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		}
 
 	}
-#endif
-//ASUS_BSP Gavin_Chang --- turn off PACKED CMD
+
 	if (!oldcard) {
 		if ((host->caps2 & MMC_CAP2_PACKED_CMD) &&
 		    (card->ext_csd.max_packed_writes > 0)) {
@@ -1857,36 +1636,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 				card->bkops_info.delay_ms =
 					card->bkops_info.host_delay_ms;
 		}
-
-	pr_info("[eMMC_LOG] eMMC CONFIG SETTING INFO START");
-	pr_info("[eMMC_LOG] --C SLEEP CMD     = %d --",MMC_CONFIG_SETTING_SLEEP);
-	pr_info("[eMMC_LOG] --  SLEEP CMD     = %d --",mmc_card_can_sleep(host));
-	pr_info("[eMMC_LOG] --C BKOPS         = %d --",MMC_CONFIG_SETTING_BKOPS);
-	pr_info("[eMMC_LOG] --  BKOPS         = %d --",card->ext_csd.bkops_en);
-	pr_info("[eMMC_LOG] --C HPI           = %d --",MMC_CONFIG_SETTING_HPI);
-	pr_info("[eMMC_LOG] --  HPI           = %d --",card->ext_csd.hpi_en);
-	pr_info("[eMMC_LOG] --C RPMB          = %d --",MMC_CONFIG_SETTING_RPMB);
-	pr_info("[eMMC_LOG] --  RPMB          = %d --",card->ext_csd.raw_rpmb_size_mult);
-	pr_info("[eMMC_LOG] --C ENHANCED AREA = %d --",MMC_CONFIG_SETTING_ENHANCED_AREA);
-	pr_info("[eMMC_LOG] --  ENHANCED AREA = %d --",card->ext_csd.enhanced_area_en);
-	pr_info("[eMMC_LOG] --C DISCARD       = %d --",MMC_CONFIG_SETTING_DISCARD);
-	pr_info("[eMMC_LOG] --  DISCARD       = %d --",mmc_can_discard(card));
-	pr_info("[eMMC_LOG] --C TRIM          = %d --",MMC_CONFIG_SETTING_TRIM);
-	pr_info("[eMMC_LOG] --  TRIM          = %d --",mmc_can_trim(card));
-	pr_info("[eMMC_LOG] --C SANITIZE      = %d --",MMC_CONFIG_SETTING_SANITIZE);
-	pr_info("[eMMC_LOG] --  SANITIZE      = %d --",mmc_can_sanitize(card));
-	pr_info("[eMMC_LOG] --C PON           = %d --",MMC_CONFIG_SETTING_PON);
-	pr_info("[eMMC_LOG] --  PON           = %d --",mmc_can_poweroff_notify(card));
-	pr_info("[eMMC_LOG] --C PACKED CMD    = %d --",MMC_CONFIG_SETTING_PACKED);
-	pr_info("[eMMC_LOG] --  PACKED CMD    = %d --",card->ext_csd.packed_event_en);
-	pr_info("[eMMC_LOG] --C CACHE         = %d --",MMC_CONFIG_SETTING_CACHE);
-	pr_info("[eMMC_LOG] --  CACHE         = %d --",card->ext_csd.cache_ctrl);
-	pr_info("[eMMC_LOG] --C HS200         = %d --",MMC_CONFIG_SETTING_HS200);
-	pr_info("[eMMC_LOG] --  HS200         = %d --",card->ext_csd.hs_max_dtr);
-	pr_info("[eMMC_LOG] eMMC CONFIG SETTING INFO END");	
-
-
-		
 	}
 
 	return 0;
@@ -1899,7 +1648,12 @@ err:
 	return err;
 }
 
-
+static int mmc_can_poweroff_notify(const struct mmc_card *card)
+{
+	return card &&
+		mmc_card_mmc(card) &&
+		(card->ext_csd.power_off_notification == EXT_CSD_POWER_ON);
+}
 
 static int mmc_poweroff_notify(struct mmc_card *card, unsigned int notify_type)
 {
@@ -1948,11 +1702,12 @@ static void mmc_remove(struct mmc_host *host)
 	BUG_ON(!host->card);
 
 	unregister_reboot_notifier(&host->card->reboot_notify);
+
+	mmc_exit_clk_scaling(host);
 	mmc_remove_card(host->card);
 
 	mmc_claim_host(host);
 	host->card = NULL;
-	mmc_exit_clk_scaling(host);
 	mmc_release_host(host);
 }
 

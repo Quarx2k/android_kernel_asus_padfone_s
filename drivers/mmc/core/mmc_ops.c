@@ -615,13 +615,6 @@ int mmc_send_hpi_cmd(struct mmc_card *card, u32 *status)
 
 	err = mmc_wait_for_cmd(card->host, &cmd, 0);
 	if (err) {
-		int rc;
-	
-		/* Let's again check the card status */
-		 rc = mmc_send_status(card, status);
-		 if (!rc && R1_CURRENT_STATE(*status) == R1_STATE_TRAN)
-			return 0;
-
 		pr_debug("%s: error %d interrupting operation. "
 			"HPI command response %#x\n", mmc_hostname(card->host),
 			err, cmd.resp[0]);

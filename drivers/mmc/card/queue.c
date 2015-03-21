@@ -15,18 +15,11 @@
 #include <linux/freezer.h>
 #include <linux/kthread.h>
 #include <linux/scatterlist.h>
+#include <linux/bitops.h>
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 #include "queue.h"
-
-//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
-#ifdef CONFIG_MMC_SUSPENDTEST
-#include "../core/mmc_ops.h"
-#include "../core/core.h"
-#include <linux/delay.h>
-#endif
-//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
 
 #define MMC_QUEUE_BOUNCESZ	65536
 
@@ -61,42 +54,6 @@ static int mmc_prep_request(struct request_queue *q, struct request *req)
 	return BLKPREP_OK;
 }
 
-//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
-#ifdef CONFIG_MMC_SUSPENDTEST
-static int mmc_run_set_suspendtest(struct mmc_queue *mq)
-{
-	int err;
-
-	if (mq->card->host->suspend_datasz) {
-		 if (mq->card->sectors_changed < mq->card->host->suspend_datasz*2)	// 1 sector = 512 byte
-			return 0;
-	} else {
-		mq->card->host->suspend_datasz = 100*1024;	//default value: 100MB
-		return 0;
-	}
-
-	mq->card->sectors_changed = 0;
-	mq->card->host->suspendcnt++;
-
-	err = mmc_suspend_host(mq->card->host);
-	if (err < 0)
-		pr_err("%s: %s: suspend host failed: %d\n", mmc_hostname(mq->card->host),
-		       __func__, err);
-
-	msleep(1000);
-
-	err = mmc_resume_host(mq->card->host);
-	if (err < 0)
-		pr_err("%s: %s: resume host failed: %d\n", mmc_hostname(mq->card->host),
-		       __func__, err);
-
-	msleep(1000);
-
-	return 0;
-}
-#endif
-//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
-
 static int mmc_queue_thread(void *d)
 {
 	struct mmc_queue *mq = d;
@@ -119,11 +76,12 @@ static int mmc_queue_thread(void *d)
 		if (req || mq->mqrq_prev->req) {
 			set_current_state(TASK_RUNNING);
 			mq->issue_fn(mq, req);
-			if (mq->flags & MMC_QUEUE_NEW_REQUEST) {
+			if (test_bit(MMC_QUEUE_NEW_REQUEST, &mq->flags)) {
 				continue; /* fetch again */
-			} else if ((mq->flags & MMC_QUEUE_URGENT_REQUEST) &&
-				   (mq->mqrq_cur->req &&
-				!(mq->mqrq_cur->req->cmd_flags & REQ_URGENT))) {
+			} else if (test_bit(MMC_QUEUE_URGENT_REQUEST,
+					&mq->flags) && (mq->mqrq_cur->req &&
+					!(mq->mqrq_cur->req->cmd_flags &
+						MMC_REQ_NOREINSERT_MASK))) {
 				/*
 				 * clean current request when urgent request
 				 * processing in progress and current request is
@@ -148,12 +106,6 @@ static int mmc_queue_thread(void *d)
 				set_current_state(TASK_RUNNING);
 				break;
 			}
-//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
-#ifdef CONFIG_MMC_SUSPENDTEST
-			if (mq->card->host->suspendtest)
-				mmc_run_set_suspendtest(mq);
-#endif
-//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
 			mmc_start_delayed_bkops(card);
 			mq->card->host->context_info.is_urgent = false;
 			up(&mq->thread_sem);
@@ -523,9 +475,7 @@ int mmc_queue_suspend(struct mmc_queue *mq, int wait)
 	unsigned long flags;
 	int rc = 0;
 
-	if (!(mq->flags & MMC_QUEUE_SUSPENDED)) {
-		mq->flags |= MMC_QUEUE_SUSPENDED;
-
+	if (!(test_and_set_bit(MMC_QUEUE_SUSPENDED, &mq->flags))) {
 		spin_lock_irqsave(q->queue_lock, flags);
 		blk_stop_queue(q);
 		spin_unlock_irqrestore(q->queue_lock, flags);
@@ -536,7 +486,7 @@ int mmc_queue_suspend(struct mmc_queue *mq, int wait)
 			 * Failed to take the lock so better to abort the
 			 * suspend because mmcqd thread is processing requests.
 			 */
-			mq->flags &= ~MMC_QUEUE_SUSPENDED;
+			clear_bit(MMC_QUEUE_SUSPENDED, &mq->flags);
 			spin_lock_irqsave(q->queue_lock, flags);
 			blk_start_queue(q);
 			spin_unlock_irqrestore(q->queue_lock, flags);
@@ -558,8 +508,7 @@ void mmc_queue_resume(struct mmc_queue *mq)
 	struct request_queue *q = mq->queue;
 	unsigned long flags;
 
-	if (mq->flags & MMC_QUEUE_SUSPENDED) {
-		mq->flags &= ~MMC_QUEUE_SUSPENDED;
+	if (test_and_clear_bit(MMC_QUEUE_SUSPENDED, &mq->flags)) {
 
 		up(&mq->thread_sem);
 
