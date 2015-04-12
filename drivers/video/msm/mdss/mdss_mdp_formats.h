@@ -132,13 +132,6 @@ enum {
 		.element = { (e0), (e1) }			\
 	}
 
-//Mickey+++, add for camera rotate used
-#ifdef CONFIG_ASUS_CAMERA_STS   
-static struct mdss_mdp_format_params camera_yv12_format =
-    FMT_YUV_PLANR(MDP_Y_CR_CB_GH2V2, MDSS_MDP_CHROMA_420, C2_R_Cr, C1_B_Cb);
-#endif
-//Mickey---
-
 static struct mdss_mdp_format_params mdss_mdp_format_map[] = {
 	FMT_RGB_565(MDP_RGB_565, C1_B_Cb, C0_G_Y, C2_R_Cr),
 	FMT_RGB_565(MDP_BGR_565, C2_R_Cr, C0_G_Y, C1_B_Cb),
