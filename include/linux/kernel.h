@@ -56,17 +56,7 @@ enum DEVICE_HWID
 
 	A90_UNKNOWN = 0xFF
 };
-
 extern enum DEVICE_HWID g_ASUS_hwID;
-// --- ASUS_BSP : add for miniporting
-
-extern bool g_Charger_mode; //Deeo +++
-extern bool g_Recovery;  //ASUS_BSP: Louis +++
-extern bool g_panel_connect; //Austin +++
-//Mickey+++
-extern bool g_Pad_Bootup;
-extern bool g_Android_Boot_Complete;
-//Mickey---
 
 #define USHRT_MAX	((u16)(~0U))
 #define SHRT_MAX	((s16)(USHRT_MAX>>1))

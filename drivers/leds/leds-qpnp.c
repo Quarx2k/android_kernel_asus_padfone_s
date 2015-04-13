@@ -2989,55 +2989,6 @@ static const struct attribute_group blink_attr_group = {
 	.attrs = blink_attrs,
 };
 
-//ASUS BSP Deeo : add for charger mode +++
-void led_set_charger_mode(uint8_t led_type)
-{
-	if(!g_Charger_mode)
-		return;
-
-	printk("[LED] Charger mode type(%d) pad(%d)\n",led_type,pad_in);
-	if(led_type == 1)	// cable in
-	{
-		if (pad_in ){
-#ifdef CONFIG_EEPROM_NUVOTON
-			AX_MicroP_ControlLED(1,1);
-			return;
-#endif
-		}
-
-		red_led->cdev.brightness = 64;
-		green_led->cdev.brightness = 64;
-
-		schedule_work(&red_led->work);
-		schedule_work(&green_led->work);
-	}
-	else if(led_type == 2) // battery-full
-	{
-		if (pad_in ){
-#ifdef CONFIG_EEPROM_NUVOTON
-			AX_MicroP_ControlLED(0,1);
-			return;
-#endif
-		}
-
-		red_led->cdev.brightness = 0;
-		green_led->cdev.brightness = 128;
-
-		schedule_work(&red_led->work);
-		schedule_work(&green_led->work);
-	}
-	else				// cable out
-	{
-#ifdef CONFIG_EEPROM_NUVOTON
-		if (pad_in )
-			AX_MicroP_ControlLED(0,0);
-#endif
-		led_clean();
-		return;
-	}
-}
-//ASUS BSP Deeo : add for charger mode ---
-EXPORT_SYMBOL(led_set_charger_mode);
 static int __devinit qpnp_flash_init(struct qpnp_led_data *led)
 {
 	int rc;
