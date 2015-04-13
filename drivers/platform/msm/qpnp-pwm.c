@@ -562,18 +562,11 @@ static int qpnp_lpg_change_table(struct pwm_device *pwm,
 	int			list_len = lut->list_len << 1;
 	int			offset = (lut->lo_index << 1) - 2;
 
-	printk("[LED] qpnp_lpg_change_table \n");
 	pwm_size = QPNP_GET_PWM_SIZE(
 			chip->qpnp_lpg_registers[QPNP_LPG_PWM_SIZE_CLK]) +
 				QPNP_MIN_PWM_BIT_SIZE;
 
-	// ASUS_BSP Deeo : set PWM size to 8 bits for PWM value enlarge to 255 +++
-	//printk("[LED] force pwm_size 8 bits\n");
-	pwm_size=8;
-	// ASUS_BSP Deeo : set PWM size to 8 bits for PWM value enlarge to 255 ---
-
 	max_pwm_value = (1 << pwm_size) - 1;
-	//printk("[LED] pwm_size 0x%x  max_pwm_value 0x%x\n",pwm_size,max_pwm_value);
 
 	if (unlikely(lut->list_len != (lut->hi_index - lut->lo_index + 1))) {
 		pr_err("LUT internal Data structure corruption detected\n");
@@ -589,7 +582,6 @@ static int qpnp_lpg_change_table(struct pwm_device *pwm,
 		else
 			pwm_value = (duty_pct[i] << pwm_size) / 100;
 
-		//printk("[LED] pwm_value %d,duty_pct[%d] %d\n",pwm_value,i,duty_pct[i]);
 		if (pwm_value > max_pwm_value)
 			pwm_value = max_pwm_value;
 
@@ -716,7 +708,7 @@ static int qpnp_lpg_configure_pattern(struct pwm_device *pwm)
 	u8			value, mask;
 
 	qpnp_set_pattern_config(&value, lut_config);
-	printk("[LED] qpnp_lpg_configure_pattern \n");
+
 	mask = QPNP_RAMP_DIRECTION_MASK | QPNP_PATTERN_REPEAT_MASK |
 			QPNP_RAMP_TOGGLE_MASK | QPNP_EN_PAUSE_HI_MASK |
 			QPNP_EN_PAUSE_LO_MASK;
@@ -932,9 +924,6 @@ static int qpnp_lpg_configure_index(struct pwm_device *pwm)
 	struct qpnp_lpg_chip	*chip = pwm->chip;
 	u8			value, mask;
 	int			rc = 0;
-
-	printk("[LED] qpnp_lpg_configure_index \n");
-	//printk("[LED] hi_index %d , lo_index %d , lpg_config->base_addr 0x%x\n",lut_config.hi_index,lut_config.lo_index,lpg_config->base_addr);
 
 	value = lut_config.hi_index;
 	mask = QPNP_HI_INDEX_MASK;
@@ -1178,7 +1167,6 @@ static int _pwm_lut_config(struct pwm_device *pwm, int period_us,
 	int				raw_lut, ramp_step_ms;
 	int				rc = 0;
 
-	printk("[LED]  _pwm_lut_config \n");
 	pwm_config = &pwm->pwm_config;
 	lpg_config = &pwm->chip->lpg_config;
 	lut_config = &lpg_config->lut_config;
@@ -1195,11 +1183,8 @@ static int _pwm_lut_config(struct pwm_device *pwm, int period_us,
 		goto after_table_write;
 
 	raw_lut = 0;
-
-	// ASUS_BSP Deeo : force set raw_lut = 1 +++
-	if ( flags & PM_PWM_LUT_USE_RAW_VALUE || 1 )
+	if (flags & PM_PWM_LUT_USE_RAW_VALUE)
 		raw_lut = 1;
-	// ASUS_BSP Deeo : force set raw_lut = 1 ---	
 
 	lut_config->list_len = len;
 	lut_config->lo_index = start_idx + 1;
@@ -1234,14 +1219,6 @@ after_table_write:
 	lut_config->ramp_toggle	    = !!(flags & PM_PWM_LUT_REVERSE);
 	lut_config->enable_pause_hi = !!(flags & PM_PWM_LUT_PAUSE_HI_EN);
 	lut_config->enable_pause_lo = !!(flags & PM_PWM_LUT_PAUSE_LO_EN);
-
-/*
-	printk("[LED] lut_config->ramp_step_ms %d\n",lut_config->ramp_step_ms);
-	printk("[LED] lut_config->ramp_direction %d\n",lut_config->ramp_direction);
-	printk("[LED] lut_config->ramp_toggle %d\n",lut_config->ramp_toggle);
-	printk("[LED] lut_config->enable_pause_hi %d\n",lut_config->enable_pause_hi);
-	printk("[LED] llut_config->enable_pause_lo %d\n",lut_config->enable_pause_lo);
-*/
 
 	rc = qpnp_lpg_change_lut(pwm);
 

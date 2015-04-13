@@ -1340,9 +1340,6 @@ hwmon_err_sens:
 	return rc;
 }
 
-//ASUS_BSP Eason A90_EVB porting +++
-struct qpnp_vadc_chip *asus_vadc;
-//ASUS_BSP Eason A90_EVB porting ---
 static int __devinit qpnp_vadc_probe(struct spmi_device *spmi)
 {
 	struct qpnp_vadc_chip *vadc;
@@ -1363,9 +1360,6 @@ static int __devinit qpnp_vadc_probe(struct spmi_device *spmi)
 	vadc = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_vadc_chip) +
 		(sizeof(struct sensor_device_attribute) *
 				count_adc_channel_list), GFP_KERNEL);
-	//ASUS_BSP Eason A90_EVB porting +++
-	asus_vadc = vadc;
-	//ASUS_BSP Eason A90_EVB porting ---
 	if (!vadc) {
 		dev_err(&spmi->dev, "Unable to allocate memory\n");
 		return -ENOMEM;
