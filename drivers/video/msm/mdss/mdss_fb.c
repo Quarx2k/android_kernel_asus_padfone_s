@@ -62,7 +62,7 @@
 #else
 #define MDSS_FB_NUM 2
 #endif
-
+extern void qpnp_wled_ctrl(bool enable); //Quarx Asus
 #define MAX_FBI_LIST 32
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
@@ -2763,6 +2763,8 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 	}
 	if (!ret)
 		mdss_fb_update_backlight(mfd);
+
+	qpnp_wled_ctrl(1); //Quarx //Asus
 
 	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
 		mdss_fb_release_kickoff(mfd);

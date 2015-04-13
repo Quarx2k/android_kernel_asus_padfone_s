@@ -34,6 +34,7 @@ enum {
     SHARP_DISP = 0,
     INNOLUX_DISP,
 };
+static struct mutex cmd_mutex;
 extern void qpnp_wled_ctrl(bool enable);
 extern int himax_ts_suspend(void);
 extern int himax_ts_resume(void);
@@ -52,6 +53,7 @@ static struct dsi_cmd_desc nvt_brightness_set = {
     {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(a90_bl_val)},
     a90_bl_val
 };
+extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
 #endif 
 #ifdef CONFIG_MACH_OPPO
 extern int lm3630_bank_a_update_status(u32 bl_level);
@@ -682,6 +684,7 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	if (level == 0) {
 		return;
 	}
+	mutex_lock(&cmd_mutex);
 	if (A91_lcd_id == SHARP_DISP) {
 		level *= 4;
 		a86_bl_val[1] = level/256;
@@ -715,15 +718,8 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	cmdreq.cb = NULL;
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+	mutex_unlock(&cmd_mutex);
 }
-
-#ifdef ASUS_PF500KL_PROJECT
-int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
-{
-	mdss_dsi_panel_bklt_dcs(ctrl, value);
-	return 0;
-}
-#endif
 
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
@@ -1110,7 +1106,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
-
+	mutex_lock(&cmd_mutex);
 	if (ctrl->on_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
 #ifdef ASUS_PF500KL_PROJECT
@@ -1132,6 +1128,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
 	pr_debug("%s:-\n", __func__);
+    	mutex_unlock(&cmd_mutex);
 	return 0;
 }
 
@@ -1151,6 +1148,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 
 	pr_debug("%s: ctrl=%p ndx=%d\n", __func__, ctrl, ctrl->ndx);
 #ifdef ASUS_PF500KL_PROJECT
+	mutex_lock(&cmd_mutex);
 	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
 		qpnp_wled_ctrl(0);
 	}
@@ -1167,6 +1165,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_BLANK;
 	pr_debug("%s:-\n", __func__);
+	mutex_unlock(&cmd_mutex);
 	return 0;
 }
 
@@ -2044,6 +2043,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->low_power_config = mdss_dsi_panel_low_power_config;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
+	mutex_init(&cmd_mutex);
 
 	return 0;
 }

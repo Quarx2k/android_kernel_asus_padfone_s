@@ -346,7 +346,6 @@ static int a86_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl, int value)
 
     if (value == 0) {
         printk("[BL] %s turn off Phone backlight\n",__func__);
-        asus_set_brightness(ctrl,0);
 		if (S5V_enable == 1 && g_ASUS_hwID == A90_EVB0)
 			backlight_IC_5V_Ctrl(0);
         return 0;
@@ -415,7 +414,6 @@ static int a86_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl, int value)
 
     }
 #endif
-    asus_set_brightness(ctrl, index);
     if((index > pdata->timaout_backlight_level) & (backlight_previous_value != 0) & ( (backlight_previous_value == 5) ||(abs(backlight_previous_value - index) >= 30))){
 		backlight_previous_value = index;
     	}
@@ -438,7 +436,6 @@ static int ME771KL_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl,int value)
 
     if (value == 0) {
         printk("[BL] %s turn off Phone backlight\n",__func__);
-        asus_set_brightness(ctrl,0);
         return 0;
     }
 
@@ -503,7 +500,6 @@ static int ME771KL_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl,int value)
     }
 #endif
 
-    asus_set_brightness(ctrl,index);
     if((index > pdata->timaout_backlight_level) & (backlight_previous_value != 0) & ( (backlight_previous_value == 5) ||(abs(backlight_previous_value - index) >= 30))){
 		backlight_previous_value = index;
     	}
