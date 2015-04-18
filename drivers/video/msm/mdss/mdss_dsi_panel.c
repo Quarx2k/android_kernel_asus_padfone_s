@@ -34,17 +34,26 @@ enum {
     SHARP_DISP = 0,
     INNOLUX_DISP,
 };
+static bool CABC_MOVING = true;
 static struct mutex cmd_mutex;
+extern struct mdss_panel_data *g_mdss_pdata;
 extern void qpnp_wled_ctrl(bool enable);
 extern int himax_ts_suspend(void);
 extern int himax_ts_resume(void);
 int A91_lcd_id = 0; // 0:sharp; 1:innolux
 static char a86_bl_val[3] = {0x51, 0x01, 0x00};
 static char a86_bl_init_val[3] = {0x51, 0x01, 0x00};	// jacob add for skip abnormal backlight value
-//static char a86_ctrl_display[2] = {0x53, 0x2C};     //enable dimming ctrl bit
-//static char cabc_ctrl[2] = {0x55, 0x3}; //moving mode
+static char a86_ctrl_display[2] = {0x53, 0x2C};     //enable dimming ctrl bit
+static char cabc_ctrl[2] = {0x55, 0x3}; //moving mode
 static char a90_bl_val[2] = {0x51, 0x64};
 static char a90_bl_init_val[2] = {0x51, 0x35};	// jacob add for skip abnormal backlight value
+#ifdef CONFIG_P05_NOVATEK_CM
+extern void nvt71890_cabc_set(bool bOn);
+#endif
+#ifdef CONFIG_A86_BACKLIGHT
+extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
+#endif
+static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level);
 static struct dsi_cmd_desc renesas_brightness_set = {
     {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(a86_bl_val)},
     a86_bl_val
@@ -54,6 +63,35 @@ static struct dsi_cmd_desc nvt_brightness_set = {
     a90_bl_val
 };
 extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
+static struct dsi_cmd_desc a86_cabc_cmd[] = {
+    { {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(a86_ctrl_display)}, a86_ctrl_display},
+    { {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(cabc_ctrl)}, cabc_ctrl},
+};
+
+int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int level)
+{
+	mdss_dsi_panel_bklt_dcs(ctrl, level);
+	return 0;
+}
+
+void sharp_set_cabc(struct mdss_dsi_ctrl_pdata *ctrl, int mode)
+{
+        struct dcs_cmd_req cmdreq;
+        mutex_lock(&cmd_mutex);
+
+        cabc_ctrl[1] = cabc_ctrl[1] & 0xf0;
+        cabc_ctrl[1] += mode;
+        printk("[Display][CABC] write cabc mode = 0x%x\n", cabc_ctrl[1]);
+
+        memset(&cmdreq, 0, sizeof(cmdreq));
+        cmdreq.cmds = a86_cabc_cmd;
+        cmdreq.cmds_cnt = ARRAY_SIZE(a86_cabc_cmd);
+        cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+        cmdreq.rlen = 0;
+        cmdreq.cb = NULL;
+        mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+        mutex_unlock(&cmd_mutex);
+}
 #endif 
 #ifdef CONFIG_MACH_OPPO
 extern int lm3630_bank_a_update_status(u32 bl_level);
@@ -698,8 +736,19 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 			a90_bl_init_val[1] = level;
 		}
 	}
+
+	if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
+		if (level <= 150 && CABC_MOVING == true) {   //turn off cabc once duty < 15 %
+			sharp_set_cabc(ctrl, 0);
+			CABC_MOVING = false;
+        }
+		else if (level > 150 && CABC_MOVING == false) {
+			sharp_set_cabc(ctrl, 3);
+			CABC_MOVING = true;
+		}
+	}
 #endif
-	printk("%s: level=%d\n", __func__, level);
+	//printk("%s: level=%d\n", __func__, level);
 
 	led_pwm1[1] = (unsigned char)level;
 	memset(&cmdreq, 0, sizeof(cmdreq));
@@ -718,7 +767,9 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	cmdreq.cb = NULL;
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+#ifdef ASUS_PF500KL_PROJECT
 	mutex_unlock(&cmd_mutex);
+#endif
 }
 
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
@@ -1052,6 +1103,7 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	case BL_PWM:
 		mdss_dsi_panel_bklt_pwm(ctrl_pdata, bl_level);
 		break;
+#ifndef ASUS_PF500KL_PROJECT
 	case BL_DCS_CMD:
 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
 			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
@@ -1081,6 +1133,37 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 			__func__);
 		break;
 	}
+#else 
+	case BL_DCS_CMD:
+		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
+			asus_set_bl_brightness(ctrl_pdata, bl_level);
+			break;
+		}
+		/*
+		 * DCS commands to update backlight are usually sent at
+		 * the same time to both the controllers. However, if
+		 * sync_wait is enabled, we need to ensure that the
+		 * dcs commands are first sent to the non-trigger
+		 * controller so that when the commands are triggered,
+		 * both controllers receive it at the same time.
+		 */
+		sctrl = mdss_dsi_get_other_ctrl(ctrl_pdata);
+		if (mdss_dsi_sync_wait_trigger(ctrl_pdata)) {
+			if (sctrl)
+				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
+			asus_set_bl_brightness(ctrl_pdata, bl_level);
+		} else {
+			asus_set_bl_brightness(ctrl_pdata, bl_level);
+			if (sctrl)
+				asus_set_bl_brightness(sctrl, bl_level);
+		}
+		break;
+	default:
+		pr_err("%s: Unknown bl_ctrl configuration\n",
+			__func__);
+		break;
+	}
+#endif
 #ifdef CONFIG_MACH_OPPO
 	lm3630_bank_a_update_status(bl_level);
 #endif
@@ -1090,7 +1173,9 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
-
+#ifdef ASUS_PF500KL_PROJECT
+	int indx = 2;
+#endif		
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
@@ -1106,7 +1191,20 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
+#ifdef ASUS_PF500KL_PROJECT
 	mutex_lock(&cmd_mutex);
+
+	if (pdata->panel_info.type == MIPI_VIDEO_PANEL)
+		indx = 2;   // add for video dtsi VBP / VFP
+
+	if (A91_lcd_id) {
+             ctrl->on_cmds.cmds[523+indx].payload[1] = a90_bl_init_val[1];
+        if (!CABC_MOVING)
+            ctrl->on_cmds.cmds[525+indx].payload[1] = 0x0;
+	} else {
+	         memcpy(ctrl->on_cmds.cmds[4].payload,a86_bl_init_val,sizeof(a86_bl_init_val));
+	}
+#endif
 	if (ctrl->on_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
 #ifdef ASUS_PF500KL_PROJECT
@@ -1128,7 +1226,9 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
 	pr_debug("%s:-\n", __func__);
+#ifdef ASUS_PF500KL_PROJECT
     	mutex_unlock(&cmd_mutex);
+#endif
 	return 0;
 }
 
@@ -1165,7 +1265,9 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_BLANK;
 	pr_debug("%s:-\n", __func__);
+#ifdef ASUS_PF500KL_PROJECT
 	mutex_unlock(&cmd_mutex);
+#endif
 	return 0;
 }
 
@@ -2043,7 +2145,8 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->low_power_config = mdss_dsi_panel_low_power_config;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
+#ifdef ASUS_PF500KL_PROJECT
 	mutex_init(&cmd_mutex);
-
+#endif
 	return 0;
 }

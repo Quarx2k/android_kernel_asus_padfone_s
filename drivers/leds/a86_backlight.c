@@ -139,7 +139,6 @@ struct  pm8xxx_pwm_period define_pwm_parameter[] = {
 		{PM_PWM_SIZE_9BIT,PM_PWM_CLK_19P2MHZ,PM_PWM_PDIV_3,0},//12.5KHz
 		{PM_PWM_SIZE_9BIT,PM_PWM_CLK_19P2MHZ,PM_PWM_PDIV_2,0},//18.75 KHz
 	};
-
 struct pwm_device {
 	int			pwm_id;		/* = bank/channel id */
 	int			in_use;
@@ -161,11 +160,9 @@ enum brightness_mode {
     AUTO,
     OUTDOOR,
 };
-
 void cabl_bl_scale(int cabl_scale, int bl_min_lvl, int mode)
 {
     int new_level = 0, index;
-
     if (backlight_value >= bl_min_lvl) 
     {
         switch (mode) {
@@ -176,7 +173,6 @@ void cabl_bl_scale(int cabl_scale, int bl_min_lvl, int mode)
                     new_level = 30;
                 }
             break;
-
             case AUTO:
                 index = 2000;
                 new_level = (backlight_value - index) * cabl_scale / 1000 + index;
@@ -184,7 +180,6 @@ void cabl_bl_scale(int cabl_scale, int bl_min_lvl, int mode)
                     new_level = 2030;
                 }
             break;
-
             case OUTDOOR:
                 index = 1000;
                 new_level = (backlight_value - index) * cabl_scale / 1000 + index;
@@ -192,23 +187,18 @@ void cabl_bl_scale(int cabl_scale, int bl_min_lvl, int mode)
                     new_level = 1030;
                 }
             break;
-
             default:
                 return;
         }
-
         down(&cabl_bl_sem);
         if (new_level == backlight_value) {
             up(&cabl_bl_sem);
             return;
         }
-
         printk(KERN_DEBUG"[BL][cabl] mode(%d), scale(%d), new_level(%d), old_level(%d)\n",mode ,cabl_scale , new_level, backlight_value);
-
         if (bl_busy) {
             wait_for_completion_timeout(&brightness_comp, msecs_to_jiffies(500));
         }
-
 		if (g_A68_hwID <= A80_SR1)
         	a80_mipi_set_backlight(new_level);
 		else if (A80_SR2 <= g_A68_hwID )
@@ -217,7 +207,6 @@ void cabl_bl_scale(int cabl_scale, int bl_min_lvl, int mode)
     }
 }
 EXPORT_SYMBOL(cabl_bl_scale);
-
 static int a80_set_pmic_backlight(value)
 {
 	int ret = 0;
@@ -261,12 +250,10 @@ static int a80_set_pmic_backlight(value)
                 	index = 0;
             	}
 #else
-
 		if (value <= 255) {  //normal mode
 			index = ((value - 20) * 319)/ 235 + 21;
 			printk(KERN_DEBUG"[BL]Set pmic backlight normal index == %d\n",index);
                 	//20~255 mapping 21~340; max: ? nits, min: ? nits, default: ? nits( ? %)
-
 			 if (index >= 340) {
                     	index = 340;
                 	}
@@ -346,6 +333,7 @@ static int a86_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl, int value)
 
     if (value == 0) {
         printk("[BL] %s turn off Phone backlight\n",__func__);
+        asus_set_brightness(ctrl,0);
 		if (S5V_enable == 1 && g_ASUS_hwID == A90_EVB0)
 			backlight_IC_5V_Ctrl(0);
         return 0;
@@ -411,9 +399,9 @@ static int a86_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl, int value)
 #endif
 	    else
             index = pdata->default_backlight_level;//value not in spec, do set default value
-
     }
 #endif
+    asus_set_brightness(ctrl, index);
     if((index > pdata->timaout_backlight_level) & (backlight_previous_value != 0) & ( (backlight_previous_value == 5) ||(abs(backlight_previous_value - index) >= 30))){
 		backlight_previous_value = index;
     	}
@@ -436,6 +424,7 @@ static int ME771KL_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl,int value)
 
     if (value == 0) {
         printk("[BL] %s turn off Phone backlight\n",__func__);
+        asus_set_brightness(ctrl,0);
         return 0;
     }
 
@@ -500,6 +489,7 @@ static int ME771KL_set_backlight(struct mdss_dsi_ctrl_pdata *ctrl,int value)
     }
 #endif
 
+    asus_set_brightness(ctrl,index);
     if((index > pdata->timaout_backlight_level) & (backlight_previous_value != 0) & ( (backlight_previous_value == 5) ||(abs(backlight_previous_value - index) >= 30))){
 		backlight_previous_value = index;
     	}
@@ -518,11 +508,9 @@ static int a68_set_backlight(value)
     int ret, duty_us;
     int index = 0;
     static bool CABC_On = true;
-
     if(value >= 2000 && value <= 2255) {
         value -= 2000;
     }
-
     if (g_A68_hwID >= A68_SR2)  //driver ic support
     {
         if (value == 0 || value == 1000) {
@@ -530,13 +518,11 @@ static int a68_set_backlight(value)
             sharp_set_brightness(0);
             return 0;
         }
-
 #ifdef ASUS_FACTORY_BUILD
         if (g_A68_hwID == A68_SR2) 
         {
             index = ((value - 20) * ((153*10000)/ 235)) / 10000 + 8;
             //factory: 20~550nits
-
             if (index >= 160) {
                 index = 160;
             }
@@ -562,7 +548,6 @@ static int a68_set_backlight(value)
             {
                 index = ((value - 20) * ((80*10000)/ 235)) / 10000 + 8;
                 //20~255 mapping 8~87; max:300nits, min:20nits (3%), default:100nits (12%)
-
                 if (index >= 87) {
                     index = 87;
                 }
@@ -574,7 +559,6 @@ static int a68_set_backlight(value)
             {
                 index = ((value - 20) * ((125*10000)/ 235)) / 10000 + 11;
                 //20~255 mapping 11~135; max:300nits, min:20nits, default:100nits(17%)
-
                 if (index >= 135) {
                     index = 135;
                 }
@@ -589,7 +573,6 @@ static int a68_set_backlight(value)
             {
                 index = ((value - 1020) * ((120*10000)/ 235)) / 10000 + 41;
                 //1020~1255 mapping 41~160; max:550nits, min:140nits(16%)
-
                 if (index >= 160) {
                     index = 160;
                 }
@@ -601,7 +584,6 @@ static int a68_set_backlight(value)
             {
                 index = ((value - 1020) * ((192*10000)/ 235)) / 10000 + 64;
                 //1020~1255 mapping 64~255; max:550nits, min:140nits(25%)
-
                 if (index >= 255) {
                     index = 255;
                 }
@@ -623,10 +605,8 @@ static int a68_set_backlight(value)
             CABC_On = true;
         }
 // -- cabc on/off
-
         sharp_set_brightness(index);
     }
-
     else  //pmic support
     {
         if (bl_lpm) 
@@ -640,12 +620,10 @@ static int a68_set_backlight(value)
                 ret = pwm_config(bl_lpm, 
                         A68_PWM_DUTY_LEVEL * (long) value / 2550L, A68_PWM_PERIOD_USEC);
             }
-
             if (ret) {
                 pr_err("pwm_config on lpm failed %d\n", ret);
                 return ret;
             }
-
             if (value) {
                 ret = pwm_enable(bl_lpm);
                 if (ret)
@@ -702,7 +680,6 @@ int pad_set_backlight(int value)
     {
         value -= 2000;
         index = ((value - 10) * 235) / pdata->pad_auto_mod.bl_div + pdata->pad_auto_mod.min_level;
-
         if (index >= pdata->pad_auto_mod.max_level) {
             index = pdata->pad_auto_mod.max_level;
         }
@@ -714,7 +691,6 @@ int pad_set_backlight(int value)
     {
         index = ((value - 10) * 235) / pdata->pad_normal_mod.bl_div + pdata->pad_normal_mod.min_level;
         //20~255 mapping 18~154; max:180nits, min:20nits (7%), default:100nits (33%)
-
         if (index >= pdata->pad_normal_mod.max_level) {
             index = pdata->pad_normal_mod.max_level;
         }
@@ -726,7 +702,6 @@ int pad_set_backlight(int value)
     {
         index = ((value - 1010) * 235) / pdata->pad_outdoor_mod.bl_div + pdata->pad_outdoor_mod.min_level;
         //1020~1255 mapping 118~255; max:300nits, min:140nits (46%)
-
         if (index >= pdata->pad_outdoor_mod.max_level) {
             index = pdata->pad_outdoor_mod.max_level;
         }
@@ -784,8 +759,6 @@ void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
         .inv_int_pol = 0,
         .disable_pin = 0,
     };
-
-
     if (g_ASUS_hwID < A86_EVB)
     {
         if(bFirst) 
@@ -904,7 +877,6 @@ static int asus_bl_parse_dt(struct platform_device *pdev,struct a86_backlight_da
 	printk("[BL]pdata->normod.min_level = %d\n",pdata->normal_mod.min_level);
 	printk("[BL]pdata->normod.max_level = %d\n",pdata->normal_mod.max_level);
 	printk("[BL]pdata->normod.bl_div = %d\n",pdata->normal_mod.bl_div);
-
 //	pars outdoor mode BL level settint
 	rc = of_property_read_u32_array(np, "outmod-bl-param", res, 3);
 	if (rc) {
@@ -969,7 +941,6 @@ static int asus_bl_parse_dt(struct platform_device *pdev,struct a86_backlight_da
 	printk("[BL]pdata->pad_outdoor_mod.min_level = %d\n",pdata->pad_outdoor_mod.min_level);
 	printk("[BL]pdata->pad_outdoor_mod.max_level = %d\n",pdata->pad_outdoor_mod.max_level);
 	printk("[BL]pdata->pad_outdoor_mod.bl_div = %d\n",pdata->pad_outdoor_mod.bl_div);
-
 //	pars Pad_outdoor BL level settint
 	rc = of_property_read_u32_array(np, "pad-autmod-bl-param", res, 3);
 	if (rc) {
@@ -1083,17 +1054,14 @@ static int change_backlight_mode(struct notifier_block *this, unsigned long even
                 backlight_mode_state = pad;
                 //p03_set_backlight(backlight_value);   //plug-in/out set bl from led-class
                 return NOTIFY_DONE;
-
         case P01_REMOVE:
                 backlight_mode_state = phone;
                 //a68_set_backlight(backlight_value);   //plug-in/out set bl from led-class
                 return NOTIFY_DONE;
-
         default:
                 return NOTIFY_DONE;
         }
 }
-
 static struct notifier_block my_hs_notifier = {
         .notifier_call = change_backlight_mode,
         .priority = VIBRATOR_MP_NOTIFY,

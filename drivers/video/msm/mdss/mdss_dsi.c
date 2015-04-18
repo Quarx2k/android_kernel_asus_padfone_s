@@ -26,7 +26,9 @@
 #include "mdss_panel.h"
 #include "mdss_dsi.h"
 #include "mdss_debug.h"
-
+#ifdef ASUS_PF500KL_PROJECT
+struct mdss_panel_data *g_mdss_pdata;
+#endif
 static int mdss_dsi_regulator_init(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -129,7 +131,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	}
 
 	i--;
-
+        g_mdss_pdata = pdata;
 	/*
 	 * If continuous splash screen feature is enabled, then we need to
 	 * request all the GPIOs that have already been configured in the

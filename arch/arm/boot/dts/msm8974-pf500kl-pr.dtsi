@@ -160,20 +160,18 @@
 		pn544@28 {
 			//compatible = "nxp,nxp_pn544";
 			compatible = "nxp,pn544";
-			status = "ok";
 			reg = <0x28>;
 			interrupt-parent = <&msmgpio>;
 			interrupts = <59 0x2>;
 			nxp,irq-gpio = <&msmgpio 59 0x00>;
 			nxp,nfc-ven = <&msmgpio 79 0x00>;
 			nxp,download-gpio = <&pm8941_gpios 24 0x00>;
-			nxp,i2c-pull-up = <1>;
 		};
 		//---Porting NFC's kernel---
 	};
 //--- ASUS BSP
 
-/*
+
 //+++ ASUS BSP......."BLSP12 : Sensors"
 	i2c@f9968000 {
 		// ASUS_BSP +++ Peter_Lu "cm36283 Lightsensor"
@@ -211,7 +209,7 @@
 		// ASUS_BSP --- Jiunhau Wang "[A86][Sensor][NA][Spec] Porting 9-axis sensor"
 	};
 //--- ASUS BSP
-*/
+
 //---.....................................................I2C bus part....................................................---//
 
 	gen-vkeys {
