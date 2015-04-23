@@ -4541,10 +4541,7 @@ bypass_checksum_failed_packet:
 
 		// kernel call for report point area, pressure and x-y axis
 					input_report_key(ts->input_dev, BTN_TOUCH, 1);             // touch down
-#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
-					if (dt2w_switch == 0)
-#endif
-						input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, c); //ID of touched point
+					input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, c); //ID of touched point
 					input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, area); //Finger Size
 					input_report_abs(ts->input_dev, ABS_MT_PRESSURE, press);   // Pressure
 					input_report_abs(ts->input_dev, ABS_MT_POSITION_X, x);     // X axis
