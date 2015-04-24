@@ -386,18 +386,30 @@ int himax_ts_suspend(void)
 
 	ts_suspend = 1;
 	
-	//Mutexlock Protect Start
-	mutex_unlock(&ts_modify->mutex_process_lock);
-	//Mutexlock Protect End
 	printk("[Touch_H] %s himax_ts_suspend end \n",__func__);
 #ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
 	if (dt2w_switch > 0) {
+		wake_lock(&ts_modify->wake_lock);
 		printk("[Touch_H] %s dt2w enabled. Re-enabe touch! \n",__func__);
 		ts_suspend = true;
-		himax_resume();
+		buf[0] = HX_CMD_SETDEEPSTB;
+		buf[1] = 0x00;
+		if(i2c_himax_master_write(ts_modify->client, buf, 2, DEFAULT_RETRY_CNT) < 0)
+		{
+			printk("[Touch_H][TOUCH_ERR] %s: I2C access failed addr = 0x%x\n", 
+				__func__, ts_modify->client->addr);
+		}
+		udelay(100);
+		wake_unlock(&ts_modify->wake_lock);
+		himax_ts_poweron(ts_modify);
+		hx_irq_enable(private_ts);
+
 		enable_irq_wake(ts_modify->client->irq);
 	}
 #endif
+	//Mutexlock Protect Start
+	mutex_unlock(&ts_modify->mutex_process_lock);
+	//Mutexlock Protect End
 	return 0;
 }
 EXPORT_SYMBOL(himax_ts_suspend);
@@ -407,6 +419,13 @@ static int himax_resume(void)
 	struct himax_ts_data *ts_modify;
 	uint8_t buf[2] = { 0 };
 	ts_modify = private_ts;
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+	if (dt2w_switch > 0) {
+		printk("[Touch_H] %s dt2w enabled, skip resume \n",__func__);
+		ts_suspend = false;
+		return 0;
+	}
+#endif
 	printk("[Touch_H] %s himax_resume start \n",__func__);
 	//Wakelock Protect Start
 	wake_lock(&ts_modify->wake_lock);
@@ -4649,7 +4668,7 @@ bypass_checksum_failed_packet:
 				if(point_printed){
 					printk("[Touch_H] Touch Up!!\n");
 #ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
-							if (dt2w_switch > 0) {
+							if (dt2w_switch > 0 && ts_suspend == true) {
 								input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, -1); //DoubleTap
 								input_mt_sync(ts->input_dev);
 							}
