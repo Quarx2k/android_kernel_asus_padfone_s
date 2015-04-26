@@ -515,6 +515,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		 * check whether the eMMC card supports BKOPS.
 		 * If HPI is not supported then BKOPs shouldn't be enabled.
 		 */
+//ASUS change:  turn off BKOPS
+#ifndef ASUS_PF500KL_PROJECT
 		if ((ext_csd[EXT_CSD_BKOPS_SUPPORT] & 0x1) &&
 		    card->ext_csd.hpi) {
 			card->ext_csd.bkops = 1;
@@ -532,7 +534,7 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 					card->ext_csd.bkops_en = 1;
 			}
 		}
-
+#endif
 		pr_info("%s: BKOPS_EN bit = %d\n",
 			mmc_hostname(card->host), card->ext_csd.bkops_en);
 
@@ -559,19 +561,22 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 	/* eMMC v4.5 or later */
 	if (card->ext_csd.rev >= 6) {
+#ifndef ASUS_PF500KL_PROJECT
+//Asus change: Turn off Discard
 		card->ext_csd.feature_support |= MMC_DISCARD_FEATURE;
-
+#endif
 		card->ext_csd.generic_cmd6_time = 10 *
 			ext_csd[EXT_CSD_GENERIC_CMD6_TIME];
 		card->ext_csd.power_off_longtime = 10 *
 			ext_csd[EXT_CSD_POWER_OFF_LONG_TIME];
-
+//ASUS Change: turn off CACHE
+#ifndef ASUS_PF500KL_PROJECT
 		card->ext_csd.cache_size =
 			ext_csd[EXT_CSD_CACHE_SIZE + 0] << 0 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 1] << 8 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 2] << 16 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 3] << 24;
-
+#endif
 		if (ext_csd[EXT_CSD_DATA_SECTOR_SIZE] == 1)
 			card->ext_csd.data_sector_size = 4096;
 		else
@@ -585,11 +590,12 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		} else {
 			card->ext_csd.data_tag_unit_size = 0;
 		}
-
+#ifndef ASUS_PF500KL_PROJECT
 		card->ext_csd.max_packed_writes =
 			ext_csd[EXT_CSD_MAX_PACKED_WRITES];
 		card->ext_csd.max_packed_reads =
 			ext_csd[EXT_CSD_MAX_PACKED_READS];
+#endif
 	}
 
 out:
@@ -1513,6 +1519,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	 * If the host supports the power_off_notify capability then
 	 * set the notification byte in the ext_csd register of device
 	 */
+//ASUS change: turn off PON
+#ifndef ASUS_PF500KL_PROJECT 
 	if ((host->caps2 & MMC_CAP2_POWEROFF_NOTIFY) &&
 	    (card->ext_csd.rev >= 6)) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
@@ -1529,7 +1537,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		if (!err)
 			card->ext_csd.power_off_notification = EXT_CSD_POWER_ON;
 	}
-
+#endif
 	/*
 	 * Activate highest bus speed mode supported by both host and card.
 	 */
@@ -1540,6 +1548,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	/*
 	 * Enable HPI feature (if supported)
 	 */
+#ifndef ASUS_PF500KL_PROJECT 
+//ASUS change turn off hpi
 	if (card->ext_csd.hpi) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				EXT_CSD_HPI_MGMT, 1,
@@ -1553,7 +1563,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		} else
 			card->ext_csd.hpi_en = 1;
 	}
-
+//ASUS change turn off CACHE
 	/*
 	 * If cache size is higher than 0, this indicates
 	 * the existence of cache and it can be turned on.
@@ -1581,7 +1591,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			card->ext_csd.cache_ctrl = 1;
 		}
 	}
-
+// ASUS change turn off PACKED CMD
 	if ((host->caps2 & MMC_CAP2_PACKED_WR &&
 			card->ext_csd.max_packed_writes > 0) ||
 	    (host->caps2 & MMC_CAP2_PACKED_RD &&
@@ -1602,7 +1612,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		}
 
 	}
-
+#endif
 	if (!oldcard) {
 		if ((host->caps2 & MMC_CAP2_PACKED_CMD) &&
 		    (card->ext_csd.max_packed_writes > 0)) {
@@ -1650,9 +1660,13 @@ err:
 
 static int mmc_can_poweroff_notify(const struct mmc_card *card)
 {
+#ifndef ASUS_PF500KL_PROJECT
 	return card &&
 		mmc_card_mmc(card) &&
 		(card->ext_csd.power_off_notification == EXT_CSD_POWER_ON);
+#else 
+	return 0;
+#endif
 }
 
 static int mmc_poweroff_notify(struct mmc_card *card, unsigned int notify_type)
