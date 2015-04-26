@@ -108,14 +108,6 @@ config THERMAL_QPNP
 	  thermal zone device via the mode file results in shifting PMIC over
 	  temperature shutdown control from hardware to software.
 
-config INTELLI_THERMAL_V2
-	bool "Better thermal monitor for MSM"
-	depends on THERMAL_TSENS8974
-	depends on CPU_FREQ_MSM
-	help
-	  This enables thermal monitoring capability in the kernel replacing
-	  userspace thermal monitoring altogether.
-
 config THERMAL_QPNP_ADC_TM
 	tristate "Qualcomm 8974 Thermal Monitor ADC Driver"
 	depends on THERMAL && SPMI
