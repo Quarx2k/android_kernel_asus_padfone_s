@@ -1292,7 +1292,7 @@ static void notify_adc_tm_fn(struct work_struct *work)
 {
 	struct qpnp_adc_tm_sensor *adc_tm = container_of(work,
 		struct qpnp_adc_tm_sensor, work);
-
+#ifndef ASUS_PF500KL_PROJECT
 	if (adc_tm->thermal_node) {
 		sysfs_notify(&adc_tm->tz_dev->device.kobj,
 					NULL, "btm");
@@ -1303,7 +1303,12 @@ static void notify_adc_tm_fn(struct work_struct *work)
 		else
 			notify_clients(adc_tm);
 	}
-
+#else
+		if (adc_tm->scale_type == SCALE_RBATT_THERM)
+			notify_battery_therm(adc_tm);
+		else
+			notify_clients(adc_tm);
+#endif
 	return;
 }
 
