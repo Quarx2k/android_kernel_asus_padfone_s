@@ -700,9 +700,8 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
-
-static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
 #ifndef ASUS_PF500KL_PROJECT
+static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
 static struct dsi_cmd_desc backlight_cmd = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
 	led_pwm1
@@ -722,7 +721,7 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	if (level == 0) {
 		return;
 	}
-	mutex_lock(&cmd_mutex);
+
 	if (A91_lcd_id == SHARP_DISP) {
 		level *= 4;
 		a86_bl_val[1] = level/256;
@@ -749,8 +748,10 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	}
 #endif
 	//printk("%s: level=%d\n", __func__, level);
-
+	mutex_lock(&cmd_mutex);
+#ifndef ASUS_PF500KL_PROJECT
 	led_pwm1[1] = (unsigned char)level;
+#endif
 	memset(&cmdreq, 0, sizeof(cmdreq));
 #ifdef ASUS_PF500KL_PROJECT
         if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
