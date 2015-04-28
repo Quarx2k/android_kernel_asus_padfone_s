@@ -2150,6 +2150,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 #ifdef ASUS_PF500KL_PROJECT
+	A91_lcd_id = gpio_get_value(LCD_ID_DETECT);
 	mutex_init(&cmd_mutex);
 #endif
 	return 0;
