@@ -889,6 +889,9 @@
 		qcom,i2c-src-freq = <19200000>;
 		qcom,clk-ctl-xfer;
 		qcom,master-id = <84>;
+		qcom,active-only;
+		qcom,use-bam;
+		qcom,ver-reg-exists;
 	};
 //--- ASUS BSP
 

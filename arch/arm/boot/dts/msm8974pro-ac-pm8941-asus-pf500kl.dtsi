@@ -10,13 +10,9 @@
  * GNU General Public License for more details.
  */
 
-//+++ ASUS_BSP : modify from msm8974pro-ac-pm8941.dtsi
-///include/ "msm8974pro-pm8941.dtsi"
-/include/ "msm8974pro-pm8941-asus-pf500kl-er2_2.dtsi"
-//--- ASUS_BSP : modify from msm8974pro-ac-pm8941.dtsi
-
+/include/ "msm8974pro-ac-pm8941.dtsi"
 / {
-	qcom,msm-id = <194 0x10000>;	//ASUS_BSP : add for ASUS DT ID MSM8974AC
+	qcom,msm-id = <194 0x10000>;
 };
 
 &sdhc_1 {

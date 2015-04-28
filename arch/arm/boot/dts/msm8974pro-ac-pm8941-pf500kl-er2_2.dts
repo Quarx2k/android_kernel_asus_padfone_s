@@ -15,7 +15,7 @@
 //+++ ASUS_BSP : modify from msm8974pro-ac-pm8941-cdp.dts
 ///include/ "msm8974pro-ac-pm8941.dtsi"
 ///include/ "msm8974-cdp.dtsi"
-/include/ "msm8974pro-ac-pm8941-asus-pf500kl-er2_2.dtsi"
+/include/ "msm8974pro-ac-pm8941-asus-pf500kl.dtsi"
 /include/ "msm8974-pf500kl-er2_2.dtsi"
 //--- ASUS_BSP : modify from msm8974pro-ac-pm8941-cdp.dts
 
