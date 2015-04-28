@@ -1150,7 +1150,7 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		sctrl = mdss_dsi_get_other_ctrl(ctrl_pdata);
 		if (mdss_dsi_sync_wait_trigger(ctrl_pdata)) {
 			if (sctrl)
-				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
+				asus_set_bl_brightness(sctrl, bl_level);
 			asus_set_bl_brightness(ctrl_pdata, bl_level);
 		} else {
 			asus_set_bl_brightness(ctrl_pdata, bl_level);
