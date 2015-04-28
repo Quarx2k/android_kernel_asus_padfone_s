@@ -765,9 +765,12 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
-
+#ifdef ASUS_PF500KL_PROJECT
+        mdss_set_tx_power_mode(0, ctrl);
+#endif
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 #ifdef ASUS_PF500KL_PROJECT
+        mdss_set_tx_power_mode(1, ctrl);
 	mutex_unlock(&cmd_mutex);
 #endif
 }

@@ -811,7 +811,26 @@ static struct dsi_cmd_desc pkt_size_cmd = {
 	{DTYPE_MAX_PKTSIZE, 1, 0, 0, 0, sizeof(max_pktsize)},
 	max_pktsize,
 };
+#ifdef ASUS_PF500KL_PROJECT
+void mdss_set_tx_power_mode(int mode, struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	u32 data;
 
+	if (ctrl == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
+	}
+
+	data = MIPI_INP((ctrl->ctrl_base) + 0x3c);
+
+	if (mode == 0)
+		data &= ~BIT(26);
+	else
+		data |= BIT(26);
+
+	MIPI_OUTP((ctrl->ctrl_base) + 0x3c, data);
+}
+#endif
 /*
  * mdss_dsi_cmds_rx() - dcs read from panel
  * @ctrl: dsi controller

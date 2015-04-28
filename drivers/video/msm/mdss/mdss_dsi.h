@@ -499,4 +499,8 @@ static inline bool mdss_dsi_ulps_feature_enabled(
 	return pdata->panel_info.ulps_feature_enabled;
 }
 
+#ifdef ASUS_PF500KL_PROJECT
+void mdss_set_tx_power_mode(int mode, struct mdss_dsi_ctrl_pdata *ctrl);
+#endif
+
 #endif /* MDSS_DSI_H */
