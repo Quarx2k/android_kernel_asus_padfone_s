@@ -54,7 +54,6 @@ extern void nvt71890_cabc_set(bool bOn);
 #ifdef CONFIG_A86_BACKLIGHT
 extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
 #endif
-static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level);
 static struct dsi_cmd_desc renesas_brightness_set = {
     {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(a86_bl_val)},
     a86_bl_val
@@ -68,12 +67,6 @@ static struct dsi_cmd_desc a86_cabc_cmd[] = {
     { {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(a86_ctrl_display)}, a86_ctrl_display},
     { {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(cabc_ctrl)}, cabc_ctrl},
 };
-
-int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int level)
-{
-	mdss_dsi_panel_bklt_dcs(ctrl, level);
-	return 0;
-}
 
 void sharp_set_cabc(struct mdss_dsi_ctrl_pdata *ctrl, int mode)
 {
@@ -707,76 +700,75 @@ static struct dsi_cmd_desc backlight_cmd = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
 	led_pwm1
 };
-#endif
 static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 {
 	struct dcs_cmd_req cmdreq;
 	struct mdss_panel_info *pinfo;
-
 	pinfo = &(ctrl->panel_data.panel_info);
 	if (pinfo->partial_update_dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			return;
 	}
-#ifdef ASUS_PF500KL_PROJECT
-	if (level == 0) {
-		return;
-	}
-
-	if (A91_lcd_id == SHARP_DISP) {
-		level *= 4;
-		a86_bl_val[1] = level/256;
-		a86_bl_val[2] = level%256;
-		if (level > 7*4) {
-			memcpy(a86_bl_init_val,a86_bl_val,sizeof(a86_bl_val));
-		}
-	} else {
-		a90_bl_val[1] = level;
-		if (level > 7) {
-			a90_bl_init_val[1] = level;
-		}
-	}
-
-	if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
-		if (level <= 150 && CABC_MOVING == true) {   //turn off cabc once duty < 15 %
-			sharp_set_cabc(ctrl, 0);
-			CABC_MOVING = false;
-        }
-		else if (level > 150 && CABC_MOVING == false) {
-			sharp_set_cabc(ctrl, 3);
-			CABC_MOVING = true;
-		}
-	}
-#endif
-	//printk("%s: level=%d\n", __func__, level);
 	mutex_lock(&cmd_mutex);
-#ifndef ASUS_PF500KL_PROJECT
 	led_pwm1[1] = (unsigned char)level;
-#endif
 	memset(&cmdreq, 0, sizeof(cmdreq));
-#ifdef ASUS_PF500KL_PROJECT
-        if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
-            cmdreq.cmds = &nvt_brightness_set;
-        } else {
-            cmdreq.cmds = &renesas_brightness_set;
-        }
-#else
 	cmdreq.cmds = &backlight_cmd;
-#endif
 	cmdreq.cmds_cnt = 1;
 	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
-#ifdef ASUS_PF500KL_PROJECT
-        mdss_set_tx_power_mode(0, ctrl);
-#endif
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
-#ifdef ASUS_PF500KL_PROJECT
-        mdss_set_tx_power_mode(1, ctrl);
-	mutex_unlock(&cmd_mutex);
-#endif
 }
-
+#else
+int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
+{
+    struct dcs_cmd_req cmdreq;
+    if (value == 0) {
+        return 0;
+    }
+    if (A91_lcd_id == SHARP_DISP) {
+        value *= 4;
+        a86_bl_val[1] = value/256;
+        a86_bl_val[2] = value%256;
+        if (value > 7*4) {
+            memcpy(a86_bl_init_val,a86_bl_val,sizeof(a86_bl_val));
+        }
+    }
+    else{
+        a90_bl_val[1] = value;
+        if (value > 7) {
+            a90_bl_init_val[1] = value;
+        }
+    }
+    if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
+        if (value <= 150 && CABC_MOVING == true) {   //turn off cabc once duty < 15 %
+            sharp_set_cabc(ctrl, 0);
+            CABC_MOVING = false;
+        } else if (value > 150 && CABC_MOVING == false) {
+            sharp_set_cabc(ctrl, 3);
+            CABC_MOVING = true;
+        }
+    }
+    mutex_lock(&cmd_mutex);
+    memset(&cmdreq, 0, sizeof(cmdreq));
+    cmdreq.cmds_cnt = 1;
+    cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+    cmdreq.rlen = 0;
+    cmdreq.cb = NULL;
+    if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
+        cmdreq.cmds = &nvt_brightness_set;
+        printk("[BL] Set nvt brightness (%d)n", a90_bl_val[1]);
+    } else {
+        cmdreq.cmds = &renesas_brightness_set;
+        printk("[BL] Set renesas brightness (%d)n", (a86_bl_val[1]*256 + a86_bl_val[2]));
+    }
+    mdss_set_tx_power_mode(0, ctrl);
+    mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+    mdss_set_tx_power_mode(1, ctrl);
+    mutex_unlock(&cmd_mutex);
+    return 0;
+}
+#endif
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	int rc = 0;
