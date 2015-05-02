@@ -610,7 +610,7 @@
 		qcom,mdss-dsi-bl-max-level = <255>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
-		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 
 		qcom,mdss-dsi-reset-sequence = <1 0>, <0 10>, <1 15>;	//msleep
 		qcom,mdss-pan-physical-width-dimension = <62>; //width of picture in mm (for xdpi)
