@@ -128,6 +128,16 @@ static ssize_t led_brightness_store(struct device *dev,
 			state = cal_bl_fading_val(g_brightness);
 	}
 	led_debug(DEBUG_VERBOSE,"[BL] (%s): user set value = %d name = %s backlight = %d  \n", __func__,(int)state,led_cdev->name,(int)g_brightness);
+	if (state != 0) {
+		if (state == 16) {
+			state = 300;
+		} else {
+			state = (state*53/3) - 300; // Wtf formula :D
+			if (state < 300) {
+				state = 300;
+			}
+		}
+	}
 
 	if (isspace(*after))
 		count++;
@@ -245,8 +255,8 @@ static ssize_t led_max_brightness_store(struct device *dev,
 	ret = strict_strtoul(buf, 10, &state);
 	if (!ret) {
 		ret = size;
-		if (state > LED_FULL)
-			state = LED_FULL;
+		//if (state > LED_FULL)
+		//	state = LED_FULL;
 		led_cdev->max_brightness = state;
 		led_set_brightness(led_cdev, led_cdev->brightness);
 	}
