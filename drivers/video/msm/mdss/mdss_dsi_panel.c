@@ -757,10 +757,10 @@ int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
     cmdreq.cb = NULL;
     if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
         cmdreq.cmds = &nvt_brightness_set;
-        printk("[BL] Set nvt brightness (%d)n", a90_bl_val[1]);
+    //    printk("[BL] Set nvt brightness (%d)n", a90_bl_val[1]);
     } else {
         cmdreq.cmds = &renesas_brightness_set;
-        printk("[BL] Set renesas brightness (%d)n", (a86_bl_val[1]*256 + a86_bl_val[2]));
+    //    printk("[BL] Set renesas brightness (%d)n", (a86_bl_val[1]*256 + a86_bl_val[2]));
     }
     mdss_set_tx_power_mode(0, ctrl);
     mdss_dsi_cmdlist_put(ctrl, &cmdreq);
@@ -1102,28 +1102,7 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		break;
 #ifndef ASUS_PF500KL_PROJECT
 	case BL_DCS_CMD:
-		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
-			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
-			break;
-		}
-		/*
-		 * DCS commands to update backlight are usually sent at
-		 * the same time to both the controllers. However, if
-		 * sync_wait is enabled, we need to ensure that the
-		 * dcs commands are first sent to the non-trigger
-		 * controller so that when the commands are triggered,
-		 * both controllers receive it at the same time.
-		 */
-		sctrl = mdss_dsi_get_other_ctrl(ctrl_pdata);
-		if (mdss_dsi_sync_wait_trigger(ctrl_pdata)) {
-			if (sctrl)
-				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
-			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
-		} else {
-			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
-			if (sctrl)
-				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
-		}
+       		asus_set_bl_brightness(ctrl_pdata, bl_level);
 		break;
 	default:
 		pr_err("%s: Unknown bl_ctrl configuration\n",

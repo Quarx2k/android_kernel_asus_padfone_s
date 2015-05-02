@@ -72,32 +72,32 @@ static int a90_mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable
     struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
     if (pdata == NULL) {
-        pr_err("%s: Invalid input datan", __func__);
+        pr_err("%s: Invalid input datan\n", __func__);
         return -EINVAL;
     }
 
     ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
     panel_data);
-    printk("%s: enable(%d)", __func__, enable);
+    printk("%s: enable(%d)\n", __func__, enable);
 
     if (!mdss_panel_power) {
         if (g_ASUS_hwID == A90_EVB0) {
             ret = gpio_request(bl_en, "bl_en");
             if (ret) {
-                pr_err("request gpio %d failed, ret=%dn",bl_en, ret);
+                pr_err("request gpio %d failed, ret=%d\n",bl_en, ret);
                 return -ENODEV;
             }
         }
 
         ret = gpio_request(stb1_en, "STB1_EN");
         if (ret) {
-            pr_err("request gpio %d failed, ret=%dn",stb1_en, ret);
+            pr_err("request gpio %d failed, ret=%d\n",stb1_en, ret);
             return -ENODEV;
         }
 
         ret = gpio_request(stb2_en, "STB2_EN");
         if (ret) {
-            pr_err("request gpio %d failed, ret=%dn",stb2_en, ret);
+            pr_err("request gpio %d failed, ret=%d\n",stb2_en, ret);
             return -ENODEV;
         }
     }
@@ -113,7 +113,7 @@ static int a90_mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable
             ctrl_pdata->power_data[i].vreg_config,
             ctrl_pdata->power_data[i].num_vreg, 1);
             if (ret) {
-                pr_err("%s: failed to enable vregs for %sn",
+                pr_err("%s: failed to enable vregs for %s\n",
                 __func__, __mdss_dsi_pm_name(i));
                 goto error;
             }
@@ -150,13 +150,13 @@ static int a90_mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable
             ctrl_pdata->power_data[i].vreg_config,
             ctrl_pdata->power_data[i].num_vreg, 0);
             if (ret) {
-                pr_err("%s: failed to disable vregs for %sn",
+                pr_err("%s: failed to disable vregs for %s\n",
                 __func__, __mdss_dsi_pm_name(i));
                 goto error;
             }
         }
     }
-    printk("%s: enable(%d) --n", __func__, enable);
+    printk("%s: enable(%d) --\n", __func__, enable);
 error:
     if (ret) {
         for (; i >= 0; i--)
