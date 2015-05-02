@@ -12,8 +12,7 @@
 
 /include/ "msm8974pro-pm8941.dtsi"
 / {
-	qcom,msm-id = <194 0x10000>,
-		      <218 0x10000>;
+	qcom,msm-id = <218 0x10000>;
 };
 
 &sdhc_1 {
