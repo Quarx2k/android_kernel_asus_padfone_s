@@ -92,7 +92,7 @@
 		qcom,mdss-pan-physical-width-dimension = <62>; //width of picture in mm (for xdpi)
 		qcom,mdss-pan-physical-height-dimension = <110>; //height of picture in mm (for ydpi)
 		//qcom,panel-roi-alignment = <900 4 2 4 540 20>;
-		qcom,ulps-enabled;
+		//qcom,ulps-enabled;
 	};
 };
 
