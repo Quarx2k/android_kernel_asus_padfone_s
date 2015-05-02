@@ -1,0 +1,152 @@
+/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/include/ "../msm8974-leds.dtsi"
+/include/ "asus-camera-common.dtsi"
+/include/ "asus-common.dtsi"
+
+/ {
+	aliases {
+		serial0 = &blsp1_uart1;
+	};
+};
+
+&soc {
+
+// +++.....................................................I2C bus part....................................................+++//
+//+++ ASUS BSP Eason......."BLSP1 : Wireless charger"
+	i2c@f9923000 {
+		IDT_P9023_i2c@39 {
+			compatible = "IDT,P9023";
+			reg = <0x39>;
+			interrupt-parent = <&msmgpio>;
+		};
+	};
+//--- ASUS BSP Eason......."BLSP1 : Wireless charger"
+
+
+// +++ ASUS_BSP : add for ASUS touch 
+	i2c@f9924000 {
+		himax_hx8528_d48@48 {
+			compatible = "himax,himax-ts";
+			reg = <0x48>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <0 0x2>;
+			vdd_ana-supply = <&pm8941_l23>;
+			vcc_i2c-supply = <&pm8941_lvs1>;
+			himax,reset-gpio = <&msmgpio 60 0x00>;
+			himax,irq-gpio = <&msmgpio 0 0x00>;
+			himax,pcb-id0 = <&msmgpio 69 0x00>;
+			himax,pcb-id1 = <&msmgpio 90 0x00>;
+		};
+	};
+// --- ASUS_BSP : add for ASUS touch 
+
+// +++ ASUS BSP Bernard Ong: mydp 7808
+	i2c@f9925000{
+		colorado_i2c@39 {
+			compatible = "analogix,slimport";
+			reg = <0x39>;
+			interrupt-parent = <&msmgpio>;
+			#interrupt-cells = <2>;
+			interrupts = <82 0x2 61 0x2>;
+			vcc_1v-supply = <&pm8941_l3>;
+			slimport,gpio_rst = <&msmgpio 45 0x00>; //Reset, MYDP_RESETN_N
+			slimport,gpio_cbl_det = <&msmgpio 61 0x00>; //cable detect, MYDP_CABLE_DET
+			slimport,gpio_pw_dwn = <&msmgpio 31 0x00>; //chip power down, MYDP_EN_N
+			slimport,gpio_usb_id = <&msmgpio 82 0x00>; //usb_hs_id
+			slimport,hdmi-tx-map = <&mdss_hdmi_tx>;  //ASUS BSP Wei +++
+		};
+	};
+//--- ASUS BSP Bernard Ong: mydp 7808
+
+//+++ ASUS BSP......."BLSP6 : Pad bus"
+	i2c@f9928000 {
+		//+++ ASUS_BSP Eason +++
+		microp@15 {
+			compatible = "nuvoton,microp";
+			reg = <0x15>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <9 0x2>;
+			microp,irq-gpio = <&msmgpio 9 0x00>;
+		};
+		//--- ASUS_BSP Eason ---
+
+		// ASUS_BSP +++ Peter_Lu "Pad Lightsensor"
+		al3010@1c {
+			compatible = "dyna,al3010";
+			reg = <0x1c>;
+		};
+		// ASUS_BSP ---
+		
+		// ASUS_BSP +++ ShawnHuang CAP1106
+		cap1106_i2c@28 {
+			compatible = "cap,cap1106";
+			reg = <0x28>;
+		};
+		// ASUS_BSP --- ShawnHuang CAP1106
+
+		//ASUS BSP Wei +++ STDP2600
+		stpd2600@74{
+			compatible = "stpd,stpd2600";
+			reg = <0x74>;
+		};
+		//ASUS BSP Wei --- STDP2600
+		
+		// ASUS_BSP +++ SiS9257 Touch
+		sis_i2c_ts@5C {
+			compatible = "sis,sis_i2c_ts";
+			reg = <0x5C>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <9 0x2>;
+			sis_i2c_ts,irq-gpio = <&msmgpio 9 0x00>;
+		};
+		// ASUS_BSP --- SiS9257 Touch
+
+		// ASUS_BSP +++ Louis, "Pad TCON control driver"
+		nvt71890_i2c@60 {
+			compatible = "nvt,nt71890_cm";
+			reg = <0x60>;
+		};
+		// ASUS_BSP --- Louis, "Pad TCON control driver"
+	};
+//--- ASUS BSP......."BLSP6 : Pad bus"
+
+//+++ ASUS BSP......."BLSP10 : NFC, Driving IC"
+	i2c@f9966000 {
+//ASUS BSP freddy+++ Porting Driving IC for Vibraotr		
+		on_semi_i2c@49 {
+			compatible = "ON_Semi,LC898301";
+			reg = <0x49>;
+			//interrupt-parent = <&msmgpio>;
+			//interrupt-cells = <2>;
+			//interrupts = <65 0x2 >;			
+			on_semi,gpio_rst = <&msmgpio 81 0x00>;//Reset,vibrator drvIC_RST				
+		};
+//ASUS BSP freddy--- Porting Driving IC for Vibraotr
+
+		//+++Porting NFC's kernel+++
+		pn544@28 {
+			//compatible = "nxp,nxp_pn544";
+			compatible = "nxp,pn544";
+			reg = <0x28>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <59 0x2>;
+			nxp,irq-gpio = <&msmgpio 59 0x00>;
+			nxp,nfc-ven = <&msmgpio 79 0x00>;
+			nxp,download-gpio = <&pm8941_gpios 24 0x00>;
+		};
+		//---Porting NFC's kernel---
+	};
+//--- ASUS BSP
+//---.....................................................I2C bus part....................................................---//
+};

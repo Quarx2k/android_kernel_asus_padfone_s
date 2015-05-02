@@ -1,0 +1,287 @@
+/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/include/ "../msm8974-leds.dtsi"
+/include/ "asus-camera-common.dtsi"
+/include/ "asus-common.dtsi"
+
+/ {
+	aliases {
+		serial0 = &blsp1_uart1;
+	};
+};
+
+&soc {
+
+// +++.....................................................I2C bus part....................................................+++//
+	i2c@f9924000 {
+		synaptics@20 {
+			compatible = "synaptics,rmi4";
+			reg = <0x20>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <61 0x2008>;
+			vdd-supply = <&pm8941_l18>;
+			vcc_i2c-supply = <&pm8941_lvs1>;
+			synaptics,reset-gpio = <&msmgpio 60 0x00>;
+			synaptics,irq-gpio = <&msmgpio 61 0x2008>;
+			synaptics,display-coords = <0 0 1079 1919>;
+			synaptics,i2c-pull-up;
+			synaptics,power-down;
+			synaptics,disable-gpios;
+			synaptics,do-lockdown;
+		};
+
+		atmel_mxt_ts@4a {
+			compatible = "atmel,mxt-ts";
+			reg = <0x4a>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <61 0x2>;
+			vdd_ana-supply = <&pm8941_l18>;
+			vcc_i2c-supply = <&pm8941_lvs1>;
+			atmel,reset-gpio = <&msmgpio 60 0x00>;
+			atmel,irq-gpio = <&msmgpio 61 0x00>;
+			atmel,panel-coords = <0  0 760 1424>;
+			atmel,display-coords = <0 0 720 1280>;
+			atmel,i2c-pull-up;
+			atmel,no-force-update;
+			atmel,cfg_1 {
+				atmel,fw-name = "atmel_8974_fluid_v1_0_AA.hex";
+				atmel,family-id = <0x82>;
+				atmel,variant-id = <0x19>;
+				atmel,version = <0x10>;
+				atmel,build = <0xaa>;
+				atmel,config = [
+					/* Object 6, Instance = 0 */
+					00 00 00 00 00 00
+					/* Object 38, Instance = 0 */
+					15 01 00 03 0A 0C 00 00
+					/* Object 7, Instance = 0 */
+					20 08 32 03
+					/* Object 8, Instance = 0 */
+					0F 00 0A 0A 00 00 0A 0A 00 00
+					/* Object 9, Instance = 0 */
+					83 00 00 18 0E 00 70 46 02 01
+					00 0A 03 31 04 05 0A 0A 90 05
+					F8 02 05 F1 F1 0F 00 00 08 2D
+					12 06 00 00 00 01
+					/* Object 15, Instance = 0 */
+					00 00 00 00 00 00 00 00 00 00
+					00
+					/* Object 18, Instance = 0 */
+					00 00
+					/* Object 19, Instance = 0 */
+					00 00 00 00 00 00
+					/* Object 23, Instance = 0 */
+					00 00 00 00 00 00 00 00 00 00
+					00 00 00 00 00
+					/* Object 25, Instance = 0 */
+					00 00 00 00 00 00 00 00 00 00
+					00 00 00 00 00
+					/* Object 40, Instance = 0 */
+					00 00 00 00 00
+					/* Object 42, Instance = 0 */
+					33 1E 19 10 80 00 00 00 FF 00
+					/* Object 46, Instance = 0 */
+					00 00 10 10 00 00 03 00 00 01
+					/* Object 47, Instance = 0 */
+					08 0A 28 0A 02 0A 00 8C 00 20
+					00 00 00
+					/* Object 55, Instance = 0 */
+					00 00 00 00 00 00
+					/* Object 56, Instance = 0 */
+					00 00 00 18 05 05 05 05 05 05
+					05 05 05 05 05 05 05 05 05 05
+					05 05 05 05 05 05 05 05 00 00
+					00 00 00 00 00 00 00 00 00 00
+					00 00
+					/* Object 57, Instance = 0 */
+					00 00 00
+					/* Object 61, Instance = 0 */
+					00 00 00 00 00
+					/* Object 62, Instance = 0 */
+					01 2A 00 16 00 00 00 00 0B 01
+					02 03 04 08 00 00 08 10 18 05
+					00 0A 05 05 50 14 19 34 1A 7F
+					00 00 00 00 00 00 00 00 00 30
+					05 02 00 01 00 05 00 00 00 00
+					00 00 00 00
+					];
+			};
+		};
+	};
+
+// +++ ASUS_BSP : add for ASUS touch 
+	i2c@f9924000 {
+		novatek_nt1103@01 {
+			compatible = "novatek,nt1103-ts";
+			reg = <0x01>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <12 0x2>;
+			/*vdd_ana-supply = <&pm8941_l18>;*/
+			vcc_i2c-supply = <&pm8941_lvs1>;
+			novatek,reset-gpio = <&msmgpio 60 0x00>;
+			novatek,irq-gpio = <&msmgpio 12 0x00>;
+			novatek,panel-coords = <0  0 1080 1920>;
+		};
+	};
+// --- ASUS_BSP : add for ASUS touch
+
+//+++ ASUS BSP......."BLSP3 : Sensors"
+	i2c@f9925000 {
+		// ASUS_BSP +++ Peter_Lu "cm36283 Lightsensor"
+		cm36283@60 {
+			compatible = "capella,cm36283";
+			reg = <0x60>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <74 0x2>;
+			cm36283,irq-gpio = <&msmgpio 74 0x00>;
+		};
+		// ASUS_BSP ---
+		// ASUS_BSP +++ Jiunhau Wang "[A86][Sensor][NA][Spec] Porting 9-axis sensor"
+		ami306@0E {
+			compatible = "aichi,ami306";
+			reg = <0x0E>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <76 0x2>;
+			vdd_ana-supply = <&pm8941_l18>;
+			vcc_i2c-supply = <&pm8941_lvs1>;
+			ami306,irq-gpio = <&msmgpio 76 0x00>;
+			ami306,ready-gpio = <&msmgpio 81 0x00>;
+		};
+		mpu6500@68 {
+			compatible = "invensense,mpu6500";
+			reg = <0x68>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <66 0x2>;
+			vdd_ana-supply = <&pm8941_l18>;
+			vcc_i2c-supply = <&pm8941_lvs1>;
+			mpu6500,irq-gpio = <&msmgpio 66 0x00>;
+			mpu6500,fsync-gpio = <&pm8941_gpios 01 0x01>;
+		};
+		// ASUS_BSP --- Jiunhau Wang "[A86][Sensor][NA][Spec] Porting 9-axis sensor"
+	};
+//--- ASUS BSP
+
+//+++ ASUS BSP......."BLSP6 : Pad bus"
+i2c@f9928000 {
+		//+++ ASUS_BSP Eason +++
+		microp@15 {
+			compatible = "nuvoton,microp";
+			reg = <0x15>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <9 0x2>;
+			microp,irq-gpio = <&msmgpio 9 0x00>;
+		};
+		//--- ASUS_BSP Eason ---
+
+		// ASUS_BSP +++ Peter_Lu "Pad Lightsensor"
+		al3010@1c {
+			compatible = "dyna,al3010";
+			reg = <0x1c>;
+		};
+		// ASUS_BSP ---
+
+		// ASUS_BSP +++ ShawnHuang CAP1106
+		cap1106_i2c@28 {
+			compatible = "cap,cap1106";
+			reg = <0x28>;
+		};
+		// ASUS_BSP --- ShawnHuang CAP1106
+		
+		//ASUS BSP Wei +++ STDP2600
+		stpd2600@74{
+			compatible = "stpd,stpd2600";
+			reg = <0x74>;
+		};
+		//ASUS BSP Wei --- STDP2600
+
+		// ASUS_BSP +++ Louis, "Pad TCON control driver"
+		nvt71890_i2c@60 {
+			compatible = "nvt,nt71890_cm";
+			reg = <0x60>;
+		};
+		// ASUS_BSP --- Louis, "Pad TCON control driver"
+		
+		// ASUS_BSP +++ SiS9257 Touch
+		sis_i2c_ts@5C {
+			compatible = "sis,sis_i2c_ts";
+			reg = <0x5C>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <9 0x2>;
+			sis_i2c_ts,irq-gpio = <&msmgpio 9 0x00>;
+		};
+		// ASUS_BSP --- SiS9257 Touch
+	};
+//--- ASUS BSP......."BLSP6 : Pad bus"
+
+//+++ ASUS BSP......."BLSP3 : Charger, Gauge, NFC"
+	i2c@f9966000 {
+		summit_smb346_i2c@2D {
+			compatible = "summit,smb346";
+			reg = <0x2D>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <27 0x2>;
+			summit,346_DCIN = <&msmgpio 27 0x00>;
+			//summit,irq-gpio = <&msmgpio 85 0x00>;
+		};
+		TI_TI_bq27520_Gauge_i2c@55 {
+			compatible = "TI,TI_bq27520_Gauge";
+			reg = <0x55>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <46 0x2>;
+			TI,BATT_LOW = <&msmgpio 46 0x00>;
+			//Hank TIgauge PMIC GPIO+++
+			gauge-gpio = <&pm8941_gpios 26 0x00>;
+			//Hank TIgauge PMIC GPIO---
+			
+		};
+		TI_TI_Gauge_Update_i2c@0B {
+			compatible = "TI,TI_Gauge_Update";
+			reg = <0x0B>;
+			interrupt-parent = <&msmgpio>;
+			
+		};
+		//+++Porting NFC's kernel+++
+		pn544@28 {
+			//compatible = "nxp,nxp_pn544";
+			compatible = "nxp,pn544";
+			reg = <0x28>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <59 0x2>;
+			nxp,irq-gpio = <&msmgpio 59 0x00>;
+			nxp,nfc-ven = <&msmgpio 79 0x00>;
+			nxp,download-gpio = <&pm8941_gpios 24 0x00>;
+		};
+		//---Porting NFC's kernel---
+	};
+//--- ASUS BSP
+
+// +++ ASUS BSP Bernard Ong: mydp 7808
+	i2c@f9968000{ 
+		colorado_i2c@39 {
+			compatible = "analogix,slimport";
+			reg = <0x39>;
+			interrupt-parent = <&msmgpio>;
+			#interrupt-cells = <2>;
+			interrupts = <82 0x2 61 0x2>;
+			vcc_1v-supply = <&pm8941_l3>;
+			slimport,gpio_rst = <&msmgpio 45 0x00>; //Reset, MYDP_RESETN_N
+			slimport,gpio_cbl_det = <&msmgpio 61 0x00>; //cable detect, MYDP_CABLE_DET
+			slimport,gpio_pw_dwn = <&msmgpio 83 0x00>; //chip power down, MYDP_EN_N
+			slimport,gpio_usb_id = <&msmgpio 82 0x00>; //usb_hs_id
+			slimport,hdmi-tx-map = <&mdss_hdmi_tx>;  //ASUS BSP Wei +++
+		};
+	};
+//--- ASUS BSP Bernard Ong: mydp 7808
+
+// --- .....................................................I2C bus part.................................................... ---//
+};

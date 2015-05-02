@@ -12,12 +12,8 @@
 
 /dts-v1/;
 
-//+++ ASUS_BSP : modify from msm8974pro-ab-pm8941-cdp.dts
-///include/ "msm8974pro-ab-pm8941.dtsi"
-///include/ "msm8974-cdp.dtsi"
-/include/ "msm8974pro-ab-pm8941-asus-pf500kl.dtsi"
-/include/ "msm8974-a90-evb.dtsi"
-//--- ASUS_BSP : modify from msm8974pro-ab-pm8941-cdp.dts
+/include/ "msm8974pro-ab-pm8941.dtsi"
+/include/ "asus/msm8974-a90-evb.dtsi"
 
 / {
 	model = "Qualcomm MSM 8974Pro-AA/AB CDP";

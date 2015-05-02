@@ -10,11 +10,18 @@
  * GNU General Public License for more details.
  */
 
-/include/ "msm8974pro-ac-pm8941.dtsi"
+/dts-v1/;
+
+/include/ "msm8974pro-ab-pm8941.dtsi"
+/include/ "asus/msm8974-pf500kl.dtsi"
+
 / {
-	qcom,msm-id = <194 0x10000>;
+	model = "Qualcomm MSM 8974Pro-AA/AB CDP";
+	compatible = "qcom,msm8974-cdp", "qcom,msm8974", "qcom,cdp";
+	qcom,board-id = <43 0>, <42 0>, <40 0>;	//ASUS_BSP
 };
 
 &sdhc_1 {
-	reg = <0xf9824900 0x1a0>, <0xf9824000 0x800>;
+	qcom,pad-pull-on = <0x0 0x3 0x3 0x1>; /* no-pull, pull-up, pull-up, pull-down */
+	qcom,pad-pull-off = <0x0 0x3 0x3 0x1>; /* no-pull, pull-up, pull-up, pull-down */
 };

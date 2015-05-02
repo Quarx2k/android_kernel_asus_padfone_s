@@ -18,10 +18,8 @@
 	interrupt-parent = <&intc>;
 
 	aliases {
-/*
 		spi0 = &spi_0;
 		spi7 = &spi_7;
-*/
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
 		sdhc3 = &sdhc_3; /* SDC3 SDIO slot */
@@ -94,7 +92,7 @@
 			linux,reserve-region;
 			reg = <0 0xC04000>;
 			label = "audio_mem";
-	       };
+		};
 	};
 
 	soc: soc { };
@@ -646,8 +644,8 @@
 
 		qcom,bam-dma-res-pipes = <6>;
 	};
-/*
-	spi_7: spi_epm: spi@f9966000 { 
+
+	spi_7: spi_epm: spi@f9966000 { /* BLSP2 QUP4 */
 		compatible = "qcom,spi-qup-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -670,7 +668,7 @@
 		qcom,bam-producer-pipe-index = <19>;
 		qcom,master-id = <84>;
 	};
-*/
+
 	tspp: msm_tspp@f99d8000 {
 		compatible = "qcom,msm_tspp";
 		cell-index = <0>;
@@ -787,7 +785,7 @@
 			qcom,cdc-mclk-clk-rate = <9600000>;
 			qcom,cdc-slim-ifd = "taiko-slim-ifd";
 			qcom,cdc-slim-ifd-elemental-addr = [00 00 A0 00 17 02];
-			qcom,cdc-dmic-sample-rate = <2400000>;//4800000
+			qcom,cdc-dmic-sample-rate = <4800000>;
 		};
 	};
 
@@ -829,7 +827,6 @@
 			"DMIC6", "MIC BIAS4 External",
 			"MIC BIAS4 External", "Digital Mic6";
 
-		qcom,hsmic_bias = <&pm8941_gpios 23 0>;
 		qcom,cdc-mclk-gpios = <&pm8941_gpios 15 0>;
 		qcom,taiko-mclk-clk-freq = <9600000>;
 		qcom,prim-auxpcm-gpio-clk  = <&msmgpio 65 0>;
@@ -841,23 +838,6 @@
 		qcom,sec-auxpcm-gpio-sync = <&msmgpio 80 0>;
 		qcom,sec-auxpcm-gpio-din  = <&msmgpio 81 0>;
 		qcom,sec-auxpcm-gpio-dout = <&msmgpio 82 0>;
-
-		button {
-			label = "button";
-			gpios = <&msmgpio 80 0x00>;
-			interrupt-parent = <&msmgpio>;
-			interrupts = <80 0x2>;
-		};
-		jack {
-			label = "jack";
-			gpios = <&msmgpio 1 0x00>;
-			interrupt-parent = <&msmgpio>;
-			interrupts = <1 0x2>;
-		};
-		hs_path_en {
-			label = "hs_path_en";
-			gpios = <&msmgpio 13 0x00>;
-		};
 	};
 
 	spmi_bus: qcom,spmi@fc4c0000 {
@@ -874,135 +854,54 @@
 		qcom,pmic-arb-channel = <0>;
 	};
 
-//+++.....................................................I2C bus part....................................................+++//
-//+++ ASUS BSP......."BLSP10 : NFC"
-	i2c@f9966000 { /*BLSP#10 */
-		cell-index = <10>;
+	i2c_0: i2c@f9967000 { /* BLSP#11 */
+		cell-index = <0>;
 		compatible = "qcom,i2c-qup";
-		reg = <0xf9966000 0x500>;
+		reg = <0Xf9967000 0x1000>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg-names = "qup_phys_addr";
-		interrupts = <0 104 0>;
+		interrupts = <0 105 0>;
 		interrupt-names = "qup_err_intr";
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
-		qcom,clk-ctl-xfer;
-		qcom,master-id = <84>;
-		qcom,active-only;
-		qcom,use-bam;
-		qcom,ver-reg-exists;
-	};
-//--- ASUS BSP
-
-//+++ ASUS BSP......."BLSP12 : Sensors"
-	i2c@f9968000 {
-		cell-index = <12>;
-		compatible = "qcom,i2c-qup";
-		reg = <0xf9968000 0x500>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr";
-		interrupts = <0 106 0>;
-		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
-		qcom,i2c-src-freq = <19200000>;
-		qcom,clk-ctl-xfer;
 		qcom,master-id = <84>;
 	};
-//--- ASUS BSP
 
-//+++ ASUS BSP......."BLSP1 : Wireless Charger IC"
 	i2c_1: i2c@f9923000 {
 		cell-index = <1>;
 		compatible = "qcom,i2c-qup";
-		reg = <0xf9923000 0x500>;
+		reg = <0xf9923000 0x1000>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg-names = "qup_phys_addr";
 		interrupts = <0 95 0>;
 		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
+		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
-		qcom,clk-ctl-xfer;
+		qcom,scl-gpio = <&msmgpio 3 0>;
+		qcom,sda-gpio = <&msmgpio 2 0>;
 		qcom,master-id = <86>;
+		status = "disabled";
 	};
-//--- ASUS BSP
 
-//+++ ASUS BSP......."BLSP2 : Touch"
 	i2c_2: i2c@f9924000 {
 		cell-index = <2>;
 		compatible = "qcom,i2c-qup";
-		reg = <0xf9924000 0x500>;
+		reg = <0xf9924000 0x1000>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg-names = "qup_phys_addr";
 		interrupts = <0 96 0>;
 		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
+		qcom,i2c-bus-freq = <384000>;
 		qcom,i2c-src-freq = <19200000>;
-		qcom,clk-ctl-xfer;
 		qcom,master-id = <86>;
-/*
 		qcom,scl-gpio = <&msmgpio 7 0>;
 		qcom,sda-gpio = <&msmgpio 6 0>;
-*/
 	};
-//--- ASUS BSP
-	
-//+++ ASUS BSP......."BLSP3 : Mydp"
-	i2c_3: i2c@f9925000 {
-		cell-index = <3>;
-		compatible = "qcom,i2c-qup";
-		reg = <0xf9925000 0x500>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr";
-		interrupts = <0 97 0>;
-		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
-		qcom,i2c-src-freq = <19200000>;
-		qcom,clk-ctl-xfer;
-		qcom,master-id = <86>;
-	};
-//--- ASUS BSP
 
-//+++ ASUS BSP......."BLSP4 : Camera"
-	i2c_4: i2c@f9926000 {
-		cell-index = <4>;
-		compatible = "qcom,i2c-qup";
-		reg = <0xf9926000 0x500>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr";
-		interrupts = <0 98 0>;
-		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
-		qcom,i2c-src-freq = <19200000>;
-		qcom,clk-ctl-xfer;
-		qcom,master-id = <86>;
-	};
-//--- ASUS BSP
-
-//+++ ASUS BSP......."BLSP6 : Pad bus"
-	i2c_6: i2c@f9928000 {
-		cell-index = <6>;
-		compatible = "qcom,i2c-qup";
-		reg = <0xf9928000 0x500>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr";
-		interrupts = <0 100 0>;
-		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
-		qcom,i2c-src-freq = <19200000>;
-		qcom,clk-ctl-xfer;
-		qcom,master-id = <86>;
-		qcom,scl-gpio = <&msmgpio 29 0>;
-		qcom,sda-gpio = <&msmgpio 30 0>;
-	};
-/*
-	spi_0: spi@f9923000 {
+	spi_0: spi@f9923000 { /* BLSP1 QUP1 */
 		compatible = "qcom,spi-qup-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -1025,7 +924,7 @@
 		qcom,bam-producer-pipe-index = <13>;
 		qcom,master-id = <86>;
 	};
-*/
+
 	qcom,clock-krait@f9016000 {
 		compatible = "qcom,clock-krait-8974";
 		reg = <0xf9016000 0x20>,
@@ -2077,10 +1976,6 @@
 
 	qcom,msm-adsp-sensors {
 		compatible = "qcom,msm-adsp-sensors";
-		qcom,src-id = <11>;
-		qcom,dst-id = <604>;
-		qcom,ab = <32505856>;
-		qcom,ib = <32505856>;
 	};
 
 	qcom,mss@fc880000 {
@@ -2154,7 +2049,7 @@
 		gpios = <&msmgpio 36 0>, <&msmgpio 37 0>, <&msmgpio 38 0>, <&msmgpio 39 0>, <&msmgpio 40 0>;
 		qcom,has-48mhz-xo;
 		qcom,has-pronto-hw;
-		qcom,wcnss-pm = <11 21 1200 1 1>;
+		qcom,wcnss-pm = <11 19 1200 1 1 6>;
 	};
 
 	qcom,ocmem@fdd00000 {
@@ -2670,9 +2565,6 @@
 
 &gdsc_venus {
 	qcom,clock-names = "core_clk";
-  qcom,skip-logic-collapse; 
-  qcom,retain-periph; 
-  qcom,retain-mem;	
 	status = "ok";
 };
 

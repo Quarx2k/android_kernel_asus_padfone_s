@@ -15,8 +15,3 @@
 /include/ "dsi-panel-sharp-qhd-video.dtsi"
 /include/ "dsi-panel-generic-720p-cmd.dtsi"
 /include/ "dsi-panel-jdi-1080p-video.dtsi"
-// Add for ASUS Display driver +++
-/include/ "dsi-panel-asus-a90-1080p-video.dtsi"
-/include/ "dsi-panel-asus-a90-innolux-1080p-video.dtsi"
-/include/ "dsi-panel-asus-a90-innolux-1080p-cmd.dtsi"
-// Add for ASUS Display driver ---

@@ -1689,9 +1689,7 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 //ASUS_BSP +++ Peter_lu "For fastboot mode"
 #ifdef CONFIG_FASTBOOT                     
              if(button->code == KEY_POWER){
-
                  g_power_key_handler.init(&g_power_key_handler, button->debounce_interval);
-             
 	}
 #endif //#ifdef CONFIG_FASTBOOT
 //ASUS_BSP --- Peter_lu "For fastboot mode"   

@@ -12,15 +12,16 @@
 
 /dts-v1/;
 
-//+++ ASUS_BSP : modify from msm8974pro-ac-pm8941-cdp.dts
-///include/ "msm8974pro-ac-pm8941.dtsi"
-///include/ "msm8974-cdp.dtsi"
-/include/ "msm8974pro-ac-pm8941-asus-pf500kl.dtsi"
-/include/ "msm8974-pf500kl-er2_2.dtsi"
-//--- ASUS_BSP : modify from msm8974pro-ac-pm8941-cdp.dts
+/include/ "msm8974pro-ac-pm8941.dtsi"
+/include/ "asus/msm8974-pf500kl.dtsi"
 
 / {
 	model = "Qualcomm MSM 8974Pro-AC CDP";
 	compatible = "qcom,msm8974-cdp", "qcom,msm8974", "qcom,cdp";
-	qcom,board-id = <51 0>;	//ASUS_BSP : add for ASUS DT ID : pf500kl-er2_2
+	qcom,board-id = <51 0>, <50 0>;
+};
+
+&sdhc_1 {
+	qcom,pad-pull-on = <0x0 0x3 0x3 0x1>; /* no-pull, pull-up, pull-up, pull-down */
+	qcom,pad-pull-off = <0x0 0x3 0x3 0x1>; /* no-pull, pull-up, pull-up, pull-down */
 };

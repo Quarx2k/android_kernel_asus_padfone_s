@@ -77,11 +77,8 @@ endif
 #        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pma8084-pm8941-mtp.dtb
 
 #ifdef ASUS_PF500KL_PROJECT
-	dtb-y += msm8974pro-ab-pm8941-pf500kl-er2_2.dtb
-	dtb-y += msm8974pro-ab-pm8941-pf500kl-pr.dtb
-	dtb-y += msm8974pro-ab-pm8941-pf500kl-er1.dtb
-	dtb-y += msm8974pro-ac-pm8941-pf500kl-er1.dtb
-	dtb-y += msm8974pro-ac-pm8941-pf500kl-er2_2.dtb
+	dtb-y += msm8974pro-ab-pm8941-pf500kl.dtb
+	dtb-y += msm8974pro-ac-pm8941-pf500kl.dtb
 	dtb-y += msm8974pro-ab-pm8941-a91-sr1.dtb
 	dtb-y += msm8974pro-ab-pm8941-a91-sr3.dtb
 	dtb-y += msm8974pro-ab-pm8941-a91-sr4.dtb

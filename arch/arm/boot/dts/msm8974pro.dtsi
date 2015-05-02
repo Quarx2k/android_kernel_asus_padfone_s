@@ -1547,8 +1547,8 @@
 			< 2419200000  965000  786 >,
 			< 2457600000  970000  802 >;
 	};
-/*
-	i2c@f9928000 { // BLSP-1 QUP-6
+
+	i2c@f9928000 { /* BLSP-1 QUP-6 */
 		cell-index = <3>;
 		compatible = "qcom,i2c-qup";
 		reg = <0xf9928000 0x1000>;
@@ -1563,7 +1563,6 @@
 		qcom,scl-gpio = <&msmgpio 30 0>;
 		qcom,master-id = <86>;
 	};
-*/
 };
 
 /* GPU overrides */

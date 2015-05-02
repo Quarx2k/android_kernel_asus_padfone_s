@@ -176,32 +176,7 @@
 		vdd-supply = <&gdsc_vfe>;
 	};
 
-	cci: qcom,cci@fda0C000 {
-		cell-index = <0>;
-		compatible = "qcom,cci";
-		reg = <0xfda0C000 0x1000>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "cci";
-		interrupts = <0 50 0>;
-		interrupt-names = "cci";
-		gpios = <&msmgpio 19 0>,
-			<&msmgpio 20 0>,
-			<&msmgpio 21 0>,
-			<&msmgpio 22 0>;
-		qcom,gpio-tbl-num = <0 1 2 3>;
-		qcom,gpio-tbl-flags = <1 1 1 1>;
-		qcom,gpio-tbl-label = "CCI_I2C_DATA0",
-				      "CCI_I2C_CLK0",
-				      "CCI_I2C_DATA1",
-				      "CCI_I2C_CLK1";
-		master0: qcom,cci-master0 {
-			status = "disabled";
-		};
-		master1: qcom,cci-master1 {
-			status = "disabled";
-		};
-	};
+
 };
 
 &master0 {
