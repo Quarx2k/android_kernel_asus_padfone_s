@@ -59,9 +59,121 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev)
 
 	return rc;
 }
+#ifdef ASUS_PF500KL_PROJECT
+#include <linux/gpio.h>
+static int mdss_panel_power = false;
+struct mdss_panel_data *g_mdss_pdata;
+extern int A91_lcd_id;
+static int a90_mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
+{
+    int ret;
+    int i = 0;
+    static int bl_en = 2, stb2_en = 48, stb1_en = 54;
+    struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+    if (pdata == NULL) {
+        pr_err("%s: Invalid input datan", __func__);
+        return -EINVAL;
+    }
+
+    ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+    panel_data);
+    printk("%s: enable(%d)", __func__, enable);
+
+    if (!mdss_panel_power) {
+        if (g_ASUS_hwID == A90_EVB0) {
+            ret = gpio_request(bl_en, "bl_en");
+            if (ret) {
+                pr_err("request gpio %d failed, ret=%dn",bl_en, ret);
+                return -ENODEV;
+            }
+        }
+
+        ret = gpio_request(stb1_en, "STB1_EN");
+        if (ret) {
+            pr_err("request gpio %d failed, ret=%dn",stb1_en, ret);
+            return -ENODEV;
+        }
+
+        ret = gpio_request(stb2_en, "STB2_EN");
+        if (ret) {
+            pr_err("request gpio %d failed, ret=%dn",stb2_en, ret);
+            return -ENODEV;
+        }
+    }
+    if (enable) {
+        for (i = 0; i < DSI_MAX_PM; i++) {
+            /*
+            * Core power module will be enabled when the
+            * clocks are enabled
+            */
+            if (DSI_CORE_PM == i)
+            continue;
+            ret = msm_dss_enable_vreg(
+            ctrl_pdata->power_data[i].vreg_config,
+            ctrl_pdata->power_data[i].num_vreg, 1);
+            if (ret) {
+                pr_err("%s: failed to enable vregs for %sn",
+                __func__, __mdss_dsi_pm_name(i));
+                goto error;
+            }
+        }
+        gpio_set_value(stb2_en, 1);     //AVDD +5V
+        msleep(10);
+        gpio_set_value(stb1_en, 1);     //AVDD -5V
+        msleep(5);
+        mdss_dsi_panel_reset(pdata, 1);
+
+        if (g_ASUS_hwID == A90_EVB0) {
+            gpio_set_value(bl_en, 1);
+        }
+
+        wmb();
+        mdss_panel_power = true;
+    } else {
+        mdss_dsi_panel_reset(pdata, 0);
+        if (g_ASUS_hwID == A90_EVB0) {
+            gpio_set_value(bl_en, 0);
+        }
+        udelay(5);
+        gpio_set_value_cansleep(stb2_en, 0);
+        gpio_set_value_cansleep(stb1_en, 0);
+        msleep(35);
+        for (i = 0; i < DSI_MAX_PM; i++) {
+            /*
+            * Core power module will be enabled when the
+            * clocks are enabled
+            */
+            if (DSI_CORE_PM == i)
+            continue;
+            ret = msm_dss_enable_vreg(
+            ctrl_pdata->power_data[i].vreg_config,
+            ctrl_pdata->power_data[i].num_vreg, 0);
+            if (ret) {
+                pr_err("%s: failed to disable vregs for %sn",
+                __func__, __mdss_dsi_pm_name(i));
+                goto error;
+            }
+        }
+    }
+    printk("%s: enable(%d) --n", __func__, enable);
+error:
+    if (ret) {
+        for (; i >= 0; i--)
+        msm_dss_enable_vreg(
+        ctrl_pdata->power_data[i].vreg_config,
+        ctrl_pdata->power_data[i].num_vreg, 0);
+    }
+
+    return ret;
+}
+#endif
 
 static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 {
+#ifdef ASUS_PF500KL_PROJECT
+	return a90_mdss_dsi_panel_power_on(pdata, false);
+#else
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	int i = 0;
@@ -98,10 +210,14 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 
 end:
 	return ret;
+#endif
 }
 
 static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 {
+#ifdef ASUS_PF500KL_PROJECT
+	return a90_mdss_dsi_panel_power_on(pdata, true);
+#else
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	int i = 0;
@@ -156,6 +272,7 @@ error:
 				ctrl_pdata->power_data[i].num_vreg, 0);
 	}
 	return ret;
+#endif
 }
 
 static int mdss_dsi_panel_power_doze(struct mdss_panel_data *pdata, int enable)

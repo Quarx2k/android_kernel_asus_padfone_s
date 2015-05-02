@@ -34,6 +34,7 @@ enum {
     SHARP_DISP = 0,
     INNOLUX_DISP,
 };
+extern void asus_mdss_mdp_clk_ctl(bool enable);
 static bool CABC_MOVING = true;
 static struct mutex cmd_mutex;
 extern struct mdss_panel_data *g_mdss_pdata;
