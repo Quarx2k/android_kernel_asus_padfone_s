@@ -1232,16 +1232,14 @@
 		compatible = "qcom,qpnp-regulator";
 		status = "disabled";
 	};
-//ASUS_BSP +++ freddy "[A91][vib][NA][Spec] qcm vibrator porting"
-		qcom,vibrator@c000 {
-			compatible = "qcom,qpnp-vibrator";
-			reg = <0xc000 0x100>;
-			label = "vibrator";
-			status = "okay";
-	            	qcom,vib-timeout-ms = <15000>;
-	            	qcom,vib-vtg-level-mV = <3000>;
-		};
-//ASUS_BSP --- freddy "[A91][vib][NA][Spec] qcm vibrator porting"			
+
+	qcom,vibrator@c000 {
+		compatible = "qcom,qpnp-vibrator";
+		reg = <0xc000 0x100>;
+		label = "vibrator";
+		status = "disabled";
+	};
+
 	qcom,leds@d000 {
 		compatible = "qcom,leds-qpnp";
 		reg = <0xd000 0x100>;

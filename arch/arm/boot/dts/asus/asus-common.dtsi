@@ -332,7 +332,62 @@
 	};
 
 };
+&rpm_bus {
+	rpm-regulator-ldoa3 {
+		pm8941_l3: regulator-l3 {
+			regulator-min-microvolt = <1000000>;
+			regulator-max-microvolt = <1000000>;
+			qcom,init-voltage = <1000000>;
+		};
+	};
 
+	rpm-regulator-ldoa17 {
+		pm8941_l17: regulator-l17 {
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			qcom,init-voltage = <2800000>;
+		};
+	};
+
+	rpm-regulator-ldoa18 {
+		pm8941_l18: regulator-l18 {
+			regulator-always-on; // ASUS_BSP ++ Jiunhau_Wang "[A86][Sensor][NA][Spec] Porting 9-axis sensor"
+		};
+	};
+
+	rpm-regulator-ldoa22 {
+		pm8941_l22: regulator-l22 {
+			regulator-min-microvolt = <2800000>;
+			qcom,init-voltage = <2800000>;
+		};
+	};
+
+	rpm-regulator-ldoa23 {
+		pm8941_l23: regulator-l23 {
+			regulator-min-microvolt = <2800000>;
+			qcom,init-voltage = <2800000>;
+		};
+	};
+
+	rpm-regulator-vsa1 {
+		pm8941_lvs1: regulator-lvs1 {
+			regulator-always-on; /* +++ ASUS_BSP : add for ASUS touch */
+		};
+	};
+
+	rpm-regulator-vsa2 {
+		pm8941_lvs2: regulator-lvs2 {
+			regulator-always-on; /* +++ ASUS_BSP Peter_Lu : Enable 1.8V for support I2C devices */
+		};
+	};
+
+	rpm-regulator-vsa3 {
+		pm8941_lvs3: regulator-lvs3 {
+			regulator-always-on; /* +++ ASUS_BSP Peter_Lu : Enable 1.8V for support I2C devices */
+		};
+	};
+
+};
 &pm8941_lsid1 {
 	qcom,leds@d800 {
 		status = "okay";
@@ -389,6 +444,15 @@
 
 	qcom,leds@e100 {
 		status = "disabled";
+	};
+
+	qcom,vibrator@c000 {
+		compatible = "qcom,qpnp-vibrator";
+		reg = <0xc000 0x100>;
+		label = "vibrator";
+		status = "okay";
+            	qcom,vib-timeout-ms = <15000>;
+            	qcom,vib-vtg-level-mV = <3000>;
 	};
 };
 
