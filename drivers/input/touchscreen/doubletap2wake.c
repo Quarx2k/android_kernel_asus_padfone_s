@@ -40,7 +40,7 @@
 #include <linux/wakelock.h>
 
 /* uncomment since no touchscreen defines android touch, do that here */
-//#define ANDROID_TOUCH_DECLARED
+#define ANDROID_TOUCH_DECLARED
 
 /* if Sweep2Wake is compiled it will already have taken care of this */
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
@@ -513,6 +513,6 @@ static void __exit doubletap2wake_exit(void)
 	return;
 }
 
-module_init(doubletap2wake_init);
+late_initcall(doubletap2wake_init);
 module_exit(doubletap2wake_exit);
 

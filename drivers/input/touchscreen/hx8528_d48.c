@@ -107,7 +107,7 @@ static int p_point_num = 0xFFFF;
 static int tpd_key = 0;
 static int tpd_key_old = 0xFF;
 
-static struct kobject *android_touch_kobj = NULL;		// Sys kobject variable
+struct kobject *android_touch_kobj;		// Sys kobject variable
 
 static int finger_count[10][2];
 static bool point_printed = 0;
