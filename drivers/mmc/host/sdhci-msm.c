@@ -3386,7 +3386,7 @@ static int __devinit sdhci_msm_probe(struct platform_device *pdev)
 	msm_host->mmc->caps2 |= MMC_CAP2_CORE_PM;
 #ifdef ASUS_PF500KL_PROJECT
 	msm_host->mmc->caps2 |= MMC_CAP2_INIT_BKOPS;
-	msm_host->mmc->caps2 |= MMC_CAP2_NO_SLEEP_CMD;
+	//msm_host->mmc->caps2 |= MMC_CAP2_NO_SLEEP_CMD;
 #endif
 	msm_host->mmc->pm_caps |= MMC_PM_KEEP_POWER;
 	msm_host->mmc->pm_caps |= MMC_PM_KEEP_POWER | MMC_PM_WAKE_SDIO_IRQ;

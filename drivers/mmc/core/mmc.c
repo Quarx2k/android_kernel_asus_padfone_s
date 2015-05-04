@@ -1467,7 +1467,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		if (card->ext_csd.sectors && (rocr & MMC_CARD_SECTOR_ADDR))
 			mmc_card_set_blockaddr(card);
 	}
-
+#ifndef ASUS_PF500KL_PROJECT
 	/*
 	 * If enhanced_area_en is TRUE, host needs to enable ERASE_GRP_DEF
 	 * bit.  This bit will be lost every time after a reset or power off.
@@ -1500,7 +1500,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			mmc_set_erase_size(card);
 		}
 	}
-
+#endif
 	/*
 	 * Ensure eMMC user default partition is enabled
 	 */

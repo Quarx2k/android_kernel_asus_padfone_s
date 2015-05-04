@@ -3400,12 +3400,12 @@ EXPORT_SYMBOL(mmc_card_sleep);
 
 int mmc_card_can_sleep(struct mmc_host *host)
 {
-#ifndef ASUS_PF500KL_PROJECT
+//#ifndef ASUS_PF500KL_PROJECT
 	struct mmc_card *card = host->card;
 
 	if (card && mmc_card_mmc(card) && card->ext_csd.rev >= 3)
 		return 1;
-#endif
+//#endif
 	return 0;
 }
 EXPORT_SYMBOL(mmc_card_can_sleep);
