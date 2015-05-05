@@ -516,7 +516,9 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		 * If HPI is not supported then BKOPs shouldn't be enabled.
 		 */
 //ASUS change:  turn off BKOPS
-#ifndef ASUS_PF500KL_PROJECT
+#ifdef ASUS_PF500KL_PROJECT
+	if (!isPadfoneS()) {
+#endif
 		if ((ext_csd[EXT_CSD_BKOPS_SUPPORT] & 0x1) &&
 		    card->ext_csd.hpi) {
 			card->ext_csd.bkops = 1;
@@ -534,6 +536,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 					card->ext_csd.bkops_en = 1;
 			}
 		}
+#ifdef ASUS_PF500KL_PROJECT
+	}
 #endif
 		pr_info("%s: BKOPS_EN bit = %d\n",
 			mmc_hostname(card->host), card->ext_csd.bkops_en);
@@ -561,21 +565,23 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 	/* eMMC v4.5 or later */
 	if (card->ext_csd.rev >= 6) {
-#ifndef ASUS_PF500KL_PROJECT
+#ifdef ASUS_PF500KL_PROJECT
 //Asus change: Turn off Discard
-		card->ext_csd.feature_support |= MMC_DISCARD_FEATURE;
+	if (!isPadfoneS()) {
 #endif
+		card->ext_csd.feature_support |= MMC_DISCARD_FEATURE;
+
 		card->ext_csd.generic_cmd6_time = 10 *
 			ext_csd[EXT_CSD_GENERIC_CMD6_TIME];
 		card->ext_csd.power_off_longtime = 10 *
 			ext_csd[EXT_CSD_POWER_OFF_LONG_TIME];
-//ASUS Change: turn off CACHE
-#ifndef ASUS_PF500KL_PROJECT
 		card->ext_csd.cache_size =
 			ext_csd[EXT_CSD_CACHE_SIZE + 0] << 0 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 1] << 8 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 2] << 16 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 3] << 24;
+#ifdef ASUS_PF500KL_PROJECT
+	}
 #endif
 		if (ext_csd[EXT_CSD_DATA_SECTOR_SIZE] == 1)
 			card->ext_csd.data_sector_size = 4096;
@@ -590,11 +596,15 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		} else {
 			card->ext_csd.data_tag_unit_size = 0;
 		}
-#ifndef ASUS_PF500KL_PROJECT
+#ifdef ASUS_PF500KL_PROJECT
+	if (!isPadfoneS()) {
+#endif
 		card->ext_csd.max_packed_writes =
 			ext_csd[EXT_CSD_MAX_PACKED_WRITES];
 		card->ext_csd.max_packed_reads =
 			ext_csd[EXT_CSD_MAX_PACKED_READS];
+#ifdef ASUS_PF500KL_PROJECT
+	}
 #endif
 	}
 
@@ -1467,7 +1477,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		if (card->ext_csd.sectors && (rocr & MMC_CARD_SECTOR_ADDR))
 			mmc_card_set_blockaddr(card);
 	}
-#ifndef ASUS_PF500KL_PROJECT
 	/*
 	 * If enhanced_area_en is TRUE, host needs to enable ERASE_GRP_DEF
 	 * bit.  This bit will be lost every time after a reset or power off.
@@ -1477,10 +1486,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				 EXT_CSD_ERASE_GROUP_DEF, 1,
 				 card->ext_csd.generic_cmd6_time);
-
 		if (err && err != -EBADMSG)
 			goto free_card;
-
 		if (err) {
 			err = 0;
 			/*
@@ -1500,7 +1507,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			mmc_set_erase_size(card);
 		}
 	}
-#endif
 	/*
 	 * Ensure eMMC user default partition is enabled
 	 */
@@ -1520,22 +1526,26 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	 * set the notification byte in the ext_csd register of device
 	 */
 //ASUS change: turn off PON
-#ifndef ASUS_PF500KL_PROJECT 
-	if ((host->caps2 & MMC_CAP2_POWEROFF_NOTIFY) &&
-	    (card->ext_csd.rev >= 6)) {
-		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-				 EXT_CSD_POWER_OFF_NOTIFICATION,
-				 EXT_CSD_POWER_ON,
-				 card->ext_csd.generic_cmd6_time);
-		if (err && err != -EBADMSG)
-			goto free_card;
+#ifdef ASUS_PF500KL_PROJECT 
+	if (!isPadfoneS()) {
+#endif
+		if ((host->caps2 & MMC_CAP2_POWEROFF_NOTIFY) &&
+		    (card->ext_csd.rev >= 6)) {
+			err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+					 EXT_CSD_POWER_OFF_NOTIFICATION,
+					 EXT_CSD_POWER_ON,
+					 card->ext_csd.generic_cmd6_time);
+			if (err && err != -EBADMSG)
+				goto free_card;
 
-		/*
-		 * The err can be -EBADMSG or 0,
-		 * so check for success and update the flag
-		 */
-		if (!err)
-			card->ext_csd.power_off_notification = EXT_CSD_POWER_ON;
+			/*
+			 * The err can be -EBADMSG or 0,
+			 * so check for success and update the flag
+			 */
+			if (!err)
+				card->ext_csd.power_off_notification = EXT_CSD_POWER_ON;
+		}
+#ifdef ASUS_PF500KL_PROJECT 
 	}
 #endif
 	/*
@@ -1548,69 +1558,73 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	/*
 	 * Enable HPI feature (if supported)
 	 */
-#ifndef ASUS_PF500KL_PROJECT 
+#ifdef ASUS_PF500KL_PROJECT 
 //ASUS change turn off hpi
-	if (card->ext_csd.hpi) {
-		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-				EXT_CSD_HPI_MGMT, 1,
-				card->ext_csd.generic_cmd6_time);
-		if (err && err != -EBADMSG)
-			goto free_card;
-		if (err) {
-			pr_warning("%s: Enabling HPI failed\n",
-				   mmc_hostname(card->host));
-			err = 0;
-		} else
-			card->ext_csd.hpi_en = 1;
-	}
-//ASUS change turn off CACHE
-	/*
-	 * If cache size is higher than 0, this indicates
-	 * the existence of cache and it can be turned on.
-	 * If HPI is not supported then cache shouldn't be enabled.
-	 */
-	if ((host->caps2 & MMC_CAP2_CACHE_CTRL) &&
-	    (card->ext_csd.cache_size > 0) && card->ext_csd.hpi_en &&
-	    ((card->quirks & MMC_QUIRK_CACHE_DISABLE) == 0)) {
-		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-				EXT_CSD_CACHE_CTRL, 1,
-				card->ext_csd.generic_cmd6_time);
-		if (err && err != -EBADMSG)
-			goto free_card;
-
+	if (!isPadfoneS()) {
+#endif
+		if (card->ext_csd.hpi) {
+			err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+					EXT_CSD_HPI_MGMT, 1,
+					card->ext_csd.generic_cmd6_time);
+			if (err && err != -EBADMSG)
+				goto free_card;
+			if (err) {
+				pr_warning("%s: Enabling HPI failed\n",
+					   mmc_hostname(card->host));
+				err = 0;
+			} else
+				card->ext_csd.hpi_en = 1;
+		}
+	//ASUS change turn off CACHE
 		/*
-		 * Only if no error, cache is turned on successfully.
+		 * If cache size is higher than 0, this indicates
+		 * the existence of cache and it can be turned on.
+		 * If HPI is not supported then cache shouldn't be enabled.
 		 */
-		if (err) {
-			pr_warning("%s: Cache is supported, "
-					"but failed to turn on (%d)\n",
-					mmc_hostname(card->host), err);
-			card->ext_csd.cache_ctrl = 0;
-			err = 0;
-		} else {
-			card->ext_csd.cache_ctrl = 1;
-		}
-	}
-// ASUS change turn off PACKED CMD
-	if ((host->caps2 & MMC_CAP2_PACKED_WR &&
-			card->ext_csd.max_packed_writes > 0) ||
-	    (host->caps2 & MMC_CAP2_PACKED_RD &&
-			card->ext_csd.max_packed_reads > 0)) {
-		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-				EXT_CSD_EXP_EVENTS_CTRL,
-				EXT_CSD_PACKED_EVENT_EN,
-				card->ext_csd.generic_cmd6_time);
-		if (err && err != -EBADMSG)
-			goto free_card;
-		if (err) {
-			pr_warning("%s: Enabling packed event failed\n",
-					mmc_hostname(card->host));
-			card->ext_csd.packed_event_en = 0;
-			err = 0;
-		} else {
-			card->ext_csd.packed_event_en = 1;
-		}
+		if ((host->caps2 & MMC_CAP2_CACHE_CTRL) &&
+		    (card->ext_csd.cache_size > 0) && card->ext_csd.hpi_en &&
+		    ((card->quirks & MMC_QUIRK_CACHE_DISABLE) == 0)) {
+			err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+					EXT_CSD_CACHE_CTRL, 1,
+					card->ext_csd.generic_cmd6_time);
+			if (err && err != -EBADMSG)
+				goto free_card;
 
+			/*
+			 * Only if no error, cache is turned on successfully.
+			 */
+			if (err) {
+				pr_warning("%s: Cache is supported, "
+						"but failed to turn on (%d)\n",
+						mmc_hostname(card->host), err);
+				card->ext_csd.cache_ctrl = 0;
+				err = 0;
+			} else {
+				card->ext_csd.cache_ctrl = 1;
+			}
+		}
+	// ASUS change turn off PACKED CMD
+		if ((host->caps2 & MMC_CAP2_PACKED_WR &&
+				card->ext_csd.max_packed_writes > 0) ||
+		    (host->caps2 & MMC_CAP2_PACKED_RD &&
+				card->ext_csd.max_packed_reads > 0)) {
+			err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+					EXT_CSD_EXP_EVENTS_CTRL,
+					EXT_CSD_PACKED_EVENT_EN,
+					card->ext_csd.generic_cmd6_time);
+			if (err && err != -EBADMSG)
+				goto free_card;
+			if (err) {
+				pr_warning("%s: Enabling packed event failed\n",
+						mmc_hostname(card->host));
+				card->ext_csd.packed_event_en = 0;
+				err = 0;
+			} else {
+				card->ext_csd.packed_event_en = 1;
+			}
+
+		}
+#ifdef ASUS_PF500KL_PROJECT
 	}
 #endif
 	if (!oldcard) {
@@ -1660,13 +1674,9 @@ err:
 
 static int mmc_can_poweroff_notify(const struct mmc_card *card)
 {
-#ifndef ASUS_PF500KL_PROJECT
 	return card &&
 		mmc_card_mmc(card) &&
 		(card->ext_csd.power_off_notification == EXT_CSD_POWER_ON);
-#else 
-	return 0;
-#endif
 }
 
 static int mmc_poweroff_notify(struct mmc_card *card, unsigned int notify_type)

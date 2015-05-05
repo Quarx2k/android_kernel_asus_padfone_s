@@ -26,7 +26,7 @@
 // +++ ASUS_BSP : add for miniporting
 enum DEVICE_HWID
 {
-	//A90
+	//A90 ????
 	A90_EVB0 = 0x0,
 	A90_EVB = 0x1,
 	A90_SR1 = 0x2,
@@ -36,7 +36,7 @@ enum DEVICE_HWID
 	A90_PR  = 0x6,
 	A90_MP  = 0x7,
 
-	//A91
+	//A91 PadFone X
 	A91_SR1 = 0x20,
 	A91_SR2 = 0x21,
 	A91_SR3 = 0x22,
@@ -47,7 +47,7 @@ enum DEVICE_HWID
 	A91_PR  = 0x27,
 	A91_MP  = 0x28,
 
-	//PF500KL
+	//PF500KL PadFone S
 	PF500KL_ER1 = 0x30,
 	PF500KL_ER2 = 0x31,
 	PF500KL_ER2_2 = 0x32,
@@ -57,6 +57,19 @@ enum DEVICE_HWID
 	A90_UNKNOWN = 0xFF
 };
 extern enum DEVICE_HWID g_ASUS_hwID;
+
+static inline bool isPadfoneS(void) {
+	if (g_ASUS_hwID == PF500KL_ER1 ||
+		g_ASUS_hwID == PF500KL_ER2 ||	
+		g_ASUS_hwID == PF500KL_ER2_2 ||
+		g_ASUS_hwID == PF500KL_PR ||
+		g_ASUS_hwID == PF500KL_MP)
+	{
+		return true;
+	} else {
+		return false;
+	}
+}
 
 #define USHRT_MAX	((u16)(~0U))
 #define SHRT_MAX	((s16)(USHRT_MAX>>1))

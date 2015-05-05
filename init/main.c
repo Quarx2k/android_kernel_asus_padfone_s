@@ -310,7 +310,7 @@ EXPORT_SYMBOL(g_ASUS_hwID);
  		printk("Kernel HW ID = UNKNOWN HW_ID (FORCE to A91_ER1)\n");
  	}
  
-	printk("g_Asus_hwID = %d\n", g_ASUS_hwID);
+	printk("g_Asus_hwID = %d, PadfoneS: %d\n", g_ASUS_hwID, isPadfoneS());
  	return 0;
  }
  __setup("HW_ID=", set_hardware_id);
