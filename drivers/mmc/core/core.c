@@ -2497,7 +2497,7 @@ int mmc_can_discard(struct mmc_card *card)
 	 */
 //ASUS change turn off discard
 #ifdef ASUS_PF500KL_PROJECT
-	if (isPadfoneS())
+	//if (isPadfoneS())
 		return 0;
 #endif
 	if (card->ext_csd.feature_support & MMC_DISCARD_FEATURE)
