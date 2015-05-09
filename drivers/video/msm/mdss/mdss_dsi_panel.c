@@ -38,7 +38,9 @@ extern void asus_mdss_mdp_clk_ctl(bool enable);
 static bool CABC_MOVING = true;
 static struct mutex cmd_mutex;
 extern struct mdss_panel_data *g_mdss_pdata;
+#ifdef CONFIG_LEDS_QPNP
 extern void qpnp_wled_ctrl(bool enable);
+#endif
 extern int himax_ts_suspend(void);
 extern int himax_ts_resume(void);
 int A91_lcd_id = 0; // 0:sharp; 1:innolux
@@ -1184,10 +1186,13 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	if (ctrl->on_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
 #ifdef ASUS_PF500KL_PROJECT
+#ifdef CONFIG_LEDS_QPNP
 	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
+
 		qpnp_wled_ctrl(1);
 	}
 	himax_ts_resume();
+#endif
 #endif
 #ifdef CONFIG_MACH_OPPO
 	if (ctrl->calibration_available && ctrl->calibration_cmds.cmd_cnt)
@@ -1225,9 +1230,11 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	pr_debug("%s: ctrl=%p ndx=%d\n", __func__, ctrl, ctrl->ndx);
 #ifdef ASUS_PF500KL_PROJECT
 	mutex_lock(&cmd_mutex);
+#ifdef CONFIG_LEDS_QPNP
 	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
 		qpnp_wled_ctrl(0);
 	}
+#endif
 	himax_ts_suspend();
 #endif
 	if (pinfo->partial_update_dcs_cmd_by_left) {

@@ -2784,7 +2784,7 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 	if (!ret)
 		mdss_fb_update_backlight(mfd);
 
-	qpnp_wled_ctrl(1); //Quarx //Asus
+	//qpnp_wled_ctrl(1); //Quarx //Asus
 
 	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
 		mdss_fb_release_kickoff(mfd);

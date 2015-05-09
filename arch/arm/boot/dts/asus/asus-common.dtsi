@@ -457,7 +457,6 @@
 
 &pm8941_lsid0 {
 	qcom,power-on@800 {
-		/delete-property/ qcom,pon_1;
 		qcom,pon_2 {
 			qcom,support-reset = <0>;
 		};
