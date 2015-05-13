@@ -64,7 +64,6 @@
 struct taiko_priv *g_taiko;
 struct wcd9xxx *g_wcd9xxx;
 
-int g_flag_csvoice_fe_connected = 0;
 struct timer_list hs_timer_insertion;
 struct timer_list hs_timer_removal;
 struct timer_list button_timer;
@@ -2821,12 +2820,18 @@ static int taiko_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_PRE_PMU:
 		taiko->spkr_pa_widget_on = true;
 		snd_soc_update_bits(codec, TAIKO_A_SPKR_DRV_EN, 0x80, 0x80);
+#ifdef ASUS_PF500KL_PROJECT
+		ApplyA68SPKGain();
+#endif
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		taiko->spkr_pa_widget_on = false;
 		snd_soc_update_bits(codec, TAIKO_A_SPKR_DRV_EN, 0x80, 0x00);
 		break;
 	}
+#ifdef ASUS_PF500KL_PROJECT
+	ApplyHeadsetGain();
+#endif
 	return 0;
 }
 
@@ -6824,6 +6829,75 @@ static const struct wcd9xxx_reg_mask_val taiko_codec_reg_init_val[] = {
 	/* set DMIC CLK drive strength to 4mA */
 	{TAIKO_A_HDRIVE_OVERRIDE, 0x07, 0x01},
 };
+
+#ifdef ASUS_PF500KL_PROJECT
+extern int gSKYPE_state;
+extern int gRingtone_state;
+extern int gGarmin_state;
+extern int gOutAcdbId;
+extern int gRingtoneProfile;
+extern int g_flag_csvoice_fe_connected;
+u32 bMaxxOn = 1;
+void ApplyA68SPKGain(void)
+{
+    u32 spkdrvgain, rx7_vol, lineout1, lineout2;
+    spkdrvgain = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_SPKR_DRV_GAIN);
+    rx7_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL);
+    lineout1 = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN);
+    lineout2 = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN);
+    printk("[Audio][MaxxAudio] before spkdrvgain:0x%x rx7_vol:0x%x lineout1:0x%x lineout2:0x%x\n",
+            spkdrvgain, rx7_vol, lineout1, lineout2);
+
+    if (g_taiko->spkr_pa_widget_on) {
+        wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_SPKR_DRV_GAIN, 0x05);
+        if ((g_flag_csvoice_fe_connected) || (gSKYPE_state) || (gRingtone_state) || (gGarmin_state)) {
+            wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL, 0x01);
+        } else {
+            if (bMaxxOn) {
+                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL, 0x01);
+            } else {
+                wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL, 0xF8);//PF500KL
+            }
+        }
+    }
+    spkdrvgain = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_SPKR_DRV_GAIN);
+    rx7_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL);
+    lineout1 = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN);
+    lineout2 = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN);
+    printk("[Audio][MaxxAudio] after spkdrvgain:0x%x rx7_vol:0x%x lineout1:0x%x lineout2:0x%x\n", spkdrvgain, rx7_vol, lineout1, lineout2);
+}
+EXPORT_SYMBOL_GPL(ApplyA68SPKGain);
+
+void ApplyHeadsetGain(void)
+{
+	u32 rx1_vol, rx2_vol;
+	rx1_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL);
+	rx2_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL);
+	printk("[Audio] before rx1_vol:0x%x rx2_vol:0x%x\n", rx1_vol, rx2_vol);
+
+	if (g_taiko->spkr_pa_widget_on) {
+		if (gOutAcdbId == 205) {
+			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL, 0xF0);
+			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL, 0xF0);
+		}
+	}/*
+	else if (P03_pamp_on) {
+		if (gOutAcdbId == 241) {
+			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL, 0xF0);
+			wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL, 0xF0);
+		}
+	}*/
+	else {
+		wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL, 0x0);
+		wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL, 0x0);
+	}
+
+	rx1_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL);
+	rx2_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL);
+	printk("[Audio] after rx1_vol:0x%x rx2_vol:0x%x\n", rx1_vol, rx2_vol);
+}
+EXPORT_SYMBOL_GPL(ApplyHeadsetGain);
+#endif
 
 static void taiko_codec_init_reg(struct snd_soc_codec *codec)
 {
