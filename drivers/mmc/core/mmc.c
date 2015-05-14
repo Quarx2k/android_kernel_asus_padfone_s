@@ -565,23 +565,23 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 	/* eMMC v4.5 or later */
 	if (card->ext_csd.rev >= 6) {
-#ifdef ASUS_PF500KL_PROJECT
+#ifndef ASUS_PF500KL_PROJECT
 //Asus change: Turn off Discard
-	//if (!isPadfoneS()) {
-#endif
 		card->ext_csd.feature_support |= MMC_DISCARD_FEATURE;
-
+#endif
 		card->ext_csd.generic_cmd6_time = 10 *
 			ext_csd[EXT_CSD_GENERIC_CMD6_TIME];
 		card->ext_csd.power_off_longtime = 10 *
 			ext_csd[EXT_CSD_POWER_OFF_LONG_TIME];
+#ifdef ASUS_PF500KL_PROJECT
+//Asus change: Turn off cache
+	if (!isPadfoneS()) {
 		card->ext_csd.cache_size =
 			ext_csd[EXT_CSD_CACHE_SIZE + 0] << 0 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 1] << 8 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 2] << 16 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 3] << 24;
-#ifdef ASUS_PF500KL_PROJECT
-	//}
+	}
 #endif
 		if (ext_csd[EXT_CSD_DATA_SECTOR_SIZE] == 1)
 			card->ext_csd.data_sector_size = 4096;
