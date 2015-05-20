@@ -498,6 +498,10 @@ config QPNP_LINEAR_CHARGER
 
 source "drivers/power/reset/Kconfig"
 
+config IDTP9023_CHARGER
+        bool "Support for IDTP 9023 charger"
+        default n
+
 endif # POWER_SUPPLY
 
 source "drivers/power/avs/Kconfig"
