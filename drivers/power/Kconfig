@@ -495,4 +495,8 @@ config QPNP_BMS
 	  Say Y here to enable support for QPNP chip bms device.
 	  It registers a fuelgauge bms power supply to report
 	  State of Charge.
+
+config IDTP9023_CHARGER
+        bool "Support for IDTP 9023 charger"
+        default n
 endif # POWER_SUPPLY

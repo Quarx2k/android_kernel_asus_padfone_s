@@ -224,6 +224,10 @@
 #define BOOST_FLASH_WA			BIT(1)
 #define POWER_STAGE_WA			BIT(2)
 
+#ifdef ASUS_PF500KL_PROJECT
+static struct qpnp_chg_chip *the_chip = NULL;
+#endif
+
 struct qpnp_chg_irq {
 	int		irq;
 	unsigned long		disabled;
@@ -911,24 +915,32 @@ qpnp_chg_idcmax_set(struct qpnp_chg_chip *chip, int mA)
 
 	if (mA == QPNP_CHG_I_MAX_MIN_100) {
 		dc = 0x00;
-		pr_debug("current=%d setting %02x\n", mA, dc);
+		printk("1current=%d setting %02x\n", mA, dc);
 		return qpnp_chg_write(chip, &dc,
 			chip->dc_chgpth_base + CHGR_I_MAX_REG, 1);
 	} else if (mA == QPNP_CHG_I_MAX_MIN_150) {
 		dc = 0x01;
-		pr_debug("current=%d setting %02x\n", mA, dc);
+		printk("2current=%d setting %02x\n", mA, dc);
 		return qpnp_chg_write(chip, &dc,
 			chip->dc_chgpth_base + CHGR_I_MAX_REG, 1);
 	}
 
 	dc = mA / QPNP_CHG_I_MAXSTEP_MA;
 
-	pr_debug("current=%d setting 0x%x\n", mA, dc);
+	printk("3current=%d setting 0x%x\n", mA, dc);
 	rc = qpnp_chg_write(chip, &dc,
 		chip->dc_chgpth_base + CHGR_I_MAX_REG, 1);
 
 	return rc;
 }
+#ifdef ASUS_PF500KL_PROJECT
+void setWirelessCharger(bool enable) {
+	if (enable)
+		qpnp_chg_idcmax_set(the_chip, QPNP_CHG_I_MAX_MAX_MA);
+	else
+		qpnp_chg_idcmax_set(the_chip, the_chip->maxinput_dc_ma);
+}
+#endif
 
 static int
 qpnp_chg_iusb_trim_get(struct qpnp_chg_chip *chip)
@@ -5185,7 +5197,9 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	rc = qpnp_charger_read_dt_props(chip);
 	if (rc)
 		return rc;
-
+#ifdef ASUS_PF500KL_PROJECT
+	the_chip = chip;
+#endif
 	if (ext_ovp_isns_present)
 		chip->ext_ovp_ic_gpio_enabled = 0;
 
