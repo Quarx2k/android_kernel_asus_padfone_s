@@ -284,32 +284,6 @@ ktime_t ktime_get(void)
 }
 EXPORT_SYMBOL_GPL(ktime_get);
 
-
-ktime_t ktime_get_v2(void)
-{
-	unsigned int seq;
-	s64 secs, nsecs;	
-
-	do {
-		seq = read_seqbegin(&timekeeper.lock);
-		secs = timekeeper.xtime.tv_sec +
-				timekeeper.wall_to_monotonic.tv_sec;
-		nsecs = timekeeper.xtime.tv_nsec +
-				timekeeper.wall_to_monotonic.tv_nsec;
-		nsecs += timekeeping_get_ns();
-		/* If arch requires, add in gettimeoffset() */
-		nsecs += arch_gettimeoffset();
-
-	} while (read_seqretry(&timekeeper.lock, seq));
-	/*
-	 * Use ktime_set/ktime_add_ns to create a proper ktime on
-	 * 32-bit architectures without CONFIG_KTIME_SCALAR.
-	 */
-	return ktime_add_ns(ktime_set(secs, 0), nsecs);
-}
-EXPORT_SYMBOL_GPL(ktime_get_v2);
-
-
 /**
  * ktime_get_ts - get the monotonic clock in timespec format
  * @ts:		pointer to timespec variable
