@@ -27,7 +27,6 @@
 #include <mach/msm_iomap.h>
 #include <mach/rpm-regulator-smd.h>
 
-
 static void __iomem *msm_wcnss_base;
 static LIST_HEAD(power_on_lock_list);
 static DEFINE_MUTEX(list_lock);
@@ -59,8 +58,6 @@ static int auto_detect;
 #define WCNSS_PMU_CFG_GC_BUS_MUX_SEL_TOP   BIT(5)
 #define WCNSS_PMU_CFG_IRIS_XO_CFG_STS      BIT(6) /* 1: in progress, 0: done */
 
-#define WCNSS_PMU_CFG_IRIS_RESET           BIT(7)
-#define WCNSS_PMU_CFG_IRIS_RESET_STS       BIT(8) /* 1: in progress, 0: done */
 #define WCNSS_PMU_CFG_IRIS_XO_READ         BIT(9)
 #define WCNSS_PMU_CFG_IRIS_XO_READ_STS     BIT(10)
 
@@ -108,7 +105,7 @@ static struct vregs_info iris_vregs_pronto[] = {
 	{"qcom,iris-vddrfa", VREG_NULL_CONFIG, 1300000, 0,
 		1300000, 100000, NULL},
 	{"qcom,iris-vddpa",  VREG_NULL_CONFIG, 2900000, 0,
-		3350000, 515000, NULL},
+		3000000, 515000, NULL},
 	{"qcom,iris-vdddig", VREG_NULL_CONFIG, 1225000, 0,
 		1800000, 10000,  NULL},
 };
@@ -170,26 +167,10 @@ int validate_iris_chip_id(u32 reg)
 	}
 }
 
-void  wcnss_iris_reset(u32 reg, void __iomem *pmu_conf_reg)
-{
-	/* Reset IRIS */
-	reg |= WCNSS_PMU_CFG_IRIS_RESET;
-	writel_relaxed(reg, pmu_conf_reg);
-
-	/* Wait for PMU_CFG.iris_reg_reset_sts */
-	while (readl_relaxed(pmu_conf_reg) &
-			WCNSS_PMU_CFG_IRIS_RESET_STS)
-		cpu_relax();
-
-	/* Reset iris reset bit */
-	reg &= ~WCNSS_PMU_CFG_IRIS_RESET;
-	writel_relaxed(reg, pmu_conf_reg);
-}
-
 static int configure_iris_xo(struct device *dev, bool use_48mhz_xo, int on,
 			int *iris_xo_set)
 {
-	u32 reg = 0, i = 0;
+	u32 reg = 0;
 	u32 iris_reg = WCNSS_INVALID_IRIS_REG;
 	int rc = 0;
 	int size = 0;
@@ -263,44 +244,35 @@ static int configure_iris_xo(struct device *dev, bool use_48mhz_xo, int on,
 			iris_reg = readl_relaxed(iris_read_reg);
 		}
 
-		wcnss_iris_reset(reg, pmu_conf_reg);
-
 		if (iris_reg != WCNSS_INVALID_IRIS_REG) {
 			iris_reg &= 0xffff;
 			iris_reg |= PRONTO_IRIS_REG_CHIP_ID;
 			writel_relaxed(iris_reg, iris_read_reg);
-			do {
-				/* Iris read */
-				reg = readl_relaxed(pmu_conf_reg);
-				reg |= WCNSS_PMU_CFG_IRIS_XO_READ;
-				writel_relaxed(reg, pmu_conf_reg);
 
-				/* Wait for PMU_CFG.iris_reg_read_sts */
-				while (readl_relaxed(pmu_conf_reg) &
-						WCNSS_PMU_CFG_IRIS_XO_READ_STS)
-					cpu_relax();
+			/* Iris read */
+			reg = readl_relaxed(pmu_conf_reg);
+			reg |= WCNSS_PMU_CFG_IRIS_XO_READ;
+			writel_relaxed(reg, pmu_conf_reg);
 
-				iris_reg = readl_relaxed(iris_read_reg);
-				pr_info("wcnss: IRIS Reg: %08x\n", iris_reg);
+			/* Wait for PMU_CFG.iris_reg_read_sts */
+			while (readl_relaxed(pmu_conf_reg) &
+					WCNSS_PMU_CFG_IRIS_XO_READ_STS)
+				cpu_relax();
 
-				if (validate_iris_chip_id(iris_reg) && i >= 4) {
-					pr_info("wcnss: IRIS Card absent/invalid\n");
-					auto_detect = WCNSS_XO_INVALID;
-					/* Reset iris read bit */
-					reg &= ~WCNSS_PMU_CFG_IRIS_XO_READ;
-					/* Clear XO_MODE[b2:b1] bits.
-					 * Clear implies 19.2 MHz TCXO
-					 */
-					reg &= ~(WCNSS_PMU_CFG_IRIS_XO_MODE);
-					goto xo_configure;
-				} else if (!validate_iris_chip_id(iris_reg)) {
-					pr_debug("wcnss: IRIS Card is present\n");
-					break;
-				}
+			iris_reg = readl_relaxed(iris_read_reg);
+			pr_info("wcnss: IRIS Reg: %08x\n", iris_reg);
+
+			if (validate_iris_chip_id(iris_reg)) {
+				pr_info("wcnss: IRIS Card absent/invalid\n");
+				auto_detect = WCNSS_XO_INVALID;
+				/* Reset iris read bit */
 				reg &= ~WCNSS_PMU_CFG_IRIS_XO_READ;
-				writel_relaxed(reg, pmu_conf_reg);
-				wcnss_iris_reset(reg, pmu_conf_reg);
-			} while (i++ < 5);
+				/* Clear XO_MODE[b2:b1] bits.
+				   Clear implies 19.2 MHz TCXO
+				 */
+				reg &= ~(WCNSS_PMU_CFG_IRIS_XO_MODE);
+				goto xo_configure;
+			}
 			auto_detect = xo_auto_detect(iris_reg);
 
 			/* Reset iris read bit */
@@ -325,8 +297,6 @@ static int configure_iris_xo(struct device *dev, bool use_48mhz_xo, int on,
 
 xo_configure:
 		writel_relaxed(reg, pmu_conf_reg);
-
-		wcnss_iris_reset(reg, pmu_conf_reg);
 
 		/* Start IRIS XO configuration */
 		reg |= WCNSS_PMU_CFG_IRIS_XO_CFG;
@@ -560,9 +530,7 @@ static int wcnss_core_vregs_on(struct device *dev, enum wcnss_hw_type hw_type)
 
 }
 
-int wcnss_wlan_power(struct device *dev,
-		struct wcnss_wlan_config *cfg,
-		enum wcnss_opcode on, int *iris_xo_set)
+int wcnss_wlan_power(struct device *dev, struct wcnss_wlan_config *cfg, enum wcnss_opcode on, int *iris_xo_set)
 {
 	int rc = 0;
 	enum wcnss_hw_type hw_type = wcnss_hardware_type();
@@ -571,26 +539,48 @@ int wcnss_wlan_power(struct device *dev,
 		down(&wcnss_power_on_lock);
 		/* RIVA regulator settings */
 		rc = wcnss_core_vregs_on(dev, hw_type);
-		if (rc)
+		if (rc) {
+			printk("[wcnss]: wcnss_core_vregs_on fail.\n");
+
 			goto fail_wcnss_on;
+		}
+		else {
+			printk("[wcnss]: wcnss_core_vregs_on.\n");
+        	}
 
 		/* IRIS regulator settings */
 		rc = wcnss_iris_vregs_on(dev, hw_type);
-		if (rc)
+		if (rc) {
+			printk("[wcnss]: wcnss_iris_vregs_on fail.\n");
+
 			goto fail_iris_on;
+		}
+		else {
+			printk("[wcnss]: wcnss_iris_vregs_on.\n");
+        	}
 
 		/* Configure IRIS XO */
-		rc = configure_iris_xo(dev, cfg->use_48mhz_xo,
-				WCNSS_WLAN_SWITCH_ON, iris_xo_set);
-		if (rc)
-			goto fail_iris_xo;
-		up(&wcnss_power_on_lock);
+		rc = configure_iris_xo(dev, cfg->use_48mhz_xo, WCNSS_WLAN_SWITCH_ON, iris_xo_set);
+		if (rc) {
+			printk("[wcnss]: configure_iris_xo (WCNSS_WLAN_SWITCH_ON) fail.\n");
 
-	} else {
-		configure_iris_xo(dev, cfg->use_48mhz_xo,
-				WCNSS_WLAN_SWITCH_OFF, NULL);
+			goto fail_iris_xo;
+		}
+		else {
+			printk("[wcnss]: configure_iris_xo (WCNSS_WLAN_SWITCH_ON).\n");
+        	}
+
+		up(&wcnss_power_on_lock);
+	} 
+	else {
+		configure_iris_xo(dev, cfg->use_48mhz_xo, WCNSS_WLAN_SWITCH_OFF, NULL);
+		printk("[wcnss]: configure_iris_xo (WCNSS_WLAN_SWITCH_OFF).\n");
+
 		wcnss_iris_vregs_off(hw_type);
+		printk("[wcnss]: wcnss_iris_vregs_off.\n");
+
 		wcnss_core_vregs_off(hw_type);
+		printk("[wcnss]: wcnss_core_vregs_off.\n");
 	}
 
 	return rc;
