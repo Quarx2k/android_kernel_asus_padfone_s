@@ -360,6 +360,10 @@ struct qpnp_chg_chip {
 	int				warm_bat_decidegc;
 	int				cool_bat_decidegc;
 	int				fake_battery_soc;
+#ifdef ASUS_PF500KL_PROJECT
+	unsigned int           		ac_online;
+	unsigned int         	  	current_max;
+#endif
 	unsigned int			safe_current;
 	unsigned int			revision;
 	unsigned int			type;
@@ -371,6 +375,9 @@ struct qpnp_chg_chip {
 	struct power_supply		*usb_psy;
 	struct power_supply		*bms_psy;
 	struct power_supply		batt_psy;
+#ifdef ASUS_PF500KL_PROJECT
+	struct power_supply		ac_psy;
+#endif
 	uint32_t			flags;
 	struct qpnp_adc_tm_btm_param	adc_param;
 	struct work_struct		adc_measure_work;
@@ -935,10 +942,11 @@ qpnp_chg_idcmax_set(struct qpnp_chg_chip *chip, int mA)
 }
 #ifdef ASUS_PF500KL_PROJECT
 void setWirelessCharger(bool enable) {
-	if (enable)
+	if (enable) {
 		qpnp_chg_idcmax_set(the_chip, QPNP_CHG_I_MAX_MAX_MA);
-	else
+	} else {
 		qpnp_chg_idcmax_set(the_chip, the_chip->maxinput_dc_ma);
+	}
 }
 #endif
 
@@ -2391,7 +2399,56 @@ get_prop_battery_voltage_now(struct qpnp_chg_chip *chip)
 		return results.physical;
 	}
 }
+#ifdef ASUS_PF500KL_PROJECT
+static int
+power_set_property_mains(struct power_supply *psy,
+				  enum power_supply_property psp,
+				  const union power_supply_propval *val)
+{
+	struct qpnp_chg_chip *chip = container_of(psy, struct qpnp_chg_chip,
+								ac_psy);
 
+	switch (psp) {
+	case POWER_SUPPLY_PROP_PRESENT:
+	case POWER_SUPPLY_PROP_ONLINE:
+		chip->ac_online = val->intval;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		chip->current_max = val->intval;
+ 		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+
+	power_supply_changed(&chip->ac_psy);
+ 	return 0;
+}
+
+static int
+power_get_property_mains(struct power_supply *psy,
+				  enum power_supply_property psp,
+				  union power_supply_propval *val)
+{
+	struct qpnp_chg_chip *chip = container_of(psy, struct qpnp_chg_chip,
+								ac_psy);
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_PRESENT:
+	case POWER_SUPPLY_PROP_ONLINE:
+		val->intval = 0;
+		if (chip->charging_disabled)
+			return 0;
+		val->intval = chip->ac_online;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = chip->current_max;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+#endif
 #define BATT_PRES_BIT BIT(7)
 static int
 get_prop_batt_present(struct qpnp_chg_chip *chip)
@@ -5426,8 +5483,13 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->aicl_check_work, qpnp_aicl_check_work);
 
 	if (chip->dc_chgpth_base) {
+#ifndef ASUS_PF500KL_PROJECT
 		chip->dc_psy.name = "qpnp-dc";
 		chip->dc_psy.type = POWER_SUPPLY_TYPE_MAINS;
+#else
+		chip->dc_psy.name = "wireless";
+		chip->dc_psy.type = POWER_SUPPLY_TYPE_WIRELESS;
+#endif
 		chip->dc_psy.supplied_to = pm_power_supplied_to;
 		chip->dc_psy.num_supplicants = ARRAY_SIZE(pm_power_supplied_to);
 		chip->dc_psy.properties = pm_power_props_mains;
@@ -5443,6 +5505,25 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			goto unregister_batt;
 		}
 	}
+
+#ifdef ASUS_PF500KL_PROJECT
+	chip->ac_psy.name = "ac";
+	chip->ac_psy.type = POWER_SUPPLY_TYPE_MAINS;
+	chip->ac_psy.supplied_to = pm_power_supplied_to;
+	chip->ac_psy.num_supplicants = ARRAY_SIZE(pm_power_supplied_to);
+	chip->ac_psy.properties = pm_power_props_mains;
+	chip->ac_psy.num_properties = ARRAY_SIZE(pm_power_props_mains);
+	chip->ac_psy.set_property = power_set_property_mains;
+	chip->ac_psy.get_property = power_get_property_mains;
+
+	rc = power_supply_register(chip->dev, &chip->ac_psy);
+	if (rc < 0) {
+		pr_err("power_supply_register ac failed rc=%d\n", rc);
+		if (chip->dc_chgpth_base)
+			power_supply_unregister(&chip->dc_psy);
+		goto unregister_batt;
+	}
+#endif
 
 	/* Turn on appropriate workaround flags */
 	rc = qpnp_chg_setup_flags(chip);

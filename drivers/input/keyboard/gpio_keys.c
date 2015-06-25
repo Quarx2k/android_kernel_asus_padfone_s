@@ -50,14 +50,10 @@ static struct input_dev *g_input_dev; //ASUS BSP freddy+ get input_dev info for 
 //ASUS BSP freddy-- define keyevent keycode
 
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. ++
-#include <linux/asusdebug.h>
 #include <linux/reboot.h>
 #include <asm/cacheflush.h>
-#include <linux/asus_global.h>
-extern struct _asus_global asus_global;
 
 extern void resetdevice(void);
-extern void set_dload_mode(int on);
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. --
 //freddy +++ for key porting
 static struct wake_lock pwr_key_wake_lock;
@@ -159,13 +155,9 @@ void wait_for_power_key_6s_work(struct work_struct *work)
 		if(((i == TIMEOUT_COUNT) || (slow_ok == 1) || time_after_eq(jiffies, timeout)) && (gpio_get_value_cansleep(power_key) == 0) && (i > 0))
 		{
 			duration = (jiffies - startime)*10/HZ;
-			ASUSEvtlog("ASDF: reset device after power press %d.%d sec (%d)\n", duration/10, duration%10, i);
 			set_vib_enable(200);
 			msleep(200);
 
-			set_dload_mode(0);
-			asus_global.ramdump_enable_magic = 0;
-			printk(KERN_CRIT "asus_global.ramdump_enable_magic = 0x%x\n",asus_global.ramdump_enable_magic);
 			flush_cache_all();
 			printk("force reset device!!\n");
 			kernel_restart("asdf");
@@ -179,7 +171,6 @@ void wait_for_power_key_6s_work(struct work_struct *work)
 
 #define TIMEOUT_SLOW 30
 static  struct work_struct __wait_for_slowlog_work;
-extern int boot_after_60sec;
 void wait_for_slowlog_work(struct work_struct *work)
 {
     static int one_slowlog_instance_running = 0;
@@ -212,14 +203,11 @@ void wait_for_slowlog_work(struct work_struct *work)
 				printk("start to gi chk\n");
 				duration = (jiffies - startime)*10/HZ;
 				printk("start to gi chk after power press %d.%d sec (%d)\n", duration/10, duration%10, i);
-				save_all_thread_info();
 
 				msleep(1 * 1000);
 
 				duration = (jiffies - startime)*10/HZ;
 				printk("start to gi delta after power press %d.%d sec (%d)\n", duration/10, duration%10, i);
-				delta_all_thread_info();
-				save_phone_hang_log();
 				//Dump_wcd9310_reg();     //Bruno++
 				//printk_lcd("slow log captured\n");
 				slow_ok = 1;
@@ -592,8 +580,6 @@ static void gpio_keys_gpio_work_func(struct work_struct *work)
 	}
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. --
 
-    if (boot_after_60sec)
-		schedule_work(&__wait_for_slowlog_work);
 	gpio_keys_gpio_report_event(bdata);
 }
 
