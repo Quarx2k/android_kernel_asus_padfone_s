@@ -34,8 +34,8 @@
 #include <linux/wakelock.h>
 //ASUS BSP freddy-- register wakelock for press key-code
 //ASUS BSP freddy++ for pad Key porting
-#include <linux/microp_notify.h> 
-#include <linux/microp_notifier_controller.h>	
+#include <linux/microp_notify.h>
+#include <linux/microp_notifier_controller.h>
 #include <linux/microp_api.h>
 #include <linux/microp_pin_def.h>
 //ASUS BSP freddy-- for pad Key porting
@@ -47,26 +47,17 @@ static struct input_dev *g_input_dev; //ASUS BSP freddy+ get input_dev info for 
 #define PAD_KEY_VOLUP   417
 #define PAD_KEY_VOLDOWN 416
 #define PAD_KEY_POWER   418
-//ASUS BSP freddy-- define keyevent keycode 
+//ASUS BSP freddy-- define keyevent keycode
 
-struct kobject *kobj;//ASUS_BSP + [thomas]Send uevent to userspace
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. ++
+#include <linux/asusdebug.h>
 #include <linux/reboot.h>
 #include <asm/cacheflush.h>
+#include <linux/asus_global.h>
+extern struct _asus_global asus_global;
 
-//ASUS_BSP +++ Peter_lu "For fastboot mode  with slow log issue"
-#ifdef CONFIG_FASTBOOT
-#include <linux/fastboot.h>
-static int fastboot_state = 0;
-enum PWR_KEY_STATE
-{
-	PWR_KEY_STATE_NOT_HANDLED_YET = 0,
-	PWR_KEY_STATE_WAITTING_FOR_DEBUNCING_TIMEOUT,
-	PWR_KEY_STATE_WAITING_FOR_KEY_RELEASE,
-	PWR_KEY_STATE_COUNT,
-};
-#endif //#ifdef CONFIG_FASTBOOT
-
+extern void resetdevice(void);
+extern void set_dload_mode(int on);
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. --
 //freddy +++ for key porting
 static struct wake_lock pwr_key_wake_lock;
@@ -74,41 +65,16 @@ static bool g_bResume=1,g_bpwr_key_lock_sts=0;
 static bool pad_volUp_still_press = 0 ,pad_volDown_still_press = 0;
 static int g_keycheck_abort = 0, g_keystate = 0; //set tag for abort method
 //freddy --- for key porting
-/* remove fake key
-static int pwk_state = 0, pwk_wake = 0; //remove fake-key tag
-static int pad_pwk_state =0, pad_pwk_wake = 0; //remove fake-key tag
-*/
-/*
-//ASUS BSP freddy++ [A91][key] "for audio scenario FM Radio,MP3 Music can use volume key."
-extern int g_flag_csvoice_fe_connected;
-extern int FMStatus;
-//ASUS BSP freddy-- [A91][key] "for audio scenario FM Radio,MP3 Music can use volume key."
-*/
 static int vol_up_gpio;
 static int vol_down_gpio;
 static int pwr_gpio;
-//ASUS BSP freddy++ for pad key porting 
+//ASUS BSP freddy++ for pad key porting
 struct pad_buttons_code {
     int vol_up;
     int vol_down;
     int power_key;
 };
 //ASUS BSP freddy-- for pad key porting
-//freddy +++ for fake key
-enum {
-	DEBUG_REPORT_EVENT = 1U << 0,
-	DEBUG_PAD_EVENT = 1U << 1,
-};
-
-static int debug_mask = DEBUG_REPORT_EVENT;
-module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
-
-#define GPIO_KEYS_PRINTK(mask, message, ...) \
-	do { \
-		if ((mask) & debug_mask) \
-			printk(message, ## __VA_ARGS__); \
-	} while (0)
-//freddy --- for fake key
 struct gpio_button_data {
 	struct gpio_keys_button *button; //ASUS BSP freddy+ remove const
 	struct input_dev *input;
@@ -193,10 +159,16 @@ void wait_for_power_key_6s_work(struct work_struct *work)
 		if(((i == TIMEOUT_COUNT) || (slow_ok == 1) || time_after_eq(jiffies, timeout)) && (gpio_get_value_cansleep(power_key) == 0) && (i > 0))
 		{
 			duration = (jiffies - startime)*10/HZ;
+			ASUSEvtlog("ASDF: reset device after power press %d.%d sec (%d)\n", duration/10, duration%10, i);
 			set_vib_enable(200);
 			msleep(200);
 
+			set_dload_mode(0);
+			asus_global.ramdump_enable_magic = 0;
+			printk(KERN_CRIT "asus_global.ramdump_enable_magic = 0x%x\n",asus_global.ramdump_enable_magic);
 			flush_cache_all();
+			printk("force reset device!!\n");
+			kernel_restart("asdf");
 		}
 
 		power_key_6s_running = 0;
@@ -205,10 +177,7 @@ void wait_for_power_key_6s_work(struct work_struct *work)
 //
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. --
 
-//jack for debug slow
-//#include "../../../sound/soc/codecs/wcd9310.h"
 #define TIMEOUT_SLOW 30
-static  struct work_struct __wait_for_two_keys_work;
 static  struct work_struct __wait_for_slowlog_work;
 extern int boot_after_60sec;
 void wait_for_slowlog_work(struct work_struct *work)
@@ -216,11 +185,11 @@ void wait_for_slowlog_work(struct work_struct *work)
     static int one_slowlog_instance_running = 0;
     int i, volume_up_key, power_key, duration;
     unsigned long timeout, startime;
-    
+
     volume_up_key = vol_up_gpio;
     power_key = pwr_gpio;
     if(!one_slowlog_instance_running)
-    { 
+    {
         if(gpio_get_value_cansleep(power_key) != 0)
         {
             return;
@@ -231,10 +200,10 @@ void wait_for_slowlog_work(struct work_struct *work)
 	slow_ok=0;
 			for(i = 0; i < TIMEOUT_SLOW && time_before(jiffies, timeout); i++)
 			{
-				if( gpio_get_value_cansleep(power_key) == 0)   
+				if( gpio_get_value_cansleep(power_key) == 0)
 				{
 					msleep(100);
-				}         
+				}
 				else
 					break;
 			}
@@ -242,74 +211,24 @@ void wait_for_slowlog_work(struct work_struct *work)
 			{
 				printk("start to gi chk\n");
 				duration = (jiffies - startime)*10/HZ;
-				printk("start to gi chk after power press %d.%d sec (%d)\n", duration/10, duration%10, i);			
-#ifdef CONFIG_FASTBOOT
-				if(is_fastboot_enable() && fastboot_state > PWR_KEY_STATE_NOT_HANDLED_YET)	{
-					printk("[FastBoot] In fastboot mode power on! without enable slow log!(%d)\n", fastboot_state);
-				}
-				else	{
-#endif			
+				printk("start to gi chk after power press %d.%d sec (%d)\n", duration/10, duration%10, i);
+				save_all_thread_info();
+
 				msleep(1 * 1000);
-				
+
 				duration = (jiffies - startime)*10/HZ;
 				printk("start to gi delta after power press %d.%d sec (%d)\n", duration/10, duration%10, i);
-				//Dump_wcd9310_reg();     //Bruno++    
+				delta_all_thread_info();
+				save_phone_hang_log();
+				//Dump_wcd9310_reg();     //Bruno++
 				//printk_lcd("slow log captured\n");
 				slow_ok = 1;
-#ifdef CONFIG_FASTBOOT
-				}
-#endif
-			}			
+			}
 		one_slowlog_instance_running = 0;
 	}
-	       
+
 }
 
-void wait_for_two_keys_work(struct work_struct *work)
-{
-    static int one_instance_running = 0;
-    int i, volume_up_key, volume_down_key, power_key;
-
-    volume_up_key = vol_up_gpio;
-    volume_down_key = vol_down_gpio;
-    power_key = pwr_gpio;
-
-    //printk("wait_for_two_keys_work++\n");
-    if(!one_instance_running)
-    { 
-        if(gpio_get_value_cansleep(power_key) != 0 || gpio_get_value_cansleep(volume_up_key) != 0 || gpio_get_value_cansleep(volume_down_key) != 0)
-        {
-            //printk("wait_for_two_keys_work one of the keys is not pressed wait_for_two_keys_work--\n");
-            return;
-        }
-        one_instance_running = 1;
-        
-        for(i = 0; i < 20; i++)
-        {
-            if(gpio_get_value_cansleep(volume_up_key) == 0 && gpio_get_value_cansleep(volume_down_key) == 0 && gpio_get_value_cansleep(power_key) == 0 )   
-            {
-                msleep(100);
-            }         
-            else
-                break;
-        }
-        if(i == 20)
-        {
-            //Dump_wcd9310_reg();     //Bruno++    
-            //printk_lcd("slow log captured\n");
-        }
-        else
-        {
-            //printk("wait_for_two_keys_work one of the keys is not pressed\n");
-        }
-        one_instance_running = 0;
-    }
-    //else
-    //    printk("wait_for_two_keys_work already running\n");
-    //printk("wait_for_two_keys_work--\n");
-            
-    
-}
 /*
  * SYSFS interface for enabling/disabling keys and switches:
  *
@@ -582,19 +501,28 @@ static struct attribute *gpio_keys_attrs[] = {
 static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
-static unsigned int count_start = 0;  
-static unsigned int count = 0;  
-#include <linux/reboot.h>
-#include <asm/cacheflush.h>
-int volumedownkeystatus;//ASUS_BSP + [thomas] Add more check about volume down key
 
-int bootupcount = 0;
 
-//ASUS_BSP +++ Peter_lu "For fastboot mode report power key event issue"
-#ifdef CONFIG_FASTBOOT
-bool isPowerKeyHandled(bool pressed);
-#endif //#ifdef CONFIG_FASTBOOT
-//ASUS_BSP --- Peter_lu "For fastboot mode"
+static struct work_struct __dump_log_work;
+#include <linux/kmod.h>
+void dump_log_work(struct work_struct *work)
+{
+	int i = 2;
+
+	char *argv[] = { "/system/bin/dump_log", NULL };
+	char *envp[] = { "HOME=/" , NULL };
+
+
+	for(; i > 0; i--) {
+		set_vib_enable(500);
+		msleep(1000);
+	}
+
+	call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+
+}
+
+static unsigned int b_press;
 
 static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 {
@@ -603,8 +531,7 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	unsigned int type = button->type ?: EV_KEY;
 	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0) ^ button->active_low;
 	int volume_up_key, volume_down_key, power_key;//ASUS_BSP + [ASDF]long press power key 6sec,reset device..
-   	int volume_down_key_status_change_from_press = 0;//ASUS_BSP + [thomas] Add more check about volume down key
-	char *envp[3];//ASUS_BSP + [thomas]Send uevent to userspace
+
 	volume_up_key = vol_up_gpio;
 	volume_down_key = vol_down_gpio;
 	power_key = pwr_gpio;//ASUS_BSP + [ASDF]long press power key 6sec,reset device..
@@ -624,117 +551,34 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	}
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. --
 	//printk("GPIO_%d=%d , GPIO_%d=%d , GPIO_%d=%d\n", vol_up_gpio, gpio_get_value_cansleep(vol_up_gpio), vol_down_gpio, gpio_get_value_cansleep(vol_down_gpio), pwr_gpio, gpio_get_value_cansleep(pwr_gpio));
-	//ASUS_BSP +++ [thomas]Send uevent to userspace
-	envp[0] = "top_event";
-	envp[1] = NULL;
-	if (bootupcount == 10 && 
-		(gpio_get_value_cansleep(volume_down_key) == 0) && 
-		(gpio_get_value_cansleep(volume_up_key) == 0) &&
-		(kobj != NULL))
-		kobject_uevent_env(kobj,KOBJ_ONLINE,envp);
-	if (bootupcount < 10)
-		bootupcount++;
-	//ASUS_BSP --- [thomas]Send uevent to userspace
-	if (gpio_get_value_cansleep(volume_up_key) == 0){
-		count_start = 1;
-	}
-	else{
-		count_start = 0;
-	}
-	//ASUS_BSP +++ [thomas] Add more check about volume down key
-	if (gpio_get_value_cansleep(volume_down_key) == 0)
-	{
-		if (volumedownkeystatus)
-		{
-			volumedownkeystatus = 0;
-		}
-	}
-	else
-	{
-		if (!volumedownkeystatus)
-		{
-			volumedownkeystatus = 1;
-			volume_down_key_status_change_from_press = 1;
-		}
-	}
-	//ASUS_BSP --- [thomas] Add more check about volume down key
-	if (count_start)
-	{
-		if (volume_down_key_status_change_from_press)	//ASUS_BSP + [thomas] Add more check about volume down key
-		{
-			count++;
-			if (count == 10)
-			{
-				printk("Kernel alive...\r\n");
-				flush_cache_all();	
-			}		
-		}
-	}
-	else
-	{
-		count = 0;
-	}
 
-	if (type == EV_ABS) 
-	{
+
+	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
-	} else 
-	  {
-
-	       if (state)//press
-		{     
-	       	if (button->code == KEY_POWER) 
-			{
-	             	printk("[Gpio_keys]%s- pwr key:%x,Resume sts= %x,keylock sts= %x\r\n",__func__,state,g_bResume,g_bpwr_key_lock_sts);
-	                                if (g_bResume) 
-						{
-	                                        wake_lock_timeout(&pwr_key_wake_lock, 3 * HZ);
-	                                        g_bpwr_key_lock_sts=1;
-	                                        g_bResume=0;
-	                                        printk(KERN_INFO "[Gpio_keys]Wakelock 3 sec for PWR key on A91\r\n");
-	                                }
-	                                else if(g_bpwr_key_lock_sts) 
-						{
-	                                        wake_unlock(&pwr_key_wake_lock);
-	                                        g_bpwr_key_lock_sts=0;
-	                                        printk(KERN_INFO "[Gpio_keys]Unlock 3 sec for PWR key on A91\r\n");
-	                                }
-	             }
-/*
-//	//ASUS BSP freddy++ [A91][key] "for audio scenario FM Radio,MP3 Music can use volume key."
-		
-                        else if ( ((button->code == KEY_VOLUMEUP) || (button->code == KEY_VOLUMEDOWN))
-                                && (g_flag_csvoice_fe_connected || FMStatus)) 
-                        {
-                                printk("[Gpio_keys]%s- vol key:%x,pm sts:%x,keylock sts:%x\r\n",__func__,state,g_bResume,g_bpwr_key_lock_sts);
-                                if (g_bResume) 
-					{
-                                        wake_lock_timeout(&pwr_key_wake_lock, 3 * HZ);
-                                        g_bpwr_key_lock_sts=1;
-                                        g_bResume=0;
-                                        printk(KERN_INFO "[Gpio_keys]Wakelock 3 sec for VOL key on A8x\r\n");
-                                }
-                        }
-    //ASUS BSP freddy++ [A91][key] "for audio scenario FM Radio,MP3 Music can use volume key."                    
-*/                        
-               }
+	} else {
 		input_event(input, type, button->code, !!state);
+
+		if(state) {
+			if(button->code == 114)
+				b_press |= 0x01;
+
+			if(button->code == 115)
+				b_press |= 0x02;
+
+			if(button->code == 116 && b_press == 3)
+				schedule_work(&__dump_log_work);
+		}
+		else {
+			if(button->code == 114)
+				b_press &= ~(0x01);
+
+			if(button->code == 115)
+				b_press &= ~(0x02);
+		}
 	}
-//ASUS_BSP +++ Peter_lu "For fastboot mode"
-#ifdef CONFIG_FASTBOOT
-	if ( button->code == KEY_POWER )	{
-		if(!isPowerKeyHandled(state))	{
-			printk(DBGMSK_PWR_G2"Report power key event \n");
 	input_sync(input);
 }
-	}
-	else
-#endif //#ifdef CONFIG_FASTBOOT
-//ASUS_BSP --- Peter_lu "For fastboot mode"
-		input_sync(input);
-}
-//ASUS BSP freddy--
 
 static void gpio_keys_gpio_work_func(struct work_struct *work)
 {
@@ -747,10 +591,10 @@ static void gpio_keys_gpio_work_func(struct work_struct *work)
 		press_time = 0xFFFFFFFF;
 	}
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. --
-    //added by jack for slow log
-    schedule_work(&__wait_for_two_keys_work);
 
-    gpio_keys_gpio_report_event(bdata);
+    if (boot_after_60sec)
+		schedule_work(&__wait_for_slowlog_work);
+	gpio_keys_gpio_report_event(bdata);
 }
 
 static void gpio_keys_gpio_timer(unsigned long _data)
@@ -759,452 +603,10 @@ static void gpio_keys_gpio_timer(unsigned long _data)
 //ASUS BSP freddy+++ fix TT 281235:Power key suspend/resume fail
 	const struct gpio_keys_button *button = bdata->button;
 	g_keystate = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;//memo button->active_low==1;
-	printk("[Gpio_keys] after debounce,gpio=%d key state=%d \n",button->gpio, g_keystate);	
+	printk("[Gpio_keys] after debounce,gpio=%d key state=%d \n",button->gpio, g_keystate);
 //ASUS BSP freddy--- fix TT 281235:Power key suspend/resume fail
 	schedule_work(&bdata->work);
 }
-
-//ASUS_BSP +++ Peter_lu "For fastboot mode"
-#ifdef CONFIG_FASTBOOT
-//#include <linux/fastboot.h>
-//#include <linux/wakelock.h>
-#include <linux/spinlock.h>
-//#include <linux/mutex.h>
-static DEFINE_SPINLOCK(handler_lock);
-/*
-enum PWR_KEY_STATE
-{
-    PWR_KEY_STATE_NOT_HANDLED_YET = 0,
-    PWR_KEY_STATE_WAITTING_FOR_DEBUNCING_TIMEOUT,
-    PWR_KEY_STATE_WAITING_FOR_KEY_RELEASE,
-    PWR_KEY_STATE_COUNT,
-};
-*/
-enum PWR_KEY_DEBOUNCING_LEVEL
-{
-    PWR_KEY_DEBOUNCING_LEVEL_NO = 0,
-    PWR_KEY_DEBOUNCING_LEVEL_SHORT,
-    PWR_KEY_DEBOUNCING_LEVEL_LONG,
-    PWR_KEY_DEBOUNCING_LEVEL_COUNT,
-};
-struct power_key_context{
-    void(*transit)(struct power_key_context * context, enum PWR_KEY_STATE  newstate);
-    void(*startDebouncing)(struct power_key_context * context, enum PWR_KEY_DEBOUNCING_LEVEL level);
-    void(*stopDebouncing)(struct power_key_context * context);
-    bool(*isDebouncing)(struct power_key_context * context);
-    void (*reportKey)(struct power_key_context * context, bool keyPressed);
-};
-struct power_key_state {
-    enum PWR_KEY_STATE state;
-    const char *name;
-    struct power_key_context *context;
-    void (*onPressed)(struct power_key_state *state);
-    void (*onReleased)(struct power_key_state *state);
-    void (*onDebouncingTimeout)(struct power_key_state *state);
-    void (*setContext)(struct power_key_state *state, struct power_key_context *context);
-};
-//the member functions of power_key_state
-static void power_key_state_setContext(struct power_key_state *this ,struct power_key_context *context)
-{
-    BUG_ON(this == NULL); 
-
-    this->context = context;
-}
-//the member functions of not_handled_yet_state
-static void not_handled_yet_state_onPressed(struct power_key_state *this)
-{
-    BUG_ON(this == NULL); 
-
-    pr_debug("not_handled_yet_state_onPressed+++\n");
-
-    if(this->context->isDebouncing(this->context)){
-
-        return;
-    }
-   
-    if(is_fastboot_enable()){
-		// timer start count
-        this->context->startDebouncing(this->context, PWR_KEY_DEBOUNCING_LEVEL_LONG);
-
-    }else{
-		// Numal mode, without starrt timer
-        this->context->startDebouncing(this->context,PWR_KEY_DEBOUNCING_LEVEL_SHORT);//todo :should be defined in boardxxx.c
-
-    }
-
-    this->context->transit(this->context, PWR_KEY_STATE_WAITTING_FOR_DEBUNCING_TIMEOUT);
-
-}
-static void not_handled_yet_state_onReleased(struct power_key_state *this)
-{
-    return;
-/*
-    if(this->context->isDebouncing(this->context)){
-
-        return;
-    }
-    
-    //this->context->stopDebouncing(this->context);
-
-    this->context->reportKey(this->context, false);
-*/    
-}
-static void not_handled_yet_state_onDebouncingTimeout(struct power_key_state *this)
-{
-    return;
-/*
-    if(is_power_key_pressed()){
-        
-        this->context->reportKey(this->context,true);
-
-    }
-    */
-}
-//the member functions of waiting_for_debuncing_timeout_state
-static void waiting_for_debuncing_timeout_state_onPressed(struct power_key_state *this)
-{
-    BUG_ON(this == NULL); 
-    
-    //just ignore it...
-}
-static void waiting_for_debuncing_timeout_state_onReleased(struct power_key_state *this)
-{
-    this->context->stopDebouncing(this->context);
-
-    this->context->transit(this->context, PWR_KEY_STATE_NOT_HANDLED_YET);
-    
-}
-static void waiting_for_debuncing_timeout_state_onDebouncingTimeout(struct power_key_state *this)
-{
-    this->context->reportKey(this->context,true);
-
-	//ready_to_wake_up_in_fastboot();
-	ready_to_wake_up_and_send_power_key_press_event_in_fastboot( false );
-
-    this->context->transit(this->context, PWR_KEY_STATE_WAITING_FOR_KEY_RELEASE);
-}
-//the member functions of waiting_for_key_release_state
-static void waiting_for_key_release_state_onPressed(struct power_key_state *this)
-{
-    BUG_ON(this == NULL); 
-    
-    //just ignore it...
-}
-static void waiting_for_key_release_state_onReleased(struct power_key_state *this)
-{
-    this->context->reportKey(this->context,false);
-
-    this->context->transit(this->context, PWR_KEY_STATE_NOT_HANDLED_YET);
-    
-}
-static void waiting_for_key_release_state_onDebouncingTimeout(struct power_key_state *this)
-{
-    BUG_ON(this == NULL); 
-    
-    //just ignore it...
-}
-struct power_key_handler {
-    bool isInited;
-    int debounce_interval_in_normal_mode;
-    int keyCode;
-    struct power_key_state *stateList;
-    enum PWR_KEY_STATE currentState;
-    struct timer_list timer; // for handle timeout...
-    struct mutex lock;
-    struct power_key_context context;
-    struct wake_lock release_wake_lock;
-    void (*init)(struct power_key_handler  *handler, int debounce_interval_in_normal_mode);    
-    void (*deInit)(struct power_key_handler  *handler);
-    void (*handle)(struct power_key_handler  *handler,int key_pressed);
-    void (*time_expired)(unsigned long _data);
-};
-//the member functions of power_key_handler
-static void power_key_handler_transit(struct power_key_context * context, enum PWR_KEY_STATE  newstate)
-{
-//    BUG_ON(NULL == context);
-
-    struct power_key_handler  *this=
-        container_of(context, struct power_key_handler, context);
-
-    pr_debug("power_key_handler transit...\n");
-
-    BUG_ON(this->currentState == newstate);
-
-    pr_debug("old state:%s\n",this->stateList[this->currentState].name);
-
-    this->currentState = newstate;
-
-//ASUS_BSP +++ Peter_lu "For fastboot mode with slowlog issue"
-	fastboot_state = newstate;
-	printk("[FastBoot] fastboot state : (%d)\n", fastboot_state);
-
-    pr_debug("new state:%s\n",this->stateList[this->currentState].name);
-
-}
-static void power_key_handler_startDebouncing(struct power_key_context * context, enum PWR_KEY_DEBOUNCING_LEVEL level)
-{
-   // BUG_ON(NULL == context);
-
-    struct power_key_handler  *this=
-        container_of(context, struct power_key_handler, context);
-
-    int expires;
-
-    //mutex_lock(&this->lock);
-    switch(level){
-
-        case PWR_KEY_DEBOUNCING_LEVEL_LONG:
-            expires =    TIME_FOR_POWERKEY_LONGPRESS;
-            break;
-        case PWR_KEY_DEBOUNCING_LEVEL_NO:
-        case PWR_KEY_DEBOUNCING_LEVEL_SHORT:
-        default:
-            expires = this->debounce_interval_in_normal_mode;
-            break;
-    }
-
-    pr_debug("power_key_handler startDebouncing %d msec\n",expires);
-    
-	// Start timer
-    if (!timer_pending(&this->timer))
-    	mod_timer(&this->timer, jiffies + msecs_to_jiffies(expires));
-
-    //mutex_unlock(&this->lock);
-}
-static void power_key_handler_stopDebouncing(struct power_key_context * context)
-{
-    //BUG_ON(NULL == context);
-
-    struct power_key_handler  *this=
-        container_of(context, struct power_key_handler, context);
-
-    //mutex_lock(&this->lock);
-    pr_debug("power_key_handler stopDebouncing\n");
-
-    if (timer_pending(&this->timer))
-    	del_timer(&this->timer);
-
-    //mutex_unlock(&this->lock);
-
-}
-
-static bool power_key_handler_isDebouncing(struct power_key_context * context)
-{
-    //BUG_ON(NULL == context);
-
-    struct power_key_handler  *this=
-        container_of(context, struct power_key_handler, context);
-
-    return (timer_pending(&this->timer));
-}
-//the power key and P01 power key will be translated to the same keycode for framework,....so just send power key event ....
-//public for all state to use.
-static void power_key_handler_reportKey(struct power_key_context * context, bool keyPressed)
-{
-    struct power_key_handler  *this=
-        container_of(context, struct power_key_handler, context);
-
-    printk("power keys state=%s,%d\n", keyPressed ? "press" : "release",this->currentState);
-       
-    input_event(g_input_dev, EV_KEY, KEY_POWER, (int)keyPressed);
-    input_sync(g_input_dev);
-}
-void send_fake_power_key_event(bool keyPressed)
-{
-    input_event(g_input_dev, EV_KEY, KEY_POWER, (int)keyPressed);
-    input_sync(g_input_dev);    
-}
-static void power_key_handler_time_expired(unsigned long _data)
-{
-    unsigned long flags;
-
-    struct power_key_handler *this = (struct power_key_handler *)_data;
-    
-    spin_lock_irqsave(&handler_lock, flags);
-
-    pr_debug("power_key_handler Debouncing timeout\n");  
-
-    this->stateList[this->currentState].onDebouncingTimeout(&this->stateList[this->currentState]);
-
-    spin_unlock_irqrestore(&handler_lock, flags);
-
-}
-static void power_key_handler_init(struct power_key_handler  *this, int debounce_interval_in_normal_mode)
-{
-    unsigned long flags;
-
-    BUG_ON(this == NULL);
-
-    BUG_ON(this->isInited == true);
-
-    spin_lock_irqsave(&handler_lock, flags);
- 
-    //[+++] This is a workaround to make sure PWR key sent
-//  wake_lock_init(&pwr_key_wake_lock, WAKE_LOCK_SUSPEND, "pwr_key_temp");
-//  printk(KERN_INFO "[PM]Initialize a wakelock of PWR key\r\n");
-    //[---] This is a workaround to make sure PWR key sent
-    
-    if(false == this->isInited){
-
-        enum PWR_KEY_STATE state_index;
-
-        this->currentState = PWR_KEY_STATE_NOT_HANDLED_YET;
-
-        for(state_index = PWR_KEY_STATE_NOT_HANDLED_YET; state_index < PWR_KEY_STATE_COUNT ; state_index++){
-
-                this->stateList[state_index].setContext(&this->stateList[state_index], &this->context);
-        }
-        
-        wake_lock_init(&this->release_wake_lock, WAKE_LOCK_SUSPEND, "power_key_press");
-        
-        //mutex_init(&this->timer_lock);
-
-		//Setting timer & time expired function
-        setup_timer(&this->timer, this->time_expired, (unsigned long)this);
-
-        this->debounce_interval_in_normal_mode = debounce_interval_in_normal_mode;
-
-        this->isInited = true;
-    }
-
-    spin_unlock_irqrestore(&handler_lock, flags);    
-}
-static void power_key_handler_deInit(struct power_key_handler  *this)
-{
-    BUG_ON(this == NULL);
-
-    BUG_ON(this->isInited == false);
-
-    if(true == this->isInited){
-
-        del_timer_sync(&this->timer);
-
-        this->isInited = false;
-
-    }
-
-}
-static void power_key_handler_handle(struct power_key_handler  *this,int key_pressed)
-{
-    unsigned long flags;
-
-    spin_lock_irqsave(&handler_lock, flags);
-
-    BUG_ON(this == NULL);
-
-    BUG_ON(this->isInited == false);
-
-    pr_debug("power_key_handler handle+++, now state:%d\n",this->currentState);
-
-    if(key_pressed){
-
-        this->stateList[this->currentState].onPressed(&this->stateList[this->currentState]);
-
-        if(!wake_lock_active(&this->release_wake_lock)){
-
-            wake_lock(&this->release_wake_lock);
-
-        }
-        
-        pr_debug(KERN_INFO "[PM]power key release wakelock, to prevent entering suspend\r\n");
-
-    }else{
-
-        this->stateList[this->currentState].onReleased(&this->stateList[this->currentState]);
-
-        if(wake_lock_active(&this->release_wake_lock)){
-
-            wake_unlock(&this->release_wake_lock);
-
-        }
-
-        pr_debug(KERN_INFO "[PM]power key wakelock release\r\n");
-
-    }
-
-    spin_unlock_irqrestore(&handler_lock, flags);
-   
-}
-static struct power_key_state a6x_power_key_state[PWR_KEY_STATE_COUNT] = {
-    {
-        .state           = PWR_KEY_STATE_NOT_HANDLED_YET,
-        .name           = "not_handled_yet_state",
-        .context         = NULL,
-        .onPressed           = not_handled_yet_state_onPressed,
-        .onReleased     = not_handled_yet_state_onReleased, 
-        .onDebouncingTimeout = not_handled_yet_state_onDebouncingTimeout,
-        .setContext = power_key_state_setContext,
-},
-{
-        .state           = PWR_KEY_STATE_WAITTING_FOR_DEBUNCING_TIMEOUT,
-        .name           = "waiting_for_debuncing_timeout_state",
-        .context         = NULL,
-        .onPressed           = waiting_for_debuncing_timeout_state_onPressed,
-        .onReleased     = waiting_for_debuncing_timeout_state_onReleased, 
-        .onDebouncingTimeout = waiting_for_debuncing_timeout_state_onDebouncingTimeout,
-        .setContext = power_key_state_setContext,
-},
- {
-        .state           = PWR_KEY_STATE_WAITING_FOR_KEY_RELEASE,
-        .name           = "waiting_for_key_release_state",
-        .context         = NULL,
-        .onPressed           = waiting_for_key_release_state_onPressed,
-        .onReleased     = waiting_for_key_release_state_onReleased, 
-        .onDebouncingTimeout = waiting_for_key_release_state_onDebouncingTimeout,
-        .setContext = power_key_state_setContext,
-},
-};
-
-static struct power_key_handler g_power_key_handler = {
-    .isInited = false,
-    .keyCode = KEY_POWER,
-    .stateList =a6x_power_key_state,
-    .currentState = PWR_KEY_STATE_NOT_HANDLED_YET,
-    .context = {
-        .transit = power_key_handler_transit,
-        .startDebouncing = power_key_handler_startDebouncing,
-        .stopDebouncing = power_key_handler_stopDebouncing,
-        .isDebouncing = power_key_handler_isDebouncing,
-        .reportKey =power_key_handler_reportKey,
-    },
-    .init = power_key_handler_init,
-    .deInit = power_key_handler_deInit,
-    .handle = power_key_handler_handle,
-    .time_expired = power_key_handler_time_expired,
-};
-bool isPowerKeyHandled(bool pressed)
-{
-    static bool is_power_key_handling_by_fastboot = false;
-
-    printk("[Fastboot] Fastboot_key_isr,state=%s\n",pressed ? "press" : "release");
-    
-    if(pressed){//press
-    
-        if(is_fastboot_enable()){
-    
-            g_power_key_handler.handle(&g_power_key_handler, pressed);
-    
-            is_power_key_handling_by_fastboot = true;
-
-
-            return true;
-            
-        }
-    
-    }else if(true == is_power_key_handling_by_fastboot){//release
-    
-            g_power_key_handler.handle(&g_power_key_handler, pressed);
-    
-            is_power_key_handling_by_fastboot = false;
-
-            return true;
-    }
-
-    return false;
-
-}
-#endif //#ifdef CONFIG_FASTBOOT
-//ASUS_BSP --- Peter_lu "For fastboot mode"   
 
 static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 {
@@ -1214,7 +616,7 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 	int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;//memo button->active_low==1;
 	BUG_ON(irq != bdata->irq);
 	g_keycheck_abort = 1;
-//ASUS BSP freddy--- fix TT 281235:Power key suspend/resume fail	
+//ASUS BSP freddy--- fix TT 281235:Power key suspend/resume fail
 	if (bdata->timer_debounce)
 		mod_timer(&bdata->timer,
 			jiffies + msecs_to_jiffies(bdata->timer_debounce));
@@ -1408,9 +810,9 @@ static ssize_t debug_key_proc_write(struct file *filp, const char *buff, size_t 
     	return -EFAULT;
     }
     initKernelEnv();
-	if(strncmp(messages, "1", 1) == 0)  // '1' is Debug Mode 
+	if(strncmp(messages, "1", 1) == 0)  // '1' is Debug Mode
     {
-    	for (i=0;i<3;i++) 
+    	for (i=0;i<3;i++)
 	    {
 	        if (ddata->data[i].button->gpio  == pwr_gpio)
 	            ddata->data[i].button->code = POWER_KEY_TEST;
@@ -1426,7 +828,7 @@ static ssize_t debug_key_proc_write(struct file *filp, const char *buff, size_t 
 	}
     else if(strncmp(messages, "0", 1) == 0) // '0' is Normal Mode
     {
-		for (i=0;i<3;i++) 
+		for (i=0;i<3;i++)
         {
         	if (ddata->data[i].button->gpio  == pwr_gpio)
             ddata->data[i].button->code = KEY_POWER;
@@ -1442,8 +844,8 @@ static ssize_t debug_key_proc_write(struct file *filp, const char *buff, size_t 
 	}
     else if(strncmp(messages, "2", 1) == 0) // '2' is BACK/MENU Mode
     {
- 
-		for (i=0;i<3;i++) 
+
+		for (i=0;i<3;i++)
         {
         	if (ddata->data[i].button->gpio  == pwr_gpio)
             ddata->data[i].button->code = KEY_POWER;
@@ -1478,13 +880,13 @@ static void create_debug_key_proc_file(void)
     }
     // init PAD keycode.
     ddata->pad_button_code.vol_up = PAD_KEY_VOLUP;
-    ddata->pad_button_code.vol_down = PAD_KEY_VOLDOWN; 
+    ddata->pad_button_code.vol_down = PAD_KEY_VOLDOWN;
     ddata->pad_button_code.power_key = PAD_KEY_POWER;
 }
 static void remove_debug_key_proc_file(void)
 {
 	extern struct proc_dir_entry proc_root;
-    printk("[Gpio_keys] remove_debug_key_proc_file.\n");  
+    printk("[Gpio_keys] remove_debug_key_proc_file.\n");
     remove_proc_entry(debug_GPIO_KEY_PROC_FILE, &proc_root);
 }
 #endif
@@ -1622,17 +1024,14 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 	struct input_dev *input;
 	int i, error;
 	int wakeup = 0;
-	int volume_down_key = vol_down_gpio;//ASUS_BSP + [thomas] Add more check about volume down key
-    //jack for debug slow
-    INIT_WORK(&__wait_for_two_keys_work, wait_for_two_keys_work);
-    INIT_WORK(&__wait_for_slowlog_work, wait_for_slowlog_work);
+	INIT_WORK(&__dump_log_work, dump_log_work);
+	INIT_WORK(&__wait_for_slowlog_work, wait_for_slowlog_work);
     INIT_WORK(&__wait_for_power_key_6s_work, wait_for_power_key_6s_work);//ASUS_BSP + [ASDF]long press power key 6sec,reset device..
 //ASUS BSP freddy +++ for init fake key wakelock.
         wake_lock_init(&pwr_key_wake_lock, WAKE_LOCK_SUSPEND, "pwr_key_lock");
-        printk(KERN_INFO "[Gpio_keys]Initialize a wakelock of PWR key\r\n");
-//ASUS BSP freddy --- for finit fake key wakelock.
+	 printk("[Progress][Gpio_keys] Probe starts\n");
 
-	volumedownkeystatus = gpio_get_value_cansleep(volume_down_key);//0>press 1>release//ASUS_BSP + [thomas] Add more check about volume down key
+//ASUS BSP freddy --- for finit fake key wakelock.
 
 	if (!pdata) {
 		error = gpio_keys_get_devtree_pdata(dev, &alt_pdata);
@@ -1685,14 +1084,6 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 
 		if (button->wakeup)
 			wakeup = 1;
-
-//ASUS_BSP +++ Peter_lu "For fastboot mode"
-#ifdef CONFIG_FASTBOOT                     
-             if(button->code == KEY_POWER){
-                 g_power_key_handler.init(&g_power_key_handler, button->debounce_interval);
-	}
-#endif //#ifdef CONFIG_FASTBOOT
-//ASUS_BSP --- Peter_lu "For fastboot mode"   
 	}
 //ASUS BSP freddy++
 	input_set_capability(input, EV_KEY, PAD_KEY_VOLUP);
@@ -1731,7 +1122,8 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
         input_set_capability(input, EV_KEY, POWER_KEY_TEST);
 #endif
 	//ASUS BSP freddy-- for P01_debug
-	kobj = &pdev->dev.kobj;//ASUS_BSP + [thomas]Send uevent to userspace
+
+	 printk("[Progress][Gpio_keys] Probe ends\n");
 	return 0;
 
  fail3:
@@ -1753,11 +1145,6 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 
 static int __devexit gpio_keys_remove(struct platform_device *pdev)
 {
-//ASUS_BSP +++ Peter_lu "For fastboot mode"
-#ifdef CONFIG_FASTBOOT
-	struct gpio_keys_platform_data *pdata = pdev->dev.platform_data;
-#endif //#ifdef CONFIG_FASTBOOT
-
 	struct gpio_keys_drvdata *ddata = platform_get_drvdata(pdev);
 	struct input_dev *input = ddata->input;
 	int i;
@@ -1768,14 +1155,6 @@ static int __devexit gpio_keys_remove(struct platform_device *pdev)
 
 	for (i = 0; i < ddata->n_buttons; i++)
 		gpio_remove_key(&ddata->data[i]);
-
-//ASUS_BSP +++ Peter_lu "For fastboot mode"
-#ifdef CONFIG_FASTBOOT
-	if( pdata->buttons[i].code == KEY_POWER)	{
-		g_power_key_handler.deInit(&g_power_key_handler);
-	}
-#endif //#ifdef CONFIG_FASTBOOT
-//ASUS_BSP --- Peter_lu "For fastboot mode"
 
 	input_unregister_device(input);
 //ASUS BSP freddy++ for P01_debug
@@ -1798,12 +1177,6 @@ static int __devexit gpio_keys_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM_SLEEP
-/*
-//ASUS BSP freddy++ add for audio scenario
-static int a8x_wake;
-static int phone_in_pad = 0;
-//ASUS BSP freddy-- add for audio scenario
-*/
 static int gpio_keys_suspend(struct device *dev)
 {
 	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
@@ -1819,15 +1192,7 @@ static int gpio_keys_suspend(struct device *dev)
 				enable_irq_wake(bdata->irq);
 		}
 	}
-/*
-	//ASUS BSP freddy++ add for audio scenario
-	if ((g_flag_csvoice_fe_connected || FMStatus) && !phone_in_pad){	
-       	enable_irq_wake(gpio_to_irq(vol_up_gpio));
-		enable_irq_wake(gpio_to_irq(vol_down_gpio));
-		a8x_wake = 1;
-	}
-	//ASUS BSP freddy-- add for audio scenario
-*/
+
 	return 0;
 }
 
@@ -1841,22 +1206,14 @@ static int gpio_keys_resume(struct device *dev)
 		if (bdata->button->wakeup && device_may_wakeup(dev))
 		{
 			disable_irq_wake(bdata->irq);
-		}	
+		}
 	}
-/*
-	//ASUS BSP freddy++ add for audio scenario		
-	if (a8x_wake){
-		disable_irq_wake(gpio_to_irq(vol_up_gpio));
-		disable_irq_wake(gpio_to_irq(vol_down_gpio));
-		a8x_wake = 0;
-	}
-	//ASUS BSP freddy-- add for audio scenario	
-*/
+
 	return 0;
 }
 #endif
 
-//ASUS BSP freddy++ 
+//ASUS BSP freddy++
 static int gpio_keys_suspend_noirq(struct device *dev)
 {
 //ASUS BSP freddy+++ fix TT 281235:Power key suspend/resume fail
@@ -1865,7 +1222,7 @@ static int gpio_keys_suspend_noirq(struct device *dev)
 		printk("[Gpio_keys] noirq_check: suspend_abort\n");
 		return -EBUSY;
 	}
-//ASUS BSP freddy--- fix TT 281235:Power key suspend/resume fail	
+//ASUS BSP freddy--- fix TT 281235:Power key suspend/resume fail
        g_bResume=0;
        printk("[Gpio_keys]%s:,Resume sts= %x,keylock sts= %x\r\n",__func__,g_bResume,g_bpwr_key_lock_sts);
 
@@ -1887,7 +1244,7 @@ static const struct dev_pm_ops gpio_keys_pm_ops = {
 //ASUS BSP freddy++
         .suspend_noirq  = gpio_keys_suspend_noirq,
         .resume_noirq   = gpio_keys_resume_noirq,
-//ASUS BSP freddy-- 
+//ASUS BSP freddy--
 };
 //static SIMPLE_DEV_PM_OPS(gpio_keys_pm_ops, gpio_keys_suspend, gpio_keys_resume);
 //ASUS BSP freddy-- Register device PM callbacks
@@ -1902,9 +1259,6 @@ static struct platform_driver gpio_keys_device_driver = {
 	}
 };
 
-//ASUS_BSP+++ BennyCheng "speed up resume time by active microp earlier"
-//extern void asus_dwc3_host_power_on_wq(void);
-//ASUS_BSP--- BennyCheng "speed up resume time by active microp earlier"
 //ASUS BSP freddy++ for pad key porting
 static void Pad_keys_report_event(int button_code, int press)
 {
@@ -1912,9 +1266,6 @@ static void Pad_keys_report_event(int button_code, int press)
 
 	if (press){     //press
                   if (button_code == PAD_KEY_POWER) {
-                                //ASUS_BSP+++ BennyCheng "speed up resume time by active microp earlier"
-                               // asus_dwc3_host_power_on_wq();
-                                //ASUS_BSP--- BennyCheng "speed up resume time by active microp earlier"
 
                                 printk("[Gpio_keys]%s- p05 pwr key:%x,Resume sts= %x,keylock sts= %x\r\n",__func__,press,g_bResume,g_bpwr_key_lock_sts);
                                 if (g_bResume) {
@@ -1929,14 +1280,14 @@ static void Pad_keys_report_event(int button_code, int press)
                                         printk(KERN_INFO "[Gpio_keys]Unlock 3 sec for PWR key on P05\r\n");
                                 }
                    }
-                        
+
        }
 
 
 
 
     printk("[Gpio_keys]PAD key keycode=%d  state=%s\n",
-				button_code, press ? "press" : "release");	
+				button_code, press ? "press" : "release");
     input_event(g_input_dev, EV_KEY, button_code, press);
     input_sync(g_input_dev);
 }
@@ -1944,7 +1295,7 @@ static void Pad_keys_report_event(int button_code, int press)
 static int mp_PadKeyevent_report(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	struct gpio_keys_drvdata *ddata = input_get_drvdata(g_input_dev);
-	switch (event) 
+	switch (event)
 	{
 		case P01_ADD:
 		{
@@ -1956,14 +1307,14 @@ static int mp_PadKeyevent_report(struct notifier_block *this, unsigned long even
 			printk("[Gpio_keys] PAD REMOVE.\r\n");
 			if (pad_volUp_still_press){
 				printk("[Gpio_keys] fake VOLUP_release for padmode.\n ");
-				Pad_keys_report_event(PAD_KEY_VOLUP, 0);				
+				Pad_keys_report_event(PAD_KEY_VOLUP, 0);
 				pad_volUp_still_press = 0;
-			}	
+			}
 			if (pad_volDown_still_press){
 				printk("[Gpio_keys] fake VOLDOWN_release for padmode.\n ");
-				Pad_keys_report_event(PAD_KEY_VOLDOWN, 0);				
+				Pad_keys_report_event(PAD_KEY_VOLDOWN, 0);
 				pad_volDown_still_press = 0;
-			}	
+			}
 			return NOTIFY_DONE;
 		}
         case P01_VOLUP_KEY_PRESSED:
@@ -1973,7 +1324,7 @@ static int mp_PadKeyevent_report(struct notifier_block *this, unsigned long even
 	                Pad_keys_report_event(ddata->pad_button_code.vol_up, 1);
 		#else
 	                Pad_keys_report_event(PAD_KEY_VOLUP, 1);
-			   
+
 		#endif
 				pad_volUp_still_press = 1;  //ASUS BSP freddy++ for check pad key still press when PAD Remove
             return NOTIFY_DONE;
@@ -1985,7 +1336,7 @@ static int mp_PadKeyevent_report(struct notifier_block *this, unsigned long even
 	                Pad_keys_report_event(ddata->pad_button_code.vol_up, 0);
 		#else
 	                Pad_keys_report_event(PAD_KEY_VOLUP, 0);
-			   
+
 		#endif
 				pad_volUp_still_press = 0;	//ASUS BSP freddy++ for check pad key still press when PAD Remove
             return NOTIFY_DONE;
@@ -1997,7 +1348,7 @@ static int mp_PadKeyevent_report(struct notifier_block *this, unsigned long even
 	                Pad_keys_report_event(ddata->pad_button_code.vol_down, 1);
 		#else
 	                Pad_keys_report_event(PAD_KEY_VOLDOWN, 1);
-			    
+
 		#endif
 				pad_volDown_still_press = 1;	//ASUS BSP freddy++ for check pad key still press when PAD Remove
             return NOTIFY_DONE;
@@ -2009,36 +1360,24 @@ static int mp_PadKeyevent_report(struct notifier_block *this, unsigned long even
 	                Pad_keys_report_event(ddata->pad_button_code.vol_down, 0);
 		#else
 	                Pad_keys_report_event(PAD_KEY_VOLDOWN, 0);
-			   
+
 		#endif
-				pad_volDown_still_press = 0;	//ASUS BSP freddy++ for check pad key still press when PAD Remove	
+				pad_volDown_still_press = 0;	//ASUS BSP freddy++ for check pad key still press when PAD Remove
         		return NOTIFY_DONE;
 		}
         case P01_PWR_KEY_PRESSED:
 		{
 			printk("[Gpio_keys] PAD POWERKEY PRESS.\r\n");
-//ASUS_BSP +++ Peter_lu "suspend for fastboot mode"
-#ifdef CONFIG_FASTBOOT
-			if(isPowerKeyHandled(true))
-				return NOTIFY_DONE;
-#endif //#ifdef CONFIG_FASTBOOT
-//ASUS_BSP ---
 		#ifdef  CONFIG_PROC_FS
 	                Pad_keys_report_event(ddata->pad_button_code.power_key, 1);
 		#else
 	                Pad_keys_report_event(PAD_KEY_POWER, 1);
-		#endif	
+		#endif
 			return NOTIFY_DONE;
 		}
         case P01_PWR_KEY_RELEASED:
 		{
 			printk("[Gpio_keys] PAD POWERKEY RELEASE.\r\n");
-//ASUS_BSP +++ Peter_lu "suspend for fastboot mode"
-#ifdef CONFIG_FASTBOOT
-			if(isPowerKeyHandled(false))
-				return NOTIFY_DONE;
-#endif //#ifdef CONFIG_FASTBOOT
-//ASUS_BSP ---
 		#ifdef  CONFIG_PROC_FS
 	                Pad_keys_report_event(ddata->pad_button_code.power_key, 0);
 		#else

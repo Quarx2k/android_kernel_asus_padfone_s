@@ -191,7 +191,7 @@
 			linux,input-type = <1>;
 			linux,code = <115>;
 			gpio-key,wakeup;
-			debounce-interval = <15>;
+			debounce-interval = <1>;
 		};
 
 		vol_down {
@@ -202,7 +202,7 @@
 			linux,input-type = <1>;
 			linux,code = <114>;
 			gpio-key,wakeup;
-			debounce-interval = <15>;
+			debounce-interval = <1>;
 		};
 
 	        pwr_key {
@@ -213,7 +213,7 @@
 	            linux,input-type = <1>;
 	            linux,code = <116>;
 	            gpio-key,wakeup;
-	            debounce-interval = <15>;
+	            debounce-interval = <1>;
 	        };
 	};
 

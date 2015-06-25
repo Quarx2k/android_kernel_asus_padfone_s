@@ -201,10 +201,6 @@ struct himax_ts_data
 	struct mutex mutex_lock;
 	// Mutexlock Protect End
 
-	// Mutexlock Protect Start
-	struct mutex mutex_process_lock;
-	// Mutexlock Protect End
-
 //----[HX_TP_SYS_FLASH_DUMP]--------------------------------------------------------------------------start
 #ifdef HX_TP_SYS_FLASH_DUMP
 	struct workqueue_struct *flash_wq;
@@ -236,6 +232,11 @@ static int himax_hang_shaking(void); 					// Hand shaking function
 static int himax_ts_poweron(struct himax_ts_data *ts_modify);		// Power on
 static int himax_touch_sysfs_init(void);			// Sys filesystem initial
 static void himax_touch_sysfs_deinit(void);			// Sys filesystem de-initial
+
+/*
+static int fb_notifier_callback(struct notifier_block *, unsigned long, void *);
+*/
+static void ts_resume_work(struct work_struct *work);
 
 #if defined(CONFIG_EEPROM_NUVOTON)
 static struct notifier_block touch_mp_notifier;

@@ -49,7 +49,6 @@
 #include <linux/buffer_head.h>
 #include <linux/kthread.h>
 
-#include <linux/switch.h>
 
 #include <linux/notifier.h>
 #include <linux/fb.h>
@@ -102,6 +101,12 @@ static u16 CFG_VER_MIN_buff[12];
 static bool ts_suspend = false;
 static bool ts_inpad = false;
 
+/* +++jacob add for resume touch when dds finish after detach pad+++ */
+volatile bool ts_resume_trigger = false;
+static int dds_touch_resume_mode = 0;
+static bool dds_notify_enable = false;
+/* ---jacob add for resume touch when dds finish after detach pad--- */
+
 static int hx_point_num = 0;					// for himax_ts_work_func use
 static int p_point_num = 0xFFFF;
 static int tpd_key = 0;
@@ -120,6 +125,7 @@ static int TOTAL_COUNT = 100;
 static bool common_fw = false;
 #endif
 
+static struct delayed_work hx_resume_w;
 #ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
 extern int dt2w_switch;
 #endif
@@ -221,12 +227,19 @@ static void setSysOperation(uint8_t operation);
 static void setFlashDumpSector(uint8_t sector);
 static void setFlashDumpPage(uint8_t page);
 static void setFlashDumpGoing(bool going);
+static int himax_dds_touch_resume(const char *val, struct kernel_param *kp);
 #endif
 //----[HX_TP_SYS_FLASH_DUMP]------------------------------------------------------------------------------end
 
 int touch_debug_mask = DEF_POINT_INFO;
 module_param_named(debug_mask, touch_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
+
+/* +++jacob add for resume touch when dds finish after detach pad+++ */
+module_param_call(dds_touch_resume_mode, himax_dds_touch_resume, param_get_int,
+			&dds_touch_resume_mode, 0644);
+/* ---jacob add for resume touch when dds finish after detach pad--- */
+
 
 //=============================================================================================================
 //
@@ -280,7 +293,7 @@ static int himax_ic_package_check(struct himax_ts_data *ts_modify)
 		CFG_VER_MIN_FLASH_ADDR = 172;	//0x00AC
 		CFG_VER_MIN_FLASH_LENG = 12;
 
-		printk("[Touch_H]Himax IC package 8528 D\n");
+	/*	printk("[Touch_H]Himax IC package 8528 D\n");*/
 
 		return 0;
 	}
@@ -300,22 +313,10 @@ int himax_ts_suspend(void)
 
 	ts_modify = private_ts;
 
-	printk("[Touch_H] %s himax_ts_suspend start \n",__func__);
-	//Wakelock Protect Start
-	wake_lock(&ts_modify->wake_lock);
-	//Wakelock Protect End
-
-	//Mutexlock Protect Start
-	mutex_lock(&ts_modify->mutex_process_lock);
-	//Mutexlock Protect End
-
 	if(ts_suspend)
 	{
 		if(touch_debug_mask & SUS_INFO)
 			printk("[Touch_H] %s reject the suspend action\n",__func__);
-		//Mutexlock Protect Start
-		mutex_unlock(&ts_modify->mutex_process_lock);
-		//Mutexlock Protect End
 		return 0;
 	}
 
@@ -323,19 +324,25 @@ int himax_ts_suspend(void)
 	if(getFlashDumpGoing())
 	{
 		printk("[Touch_H] %s: Flash dump is going, reject suspend\n",__func__);
-		//Mutexlock Protect Start
-		mutex_unlock(&ts_modify->mutex_process_lock);
-		//Mutexlock Protect End
 		return 0;
 	}
 #endif
 
 	printk("[Touch_H] %s: TS suspend\n", __func__);
 
+	//Wakelock Protect Start
+	wake_lock(&ts_modify->wake_lock);
+	//Wakelock Protect End
+
 	//Mutexlock Protect Start
 	mutex_lock(&ts_modify->mutex_lock);
 	//Mutexlock Protect End
-	
+
+	input_report_key(private_ts->input_dev, BTN_TOUCH, 0);
+	input_mt_sync(private_ts->input_dev);
+	input_sync(private_ts->input_dev);
+
+
 	buf[0] = HX_CMD_TSSOFF;
 	if(i2c_himax_master_write(ts_modify->client, buf, 1, DEFAULT_RETRY_CNT) < 0)
 	{
@@ -361,12 +368,6 @@ int himax_ts_suspend(void)
 	}
 	msleep(120);
 
-	// leave event
-	input_report_key(private_ts->input_dev, BTN_TOUCH, 0);  // touch up
-	input_mt_sync(private_ts->input_dev);
-	input_sync(private_ts->input_dev);
-
-
 	//Mutexlock Protect Start
 	mutex_unlock(&ts_modify->mutex_lock);
 	//Mutexlock Protect End
@@ -386,7 +387,6 @@ int himax_ts_suspend(void)
 
 	ts_suspend = 1;
 	
-	printk("[Touch_H] %s himax_ts_suspend end \n",__func__);
 #ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
 	if (dt2w_switch > 0) {
 		wake_lock(&ts_modify->wake_lock);
@@ -407,17 +407,37 @@ int himax_ts_suspend(void)
 		enable_irq_wake(ts_modify->client->irq);
 	}
 #endif
-	//Mutexlock Protect Start
-	mutex_unlock(&ts_modify->mutex_process_lock);
-	//Mutexlock Protect End
+
 	return 0;
 }
 EXPORT_SYMBOL(himax_ts_suspend);
+
+int himax_ts_resume(void)
+{
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+	if (dt2w_switch > 0) {
+		printk("[Touch_H] %s Prevent suspend while dt2w enabled \n",__func__);
+		ts_suspend = false;
+		disable_irq_wake(private_ts->client->irq);
+		return 0;
+	} else
+#endif
+	{
+	if(delayed_work_pending(&hx_resume_w)) {
+		cancel_delayed_work_sync(&hx_resume_w);
+		printk("[Touch_H] cancel last resume_work\n");
+	}
+	queue_delayed_work(hx_attach_detach_wq, &hx_resume_w, msecs_to_jiffies(2));
+	}
+	return 0;
+}
+EXPORT_SYMBOL(himax_ts_resume);
 
 static int himax_resume(void)
 {
 	struct himax_ts_data *ts_modify;
 	uint8_t buf[2] = { 0 };
+
 	ts_modify = private_ts;
 #ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
 	if (dt2w_switch > 0) {
@@ -426,22 +446,12 @@ static int himax_resume(void)
 		return 0;
 	}
 #endif
-	printk("[Touch_H] %s himax_resume start \n",__func__);
-	//Wakelock Protect Start
-	wake_lock(&ts_modify->wake_lock);
-	//Wakelock Protect End
 
-	//Mutexlock Protect Start
-	mutex_lock(&ts_modify->mutex_process_lock);
-	//Mutexlock Protect End
 
 	if(!ts_suspend)
 	{
 		if(touch_debug_mask & SUS_INFO)
 			printk("[Touch_H] %s TP never enter suspend , reject the resume action\n",__func__);
-		//Mutexlock Protect Start
-		mutex_unlock(&ts_modify->mutex_process_lock);
-		//Mutexlock Protect End
 		return 0;
 	}
 
@@ -449,13 +459,14 @@ static int himax_resume(void)
 	{
 		if(touch_debug_mask & SUS_INFO)
 			printk("[Touch_H] %s in pad now , reject the resume action\n",__func__);
-		//Mutexlock Protect Start
-		mutex_unlock(&ts_modify->mutex_process_lock);
-		//Mutexlock Protect End
 		return 0;
 	}
 
 	printk("[Touch_H] %s: TS resume\n", __func__);
+
+	//Wakelock Protect Start
+	wake_lock(&ts_modify->wake_lock);
+	//Wakelock Protect End
 
 	buf[0] = HX_CMD_SETDEEPSTB;
 	buf[1] = 0x00;
@@ -476,30 +487,8 @@ static int himax_resume(void)
 
 	ts_suspend = 0;
 
-	//Mutexlock Protect Start
-	mutex_unlock(&ts_modify->mutex_process_lock);
-	//Mutexlock Protect End
-	printk("[Touch_H] %s himax_resume end \n",__func__);
 	return 0;
 }
-
-int himax_ts_resume(void)
-{
-#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
-	if (dt2w_switch > 0) {
-		printk("[Touch_H] %s Prevent suspend while dt2w enabled \n",__func__);
-		ts_suspend = false;
-		disable_irq_wake(private_ts->client->irq);
-		return 0;
-	} else
-#endif
-	{
-		himax_resume();
-	}
-	return 0;
-}
-EXPORT_SYMBOL(himax_ts_resume);
-
 //----[ normal function]----------------------------------------------------------------------------------end
 
 //----[ i2c read/write function]------------------------------------------------------------------------start
@@ -1190,7 +1179,7 @@ int himax_hang_shaking(void)    //0:Running, 1:Stop, 2:I2C Fail
 		printk("[Touch_H]:write 0x92 failed line: %d \n", __LINE__);
 		goto hang_shaking_i2c_msg_fail;
 	}
-	msleep(15); //Must more than 1 frame
+	msleep(50); /* Must more than 1 frame */
 	
 	buf0[0] = 0x92;
 	buf0[1] = 0x00;
@@ -1284,7 +1273,7 @@ static void himax_chip_reset_function(struct work_struct *dat)
 }
 #endif
  //----[ENABLE_CHIP_RESET_MACHINE]-----------------------------------------------------------------------end
-
+/*
 static int himax_read_flash(unsigned char *buf, unsigned int addr_start, unsigned int length) //OK
 {
 	u16 i = 0;
@@ -1367,6 +1356,7 @@ static int himax_read_flash(unsigned char *buf, unsigned int addr_start, unsigne
 
 	return 1;
 }
+*/
  //----[firmware version read]---------------------------------------------------------------------------start
 static u8 himax_read_FW_ver(void)
 {
@@ -1436,6 +1426,9 @@ static u8 himax_read_FW_ver(void)
 #ifdef HX_RST_PIN_FUNC
 	himax_HW_reset();
 #endif
+
+	mutex_lock(&private_ts->mutex_lock);
+
 	//Sleep out
 	if (i2c_himax_write(private_ts->client, 0x81, &cmd[0], 0, DEFAULT_RETRY_CNT) < 0)
 	{
@@ -1635,8 +1628,12 @@ static u8 himax_read_FW_ver(void)
 	printk("[Touch_H]FW_VER_MAJ_buff : %d \n", FW_VER_MAJ_buff[0]);
 	printk("[Touch_H]FW_VER_MIN_buff : %d \n", FW_VER_MIN_buff[0]);
 	
-	printk("[Touch_H]CFG_VER_MAJ_buff : ");
-
+	printk("[Touch_H]CFG_VER_MAJ_buff : %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
+		CFG_VER_MAJ_buff[0], CFG_VER_MAJ_buff[1], CFG_VER_MAJ_buff[2], CFG_VER_MAJ_buff[3],
+		CFG_VER_MAJ_buff[4], CFG_VER_MAJ_buff[5], CFG_VER_MAJ_buff[6], CFG_VER_MAJ_buff[7],
+		CFG_VER_MAJ_buff[8], CFG_VER_MAJ_buff[9], CFG_VER_MAJ_buff[10], CFG_VER_MAJ_buff[11]
+		);
+/*
 	for (i = 0; i < 12; i++)
 	{
 		printk(" %d", CFG_VER_MAJ_buff[i]);
@@ -1645,9 +1642,13 @@ static u8 himax_read_FW_ver(void)
 		else
 			printk(",");
 	}
-
-	printk("[Touch_H]CFG_VER_MIN_buff : ");
-
+*/
+	printk("[Touch_H]CFG_VER_MIN_buff : %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
+		CFG_VER_MIN_buff[0], CFG_VER_MIN_buff[1], CFG_VER_MIN_buff[2], CFG_VER_MIN_buff[3],
+		CFG_VER_MIN_buff[4], CFG_VER_MIN_buff[5], CFG_VER_MIN_buff[6], CFG_VER_MIN_buff[7],
+		CFG_VER_MIN_buff[8], CFG_VER_MIN_buff[9], CFG_VER_MIN_buff[10], CFG_VER_MIN_buff[11]
+		);
+/*
 	for (i = 0; i < 12; i++)
 	{
 		printk(" %d", CFG_VER_MIN_buff[i]);
@@ -1657,6 +1658,9 @@ static u8 himax_read_FW_ver(void)
 		else
 			printk(",");
 	}
+*/
+
+	mutex_unlock(&private_ts->mutex_lock);
 
 #ifdef ENABLE_CHIP_RESET_MACHINE
 	if (private_ts->init_success)
@@ -1672,9 +1676,10 @@ static u8 himax_read_FW_ver(void)
 
 static void himax_touch_information(void)
 {
-	static unsigned char temp_buffer[6];
+//	static unsigned char temp_buffer[6];
 	if (IC_TYPE == HX_85XX_D_SERIES_PWON)
 	{
+/*
 		himax_read_flash(temp_buffer, 0x26E, 3);
 		HX_RX_NUM = temp_buffer[0];
 		HX_TX_NUM = temp_buffer[1];
@@ -1688,10 +1693,17 @@ static void himax_touch_information(void)
 		himax_read_flash(temp_buffer, 0x272, 6);
 // 		HX_X_RES = temp_buffer[2] * 256 + temp_buffer[3];
 // 		HX_Y_RES = temp_buffer[4] * 256 + temp_buffer[5];
+*/
+
+                HX_RX_NUM = 13;
+                HX_TX_NUM = 24;
+                HX_MAX_PT = 10;
+
 		HX_X_RES = 1080;
 		HX_Y_RES = 1920;
 
-
+		HX_INT_IS_EDGE = false;
+/*
 		himax_read_flash(temp_buffer, 0x200, 6);
 		if ((temp_buffer[1] & 0x01) == 1)
 		{
@@ -1701,6 +1713,7 @@ static void himax_touch_information(void)
 		{
 			HX_INT_IS_EDGE = false;
 		}
+*/
 	}
 	else
 	{
@@ -2415,6 +2428,14 @@ static ssize_t himax_debug_level_dump(struct device *dev, struct device_attribut
 	if (buf[0] == 'r') //resume
 	{
 		himax_ts_resume();
+		return count;
+	}
+
+	if (buf[0] == 'f') {
+		HX_RX_NUM = (buf[2] - '0')*10 + buf[3] - '0';
+		HX_TX_NUM = (buf[5] - '0')*10 + buf[6] - '0';
+		setXChannel(HX_RX_NUM);
+		setYChannel(HX_TX_NUM);
 		return count;
 	}
 	
@@ -4285,6 +4306,23 @@ static void himax_touch_sysfs_deinit(void)
  //kobject_del(android_touch_kobj);
 }
 
+
+static struct work_struct checkFWdis_w;
+static void checkFWdisable(struct work_struct *work)
+{
+	himax_read_FW_ver();
+#ifdef ASUS_FACTORY_BUILD
+	if(g_ASUS_hwID >= A91_SR1){
+		if((FW_VER_MAJ_buff[0] == 3) && (FW_VER_MIN_buff[0] < 10)){
+		printk("[Touch_H] It's common Firmware, need update.\n");
+		common_fw = true;
+		private_ts->irq_is_disable = 1;
+		disable_irq(private_ts->client->irq);
+		}
+	}
+#endif
+}
+
 //=============================================================================================================
 //
 //	Segment : Himax Touch Work Function
@@ -4397,10 +4435,12 @@ static void himax_ts_work_func(struct work_struct *work)
 	{
 		printk("[Touch_H][HIMAX TP MSG] checksum fail : check_sum_cal: 0x%02X\n",
 			check_sum_cal);
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
 		if (dt2w_switch > 0) {
 			printk("[Touch_H][HIMAX TP MSG] Ignore checksum in dt2w\n");
 			goto bypass_checksum_failed_packet;
 		}
+#endif
 		//Mutexlock Protect Start
 		mutex_unlock(&ts->mutex_lock);
 		//Mutexlock Protect End
@@ -4593,6 +4633,7 @@ bypass_checksum_failed_packet:
 						finger_count[c][1] = true;
 					}
 
+
 //----[HX_TP_SYS_DIAG]--------------------------------------------------------------------------------start
 #ifdef HX_TP_SYS_DIAG
 					//coordinate dump start
@@ -4737,6 +4778,43 @@ work_func_send_i2c_msg_fail:
 	return;
 }
 
+/* +++jacob add for resume touch when dds finish after detach pad+++ */
+static int himax_dds_touch_resume(const char *val, struct kernel_param *kp) {
+
+	int ret;
+	if (ts_resume_trigger == true){
+		if(touch_debug_mask & ALL_POINT_INFO)
+			printk("[Touch_H] %s resume had been trigger , reject the resume action\n",__func__);
+		return 0;
+	}
+	ts_resume_trigger = true;
+	ret = param_set_int(val, kp);
+	if(touch_debug_mask & ALL_POINT_INFO)
+	printk("[Touch_H] %s dds_touch_resume_mode == %d !! \n", __func__, dds_touch_resume_mode);
+	if (ret) {
+		printk("[Touch_H] %s param_set_int error !! \n", __func__);
+		}
+	if (dds_touch_resume_mode == 1 ) {
+
+		if (dds_notify_enable == true) {
+			printk("[Touch_H] (%s) resume notyfy by dds++\n", __func__);
+#if defined(CONFIG_EEPROM_NUVOTON)
+			cancel_delayed_work_sync(&mp_detach_w);
+#endif
+			ts_inpad = false;
+			if(touch_debug_mask & ALL_POINT_INFO)
+				printk("[Touch_H] Pad detach resume!!!\n");
+			himax_ts_resume();
+			// 	himax_usb_detection(0);
+			dds_notify_enable = false;
+			printk("[Touch_H] (%s) resume notyfy by dds--\n", __func__);
+			}
+	}
+	ts_resume_trigger = false;
+	return 0;
+}
+/* ---jacob add for resume touch when dds finish after detach pad--- */
+
 //=============================================================================================================
 //
 //	Segment : Himax Linux Driver Probe Function
@@ -4778,10 +4856,11 @@ static int himax_ts_register_interrupt(struct i2c_client *client)
 
 		printk("[Touch_H][TOUCH_ERR] %s: request_irq %d failed\n", __func__, client->irq);
 	}
-	else
+/*	else
 	{
 		printk("[Touch_H]%s request_irq ok \n", __func__);
 	}
+*/
 	return err;
 }
 //----[ interrupt ]-----------------------------------------------------------------------------------------end
@@ -4966,6 +5045,7 @@ static int himax_ts_probe(struct i2c_client *client, const struct i2c_device_id 
 	calculate_point_number();
 /*
 	ts->fb_notif.notifier_call = fb_notifier_callback; 
+
 	if(fb_register_client(&ts->fb_notif))
 		dev_err(&client->dev, "[Touch_H][TOUCH_ERR] Unable to register fb_notifier\n");
 */
@@ -4997,10 +5077,6 @@ static int himax_ts_probe(struct i2c_client *client, const struct i2c_device_id 
 	mutex_init(&ts->mutex_lock);
  	//Mutexlock Protect End
 
- 	//Mutexlock Protect Start
-	mutex_init(&ts->mutex_process_lock);
- 	//Mutexlock Protect End
-
 	//Wakelock Protect Start
 	wake_lock_init(&ts->wake_lock, WAKE_LOCK_SUSPEND, "himax_touch_wake_lock");
 	//Wakelock Protect End
@@ -5017,7 +5093,7 @@ static int himax_ts_probe(struct i2c_client *client, const struct i2c_device_id 
 	}
 
 	ts->input_dev->name = INPUT_DEV_NAME;
-	printk("[Touch_H] Max X=%d, Max Y=%d\n", HX_X_RES, HX_Y_RES);
+/*	printk("[Touch_H] Max X=%d, Max Y=%d\n", HX_X_RES, HX_Y_RES);*/
 
 //----[HX_EN_XXX_BUTTON]----------------------------------------------------------------------------------start	
 #if defined(HX_EN_SEL_BUTTON) || defined(HX_EN_MUT_BUTTON)    
@@ -5062,9 +5138,9 @@ static int himax_ts_probe(struct i2c_client *client, const struct i2c_device_id 
 	}
 
 	gpio_set_value(ts->rst_gpio, 0);
-	msleep(100);
+	msleep(30);
 	gpio_set_value(ts->rst_gpio, 1);
-	msleep(100);
+	msleep(30);
 #endif
 //----[HX_RST_PIN_FUNC]---------------------------------------------------------------------------------end
 
@@ -5097,12 +5173,13 @@ static int himax_ts_probe(struct i2c_client *client, const struct i2c_device_id 
 	if(switch_dev_register(&hx_sdev) < 0)
 	{
 		goto err_sdev_register_fail;
-	} 
+	}
 
 #if defined(CONFIG_EEPROM_NUVOTON)
 	INIT_WORK(&mp_attach_w, attach_padstation_work);
 	INIT_DELAYED_WORK(&mp_detach_w, detach_padstation_work);
 #endif
+	INIT_DELAYED_WORK(&hx_resume_w, ts_resume_work);
 
 	hx_attach_detach_wq = create_singlethread_workqueue("hx_attach_detach_wq");
 	if (!hx_attach_detach_wq) {
@@ -5118,16 +5195,11 @@ static int himax_ts_probe(struct i2c_client *client, const struct i2c_device_id 
 	ts->init_success = 1;
 
 #ifdef ASUS_FACTORY_BUILD
-	if(g_ASUS_hwID >= A91_SR1){
-		himax_read_FW_ver();
-		if((FW_VER_MAJ_buff[0] == 3) && (FW_VER_MIN_buff[0] < 10)){
-			printk("[Touch_H] It's common Firmware, need update.\n");
-			common_fw = true;
-			ts->irq_is_disable = 1;
-			disable_irq(ts->client->irq);
-		}
-	}
+	hx_irq_disable(ts);
 #endif
+
+	INIT_WORK(&checkFWdis_w, checkFWdisable);
+	queue_work(ts->himax_wq, &checkFWdis_w);
 
 	printk("[Touch_H] himax_ts_probe ---\n");
 
@@ -5146,10 +5218,6 @@ err_input_dev_alloc_failed:
 
 	//Mutexlock Protect Start
 	mutex_destroy(&ts->mutex_lock);
-	//Mutexlock Protect End
-
-	//Mutexlock Protect Start
-	mutex_destroy(&ts->mutex_process_lock);
 	//Mutexlock Protect End
 
 	//Wakelock Protect Start
@@ -5225,10 +5293,6 @@ static int himax_ts_remove(struct i2c_client *client)
 
 	//Mutexlock Protect Start
 	mutex_destroy(&ts->mutex_lock);
-	//Mutexlock Protect End
-
-	//Mutexlock Protect Start
-	mutex_destroy(&ts->mutex_process_lock);
 	//Mutexlock Protect End
 
 	if (ts->himax_wq)
@@ -5348,6 +5412,10 @@ static void himax_cable_status(struct work_struct *work)
 	}
 }
 
+static void ts_resume_work(struct work_struct *work)
+{
+	himax_resume();
+}
 
 /*
 static int fb_notifier_callback(struct notifier_block *self,unsigned long event, void *data)
@@ -5355,6 +5423,7 @@ static int fb_notifier_callback(struct notifier_block *self,unsigned long event,
 	struct fb_event *evdata = data;
 	int *blank;
 	struct himax_ts_data *himax_dev_data = container_of(self, struct himax_ts_data, fb_notif);
+
 	if (evdata && evdata->data && event == FB_EVENT_BLANK && himax_dev_data && himax_dev_data->client)
 	{
 		blank = evdata->data;
@@ -5367,6 +5436,7 @@ static int fb_notifier_callback(struct notifier_block *self,unsigned long event,
 				printk("[Touch_H] cancel last resume_work\n");
 			}
 			queue_delayed_work(hx_attach_detach_wq, &hx_resume_w, msecs_to_jiffies(2));
+
 		}
 		else if (*blank == FB_BLANK_POWERDOWN)
 		{
@@ -5376,6 +5446,7 @@ static int fb_notifier_callback(struct notifier_block *self,unsigned long event,
 			}
 		}
 	}
+
 	return 0;
 }
 */
@@ -5395,17 +5466,24 @@ static void attach_padstation_work(struct work_struct *work)
 
 static void detach_padstation_work(struct work_struct *work)
 {
+	/* +++jacob add for resume touch when dds finish after detach pad+++ */
+	if (ts_resume_trigger == true){
+		if(touch_debug_mask & SUS_INFO)
+			printk("[Touch_H] %s resume had been trigger , reject the resume action\n",__func__);
+		return;
+	}
+	ts_resume_trigger = true;
+	/* ---jacob add for resume touch when dds finish after detach pad--- */
 	printk("[Touch_H] detach_padstation_work()++\n");
-
 	ts_inpad = false;
 
 	if(touch_debug_mask & SUS_INFO)
 		printk("[Touch_H] Pad detach resume!!!\n");
 
 	himax_ts_resume();
-
+	dds_notify_enable = false;	/* jacob add for resume touch when dds finish after detach pad */
 // 	himax_usb_detection(0);
-
+	ts_resume_trigger = false;	/* jacob add for resume touch when dds finish after detach pad */
 	printk("[Touch_H] detach_padstation_work()--\n");
 }
 
@@ -5419,6 +5497,7 @@ static int touch_mp_event(struct notifier_block *this, unsigned long event, void
 		case P01_ADD:{
 			hx_irq_disable(private_ts);
 			ts_inpad = true;
+			dds_notify_enable = false;	/* jacob add for resume touch when dds finish after detach pad */
 			if(delayed_work_pending(&mp_detach_w)) {
 				cancel_delayed_work_sync(&mp_detach_w);
 				printk("[Touch_H] cancel last detach_work\n");
@@ -5427,6 +5506,10 @@ static int touch_mp_event(struct notifier_block *this, unsigned long event, void
 			return NOTIFY_DONE;
 		}
 		case P01_REMOVE:{
+	/* +++jacob add for resume touch when dds finish after detach pad+++ */
+			printk("[Touch_H] dds_notify_enable\n");
+			dds_notify_enable = true;
+	/* ---jacob add for resume touch when dds finish after detach pad--- */
 			if(delayed_work_pending(&mp_detach_w)) {
 				cancel_delayed_work_sync(&mp_detach_w);
 				printk("[Touch_H] cancel last detach_work\n");
@@ -5445,3 +5528,4 @@ static struct notifier_block touch_mp_notifier = {
         .priority = TOUCH_MP_NOTIFY,
 };
 #endif
+
