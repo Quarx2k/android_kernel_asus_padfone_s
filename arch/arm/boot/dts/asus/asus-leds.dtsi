@@ -120,4 +120,7 @@
 		};
 // ASUS_BSP Deeo : add for new kobject ---
 	};
+	qcom,leds@e200 {
+		status = "disable"; //ASUS_BSP Deeo : disable kpbl
+	};
 };
