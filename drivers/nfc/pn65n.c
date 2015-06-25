@@ -226,7 +226,6 @@ static long  pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 			//if (pn544_dev->firm_gpio) gpio_set_value(pn544_dev->firm_gpio, 0);
 			gpio_set_value(pn544_dev->firm_gpio, 0);
 			gpio_set_value(pn544_dev->ven_gpio, 1);
-			enable_irq_wake(gpio_to_irq(pn544_dev->irq_gpio));//set irq_gpio as wakeup source when NFC power on
 			msleep(100);
 		} else  if (arg == 0) {
 			/* power off */
@@ -234,7 +233,6 @@ static long  pn544_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 			//if (pn544_dev->firm_gpio) gpio_set_value(pn544_dev->firm_gpio, 0);
 			gpio_set_value(pn544_dev->firm_gpio, 0);		
 			gpio_set_value(pn544_dev->ven_gpio, 0);
-			disable_irq_wake(gpio_to_irq(pn544_dev->irq_gpio));//disable irq_gpio as wakeup source when NFC power off
 			msleep(100);
  		} else {
 			pr_err("%s bad arg %lu\n", __func__, arg);
@@ -837,7 +835,11 @@ static int pn544_i2c_remove(struct i2c_client *client)
 static int nfc_suspend(struct i2c_client *client, pm_message_t mesg)
 {
 	printk("[nfc] ++pn544_suspend\n");
-	//enable_irq_wake(gpio_to_irq(pn544_dev->irq_gpio));
+	if((gpio_get_value(pn544_dev->firm_gpio) == 0) && (gpio_get_value(pn544_dev->ven_gpio) == 1))
+	{
+		printk("[nfc] ++pn544_suspend - enable_irq_wake\n");
+		enable_irq_wake(gpio_to_irq(pn544_dev->irq_gpio));    //enable irq_gpio as wakeup source when NFC suspend
+	}
 	printk("[nfc] --pn544_suspend\n");
    	return 0;
 }
@@ -845,7 +847,12 @@ static int nfc_suspend(struct i2c_client *client, pm_message_t mesg)
 static int nfc_resume(struct i2c_client *client)
 {
 	printk("[nfc] ++pn544_resume\n");
-        wake_lock_timeout(&nfc_wake_lock, 1 * HZ);
+	if((gpio_get_value(pn544_dev->firm_gpio) == 0) && (gpio_get_value(pn544_dev->ven_gpio) == 1))
+	{
+		printk("[nfc] ++pn544_resume - disable_irq_wake\n");
+		disable_irq_wake(gpio_to_irq(pn544_dev->irq_gpio));    //disable irq_gpio as wakeup source when NFC resume
+	}
+	wake_lock_timeout(&nfc_wake_lock, 1 * HZ);
 	printk("[nfc] --pn544_resume\n");
    	return 0;
 }
