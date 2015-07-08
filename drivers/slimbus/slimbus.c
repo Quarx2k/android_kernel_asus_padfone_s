@@ -693,9 +693,12 @@ void slim_msg_response(struct slim_controller *ctrl, u8 *reply, u8 tid, u8 len)
 
 	mutex_lock(&ctrl->m_ctrl);
 	txn = ctrl->txnt[tid];
-	if (txn == NULL) {
-		dev_err(&ctrl->dev, "Got response to invalid TID:%d, len:%d",
+	if (txn == NULL || txn->rbuf == NULL) {
+		if (txn == NULL)
+			dev_err(&ctrl->dev, "Got response to invalid TID:%d, len:%d",
 				tid, len);
+		else
+			dev_err(&ctrl->dev, "Invalid client buffer passed\n");
 		mutex_unlock(&ctrl->m_ctrl);
 		return;
 	}
@@ -842,15 +845,13 @@ int slim_assign_laddr(struct slim_controller *ctrl, const u8 *e_addr,
 
 	dev_dbg(&ctrl->dev, "setting slimbus l-addr:%x\n", *laddr);
 ret_assigned_laddr:
-	//mutex_unlock(&ctrl->m_ctrl); //ASUS Tim++
-	if (exists || ret) {
-		mutex_unlock(&ctrl->m_ctrl); //ASUS Tim++
+	mutex_unlock(&ctrl->m_ctrl);
+	if (exists || ret)
 		return ret;
-	}
 
 	pr_info("slimbus:%d laddr:0x%x, EAPC:0x%x:0x%x", ctrl->nr, *laddr,
 				e_addr[1], e_addr[2]);
-	//mutex_lock(&ctrl->m_ctrl); //ASUS Tim++
+	mutex_lock(&ctrl->m_ctrl);
 	list_for_each_safe(pos, next, &ctrl->devs) {
 		sbdev = list_entry(pos, struct slim_device, dev_list);
 		if (memcmp(sbdev->e_addr, e_addr, 6) == 0) {
@@ -1103,7 +1104,7 @@ int slim_xfer_msg(struct slim_controller *ctrl, struct slim_device *sbdev,
 	} else
 		ret = slim_processtxn(ctrl, SLIM_MSG_DEST_LOGICALADDR, mc, ec,
 				SLIM_MSG_MT_CORE, rbuf, wbuf, len, mlen,
-				NULL, sbdev->laddr, NULL);
+				msg->comp, sbdev->laddr, NULL);
 xfer_err:
 	return ret;
 }
@@ -3065,7 +3066,7 @@ int slim_control_ch(struct slim_device *sb, u16 chanh,
 					pch = list_entry(pos,
 						struct slim_pending_ch,
 						pending);
-					if (pch->chan == slc->chan) {
+					if (pch->chan == chan) {
 						list_del(&pch->pending);
 						kfree(pch);
 						add_mark_removal = false;

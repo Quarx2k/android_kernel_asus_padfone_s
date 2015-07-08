@@ -312,7 +312,7 @@ static void bif_enter_irq_mode_work(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct bif_ctrl_dev *bdev
 		= container_of(dwork, struct bif_ctrl_dev, enter_irq_mode_work);
-	int rc = 0, i = 0;
+	int rc, i;
 
 	mutex_lock(&bdev->mutex);
 	for (i = 0; i < BIF_TRANSACTION_RETRY_COUNT; i++) {
@@ -3534,7 +3534,7 @@ static int bif_add_known_slaves_from_dt(struct bif_ctrl_dev *bdev,
 					struct device_node *of_node)
 {
 	int len = 0;
-	int rc = 0, i;
+	int rc = 0, i = 0;
 	u32 addr;
 	const __be32 *val;
 
@@ -3767,8 +3767,9 @@ struct bif_ctrl_dev *bif_ctrl_register(struct bif_ctrl_desc *bif_desc,
 	if (rc)
 		pr_debug("Search for all slaves failed, rc=%d\n", rc);
 	rc = bif_add_known_slaves_from_dt(bdev, of_node);
-	if (rc) 
-		pr_err("Adding slaves based on device tree addressed failed, rc=%d.\n", rc);
+	if (rc)
+		pr_err("Adding slaves based on device tree addressed failed, rc=%d.\n",
+			rc);
 	rc = bif_assign_all_slaves_dev_addr(bdev);
 	if (rc)
 		pr_err("Failed to set slave device address, rc=%d\n", rc);

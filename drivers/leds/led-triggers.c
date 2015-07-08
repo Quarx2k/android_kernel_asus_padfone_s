@@ -43,8 +43,6 @@ ssize_t led_trigger_store(struct device *dev, struct device_attribute *attr,
 	strncpy(trigger_name, buf, sizeof(trigger_name) - 1);
 	len = strlen(trigger_name);
 
-	printk("[LED] trigger_name : %s",trigger_name);
-
 	if (len && trigger_name[len - 1] == '\n')
 		trigger_name[len - 1] = '\0';
 
@@ -104,6 +102,12 @@ EXPORT_SYMBOL_GPL(led_trigger_show);
 void led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trigger)
 {
 	unsigned long flags;
+	char *event = NULL;
+	char *envp[2];
+	const char *name;
+
+	name = trigger ? trigger->name : "none";
+	event = kasprintf(GFP_KERNEL, "TRIGGER=%s", name);
 
 	/* Remove any existing trigger */
 	if (led_cdev->trigger) {
@@ -123,6 +127,13 @@ void led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trigger)
 		led_cdev->trigger = trigger;
 		if (trigger->activate)
 			trigger->activate(led_cdev);
+	}
+
+	if (event) {
+		envp[0] = event;
+		envp[1] = NULL;
+		kobject_uevent_env(&led_cdev->dev->kobj, KOBJ_CHANGE, envp);
+		kfree(event);
 	}
 }
 EXPORT_SYMBOL_GPL(led_trigger_set);

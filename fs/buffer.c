@@ -1052,7 +1052,6 @@ __getblk_slow(struct block_device *bdev, sector_t block, int size)
 
 	for (;;) {
 		struct buffer_head *bh;
-
 		int ret;
 
 		bh = __find_get_block(bdev, block, size);

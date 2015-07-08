@@ -137,9 +137,7 @@ int spmi_del_controller(struct spmi_controller *ctrl)
 	bus_for_each_dev(&spmi_bus_type, NULL, ctrl, spmi_ctrl_remove_device);
 	mutex_unlock(&board_lock);
 
-#ifdef CONFIG_DEBUG_FS
 	spmi_dfs_del_controller(ctrl);
-#endif
 
 	mutex_lock(&board_lock);
 	idr_remove(&ctrl_idr, ctrl->nr);
@@ -814,9 +812,7 @@ static int spmi_register_controller(struct spmi_controller *ctrl)
 	dev_dbg(&ctrl->dev, "Bus spmi-%d registered: dev:0x%p\n",
 					ctrl->nr, &ctrl->dev);
 
-#ifdef CONFIG_DEBUG_FS
 	spmi_dfs_add_controller(ctrl);
-#endif
 	return 0;
 
 exit:

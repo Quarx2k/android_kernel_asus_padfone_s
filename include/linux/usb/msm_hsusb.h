@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Author: Brian Swetland <swetland@google.com>
- * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -346,6 +346,10 @@ struct msm_otg_platform_data {
  * @chg_check_timer: The timer used to implement the workaround to detect
  *               very slow plug in of wall charger.
  * @ui_enabled: USB Intterupt is enabled or disabled.
+ * @pm_done: It is used to increment the pm counter using pm_runtime_get_sync.
+	     This handles the race case when PM resume thread returns before
+	     the charger detection starts. When USB is disconnected pm_done
+	     is set to true.
  */
 struct msm_otg {
 	struct usb_phy phy;
@@ -462,6 +466,8 @@ struct msm_otg {
 	bool ext_chg_active;
 	struct completion ext_chg_wait;
 	int ui_enabled;
+	bool pm_done;
+	struct qpnp_vadc_chip	*vadc_dev;
 };
 
 struct ci13xxx_platform_data {

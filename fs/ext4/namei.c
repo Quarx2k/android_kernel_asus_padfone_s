@@ -1034,6 +1034,12 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, stru
 			EXT4_ERROR_INODE(dir, "bad inode number: %u", ino);
 			return ERR_PTR(-EIO);
 		}
+		if (unlikely(ino == dir->i_ino)) {
+			EXT4_ERROR_INODE(dir, "'%.*s' linked to parent dir",
+					 dentry->d_name.len,
+					 dentry->d_name.name);
+			return ERR_PTR(-EIO);
+		}
 		inode = ext4_iget(dir->i_sb, ino);
 		if (inode == ERR_PTR(-ESTALE)) {
 			EXT4_ERROR_INODE(dir,
@@ -1753,6 +1759,9 @@ retry:
 		ext4_handle_sync(handle);
 
 	inode = ext4_new_inode(handle, dir, mode, &dentry->d_name, 0, NULL);
+#ifdef CONFIG_MACH_FIND7
+	ext4_fill_inode(dir->i_sb, inode);
+#endif
 	err = PTR_ERR(inode);
 	if (!IS_ERR(inode)) {
 		inode->i_op = &ext4_file_inode_operations;
@@ -1827,6 +1836,9 @@ retry:
 
 	inode = ext4_new_inode(handle, dir, S_IFDIR | mode,
 			       &dentry->d_name, 0, NULL);
+#ifdef CONFIG_MACH_FIND7
+	ext4_fill_inode(dir->i_sb, inode);
+#endif
 	err = PTR_ERR(inode);
 	if (IS_ERR(inode))
 		goto out_stop;

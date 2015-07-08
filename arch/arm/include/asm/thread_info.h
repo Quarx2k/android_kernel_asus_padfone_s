@@ -43,6 +43,16 @@ struct cpu_context_save {
 	__u32	extra[2];		/* Xscale 'acc' register, etc */
 };
 
+struct arm_restart_block {
+	union {
+		/* For user cache flushing */
+		struct {
+			unsigned long start;
+			unsigned long end;
+		} cache;
+	};
+};
+
 /*
  * low level task data that entry.S needs immediate access to.
  * __switch_to() assumes cpu_context follows immediately after cpu_domain.
@@ -66,6 +76,7 @@ struct thread_info {
 	unsigned long		thumbee_state;	/* ThumbEE Handler Base register */
 #endif
 	struct restart_block	restart_block;
+	struct arm_restart_block	arm_restart_block;
 };
 
 #define INIT_THREAD_INFO(tsk)						\
@@ -153,7 +164,8 @@ extern int vfp_restore_user_hwstate(struct user_vfp __user *,
 #define TIF_MEMDIE		18	/* is terminating due to OOM killer */
 #define TIF_RESTORE_SIGMASK	20
 #define TIF_SECCOMP		21
-#define TIF_MM_RELEASED		22	/* task MM has been released */
+#define TIF_MM_RELEASED		23	/* task MM has been released */
+
 #define _TIF_SIGPENDING		(1 << TIF_SIGPENDING)
 #define _TIF_NEED_RESCHED	(1 << TIF_NEED_RESCHED)
 #define _TIF_NOTIFY_RESUME	(1 << TIF_NOTIFY_RESUME)

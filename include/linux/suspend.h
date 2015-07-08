@@ -38,12 +38,6 @@ typedef int __bitwise suspend_state_t;
 #define PM_SUSPEND_MEM		((__force suspend_state_t) 3)
 #define PM_SUSPEND_MAX		((__force suspend_state_t) 4)
 
-//Add a timer to trigger wakelock debug
-//struct timer_list unattended_timer;
-#define PM_UNATTENDED_TIMEOUT   1000*60*10		//10min
-
-
-
 enum suspend_stat_step {
 	SUSPEND_FREEZE = 1,
 	SUSPEND_PREPARE,

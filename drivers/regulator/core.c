@@ -992,17 +992,6 @@ static int set_machine_constraints(struct regulator_dev *rdev,
 	if (!suppress_info_printing)
 		print_constraints(rdev);
 	return 0;
-
-// ASUS_BSP +++ Peter_Lu "Set L18 sensor power source from standby mode to normal mode for keep sensor power source stable"
-	if (  0 == strncmp(rdev_get_name(rdev), "8941_l18", 8) )	{
-		ret = ops->set_mode(rdev, REGULATOR_MODE_NORMAL);
-		if (ret < 0)
-			printk("[set_machine_constraints] 8941_l18 Set optimum mode fail!(%d) \n", ops->get_mode(rdev));
-		else
-			printk("[set_machine_constraints] 8941_l18 Set optimum mode %d\n", ops->get_mode(rdev));
-	}
-// ASUS_BSP --- Peter_Lu 
-	
 out:
 	kfree(rdev->constraints);
 	rdev->constraints = NULL;
@@ -2000,8 +1989,8 @@ static int _regulator_do_set_voltage(struct regulator_dev *rdev,
 int regulator_set_voltage(struct regulator *regulator, int min_uV, int max_uV)
 {
 	struct regulator_dev *rdev = regulator->rdev;
-	int prev_min_uV, prev_max_uV;
 	int ret = 0;
+	int old_min_uV, old_max_uV;
 
 	mutex_lock(&rdev->mutex);
 
@@ -2024,22 +2013,26 @@ int regulator_set_voltage(struct regulator *regulator, int min_uV, int max_uV)
 	if (ret < 0)
 		goto out;
 
-	prev_min_uV = regulator->min_uV;
-	prev_max_uV = regulator->max_uV;
-
+	/* restore original values in case of error */
+	old_min_uV = regulator->min_uV;
+	old_max_uV = regulator->max_uV;
 	regulator->min_uV = min_uV;
 	regulator->max_uV = max_uV;
 
 	ret = regulator_check_consumers(rdev, &min_uV, &max_uV);
-	if (ret < 0) {
-		regulator->min_uV = prev_min_uV;
-		regulator->max_uV = prev_max_uV;
-		goto out;
-	}
+	if (ret < 0)
+		goto out2;
 
 	ret = _regulator_do_set_voltage(rdev, min_uV, max_uV);
+	if (ret < 0)
+		goto out2;
 
 out:
+	mutex_unlock(&rdev->mutex);
+	return ret;
+out2:
+	regulator->min_uV = old_min_uV;
+	regulator->max_uV = old_max_uV;
 	mutex_unlock(&rdev->mutex);
 	return ret;
 }

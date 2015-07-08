@@ -25,7 +25,6 @@
 #include <net/udp.h>
 #include <net/transp_v6.h>
 #include <net/ping.h>
-#include <linux/export.h>
 
 struct proto pingv6_prot = {
 	.name =		"PINGv6",
@@ -127,9 +126,10 @@ int ping_v6_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 
 	if (msg->msg_name) {
 		struct sockaddr_in6 *u = (struct sockaddr_in6 *) msg->msg_name;
-		if (msg->msg_namelen < sizeof(struct sockaddr_in6) ||
-		    u->sin6_family != AF_INET6) {
+		if (msg->msg_namelen < sizeof(*u))
 			return -EINVAL;
+		if (u->sin6_family != AF_INET6) {
+			return -EAFNOSUPPORT;
 		}
 		if (sk->sk_bound_dev_if &&
 		    sk->sk_bound_dev_if != u->sin6_scope_id) {
@@ -159,6 +159,7 @@ int ping_v6_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 	fl6.flowi6_proto = IPPROTO_ICMPV6;
 	fl6.saddr = np->saddr;
 	fl6.daddr = *daddr;
+	fl6.flowi6_mark = sk->sk_mark;
 	fl6.fl6_icmp_type = user_icmph.icmp6_type;
 	fl6.fl6_icmp_code = user_icmph.icmp6_code;
 	fl6.flowi6_uid = sock_i_uid(sk);
@@ -166,6 +167,8 @@ int ping_v6_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 
 	if (!fl6.flowi6_oif && ipv6_addr_is_multicast(&fl6.daddr))
 		fl6.flowi6_oif = np->mcast_oif;
+	else if (!fl6.flowi6_oif)
+		fl6.flowi6_oif = np->ucast_oif;
 
 	dst = ip6_sk_dst_lookup_flow(sk, &fl6,  daddr, 1);
 	if (IS_ERR(dst))
@@ -178,6 +181,8 @@ int ping_v6_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 
 	if (!fl6.flowi6_oif && ipv6_addr_is_multicast(&fl6.daddr))
 		fl6.flowi6_oif = np->mcast_oif;
+	else if (!fl6.flowi6_oif)
+		fl6.flowi6_oif = np->ucast_oif;
 
 	pfh.icmph.type = user_icmph.icmp6_type;
 	pfh.icmph.code = user_icmph.icmp6_code;

@@ -57,6 +57,7 @@
 #ifdef CONFIG_SND_PCM
 #include "f_audio_source.c"
 #endif
+#include "f_fs.c"
 #include "f_mass_storage.c"
 #include "u_serial.c"
 #include "u_sdio.c"
@@ -74,9 +75,6 @@
 #include "f_ccid.c"
 #include "f_mtp.c"
 #include "f_accessory.c"
-#include "f_hid.h"
-#include "f_hid_android_keyboard.c"
-#include "f_hid_android_mouse.c"
 #define USB_ETH_RNDIS y
 #include "f_rndis.c"
 #include "rndis.c"
@@ -95,6 +93,7 @@
 #include "f_uac1.c"
 #endif
 #include "f_ncm.c"
+#include "f_charger.c"
 
 MODULE_AUTHOR("Mike Lockwood");
 MODULE_DESCRIPTION("Android Composite USB Driver");
@@ -214,6 +213,8 @@ struct android_dev {
 
 	/* A list node inside the android_dev_list */
 	struct list_head list_item;
+
+	char ffs_aliases[256];
 };
 
 struct android_configuration {
@@ -434,6 +435,163 @@ static void android_disable(struct android_dev *dev)
 
 /*-------------------------------------------------------------------------*/
 /* Supported functions initialization */
+
+struct functionfs_config {
+	bool opened;
+	bool enabled;
+	struct ffs_data *data;
+};
+
+static int ffs_function_init(struct android_usb_function *f,
+			     struct usb_composite_dev *cdev)
+{
+	f->config = kzalloc(sizeof(struct functionfs_config), GFP_KERNEL);
+	if (!f->config)
+		return -ENOMEM;
+
+	return functionfs_init();
+}
+
+static void ffs_function_cleanup(struct android_usb_function *f)
+{
+	functionfs_cleanup();
+	kfree(f->config);
+}
+
+static void ffs_function_enable(struct android_usb_function *f)
+{
+	struct android_dev *dev = f->android_dev;
+	struct functionfs_config *config = f->config;
+
+	config->enabled = true;
+
+	/* Disable the gadget until the function is ready */
+	if (!config->opened)
+		android_disable(dev);
+}
+
+static void ffs_function_disable(struct android_usb_function *f)
+{
+	struct android_dev *dev = f->android_dev;
+	struct functionfs_config *config = f->config;
+
+	config->enabled = false;
+
+	/* Balance the disable that was called in closed_callback */
+	if (!config->opened)
+		android_enable(dev);
+}
+
+static int ffs_function_bind_config(struct android_usb_function *f,
+				    struct usb_configuration *c)
+{
+	struct functionfs_config *config = f->config;
+	return functionfs_bind_config(c->cdev, c, config->data);
+}
+
+static ssize_t
+ffs_aliases_show(struct device *pdev, struct device_attribute *attr, char *buf)
+{
+	struct android_dev *dev;
+	int ret;
+
+	dev = list_first_entry(&android_dev_list, struct android_dev,
+			list_item);
+
+	mutex_lock(&dev->mutex);
+	ret = sprintf(buf, "%s\n", dev->ffs_aliases);
+	mutex_unlock(&dev->mutex);
+
+	return ret;
+}
+
+static ssize_t
+ffs_aliases_store(struct device *pdev, struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	struct android_dev *dev;
+	char buff[256];
+
+	dev = list_first_entry(&android_dev_list, struct android_dev,
+			list_item);
+	mutex_lock(&dev->mutex);
+
+	if (dev->enabled) {
+		mutex_unlock(&dev->mutex);
+		return -EBUSY;
+	}
+
+	strlcpy(buff, buf, sizeof(buff));
+	strlcpy(dev->ffs_aliases, strim(buff), sizeof(dev->ffs_aliases));
+
+	mutex_unlock(&dev->mutex);
+
+	return size;
+}
+
+static DEVICE_ATTR(aliases, S_IRUGO | S_IWUSR, ffs_aliases_show,
+					       ffs_aliases_store);
+static struct device_attribute *ffs_function_attributes[] = {
+	&dev_attr_aliases,
+	NULL
+};
+
+static struct android_usb_function ffs_function = {
+	.name		= "ffs",
+	.init		= ffs_function_init,
+	.enable		= ffs_function_enable,
+	.disable	= ffs_function_disable,
+	.cleanup	= ffs_function_cleanup,
+	.bind_config	= ffs_function_bind_config,
+	.attributes	= ffs_function_attributes,
+};
+
+static int functionfs_ready_callback(struct ffs_data *ffs)
+{
+	struct android_dev *dev = ffs_function.android_dev;
+	struct functionfs_config *config = ffs_function.config;
+	int ret = 0;
+
+	mutex_lock(&dev->mutex);
+
+	ret = functionfs_bind(ffs, dev->cdev);
+	if (ret)
+		goto err;
+
+	config->data = ffs;
+	config->opened = true;
+
+	if (config->enabled)
+		android_enable(dev);
+
+err:
+	mutex_unlock(&dev->mutex);
+	return ret;
+}
+
+static void functionfs_closed_callback(struct ffs_data *ffs)
+{
+	struct android_dev *dev = ffs_function.android_dev;
+	struct functionfs_config *config = ffs_function.config;
+
+	mutex_lock(&dev->mutex);
+
+	if (config->enabled)
+		android_disable(dev);
+
+	config->opened = false;
+	config->data = NULL;
+
+	functionfs_unbind(ffs);
+
+	mutex_unlock(&dev->mutex);
+}
+
+static int functionfs_check_dev_callback(const char *dev_name)
+{
+	return 0;
+}
+
 
 struct adb_data {
 	bool opened;
@@ -1361,6 +1519,19 @@ static struct android_usb_function ccid_function = {
 	.bind_config	= ccid_function_bind_config,
 };
 
+/* Charger */
+static int charger_function_bind_config(struct android_usb_function *f,
+						struct usb_configuration *c)
+{
+	return charger_bind_config(c);
+}
+
+static struct android_usb_function charger_function = {
+	.name		= "charging",
+	.bind_config	= charger_function_bind_config,
+};
+
+
 static int
 mtp_function_init(struct android_usb_function *f,
 		struct usb_composite_dev *cdev)
@@ -1773,7 +1944,7 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	struct fsg_common *common;
 	int err;
 	int i;
-	const char *name[2];
+	const char *name[3];
 
 	config = kzalloc(sizeof(struct mass_storage_function_config),
 								GFP_KERNEL);
@@ -2018,42 +2189,8 @@ static struct android_usb_function uasp_function = {
 	.bind_config	= uasp_function_bind_config,
 };
 
-static int hid_function_init(struct android_usb_function *f, struct usb_composite_dev *cdev)
-{
-	return ghid_setup(cdev->gadget, 2);
-}
-
-static void hid_function_cleanup(struct android_usb_function *f)
-{
-	ghid_cleanup();
-}
-
-static int hid_function_bind_config(struct android_usb_function *f, struct usb_configuration *c)
-{
-	int ret;
-	printk(KERN_INFO "hid keyboard\n");
-	ret = hidg_bind_config(c, &ghid_device_android_keyboard, 0);
-	if (ret) {
-		pr_info("%s: hid_function_bind_config keyboard failed: %d\n", __func__, ret);
-		return ret;
-	}
-	printk(KERN_INFO "hid mouse\n");
-	ret = hidg_bind_config(c, &ghid_device_android_mouse, 1);
-	if (ret) {
-		pr_info("%s: hid_function_bind_config mouse failed: %d\n", __func__, ret);
-		return ret;
-	}
-	return 0;
-}
-
-static struct android_usb_function hid_function = {
-	.name		= "hid",
-	.init		= hid_function_init,
-	.cleanup	= hid_function_cleanup,
-	.bind_config	= hid_function_bind_config,
-};
-
 static struct android_usb_function *supported_functions[] = {
+	&ffs_function,
 	&mbim_function,
 	&ecm_qc_function,
 #ifdef CONFIG_SND_PCM
@@ -2082,7 +2219,7 @@ static struct android_usb_function *supported_functions[] = {
 	&audio_source_function,
 #endif
 	&uasp_function,
-	&hid_function,
+	&charger_function,
 	NULL
 };
 
@@ -2220,6 +2357,22 @@ android_unbind_enabled_functions(struct android_dev *dev,
 	}
 }
 
+static inline void check_streaming_func(struct usb_gadget *gadget,
+		struct android_usb_platform_data *pdata,
+		char *name)
+{
+	int i;
+
+	for (i = 0; i < pdata->streaming_func_count; i++) {
+		if (!strcmp(name,
+			pdata->streaming_func[i])) {
+			pr_debug("set streaming_enabled to true\n");
+			gadget->streaming_enabled = true;
+			break;
+		}
+	}
+}
+
 static int android_enable_function(struct android_dev *dev,
 				   struct android_configuration *conf,
 				   char *name)
@@ -2227,6 +2380,9 @@ static int android_enable_function(struct android_dev *dev,
 	struct android_usb_function **functions = dev->functions;
 	struct android_usb_function *f;
 	struct android_usb_function_holder *f_holder;
+	struct android_usb_platform_data *pdata = dev->pdata;
+	struct usb_gadget *gadget = dev->cdev->gadget;
+
 	while ((f = *functions++)) {
 		if (!strcmp(name, f->name)) {
 			if (f->android_dev && f->android_dev != dev)
@@ -2244,6 +2400,13 @@ static int android_enable_function(struct android_dev *dev,
 				f_holder->f = f;
 				list_add_tail(&f_holder->enabled_list,
 					      &conf->enabled_functions);
+				pr_debug("func:%s is enabled.\n", f->name);
+				/*
+				 * compare enable function with streaming func
+				 * list and based on the same request streaming.
+				 */
+				check_streaming_func(gadget, pdata, f->name);
+
 				return 0;
 			}
 		}
@@ -2335,7 +2498,10 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	struct android_usb_function_holder *f_holder;
 	char *name;
 	char buf[256], *b;
+	char aliases[256], *a;
 	int err;
+	int is_ffs;
+	int ffs_enabled = 0;
 
 	mutex_lock(&dev->mutex);
 
@@ -2363,29 +2529,48 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 
 	while (b) {
 		conf_str = strsep(&b, ":");
-		if (conf_str) {
-			/* If the next not equal to the head, take it */
-			if (curr_conf->next != &dev->configs)
-				conf = list_entry(curr_conf->next,
-						  struct android_configuration,
-						  list_item);
-			else
-				conf = alloc_android_config(dev);
+		if (!conf_str)
+			continue;
 
-			curr_conf = curr_conf->next;
-		}
+		/* If the next not equal to the head, take it */
+		if (curr_conf->next != &dev->configs)
+			conf = list_entry(curr_conf->next,
+					  struct android_configuration,
+					  list_item);
+		else
+			conf = alloc_android_config(dev);
 
+		curr_conf = curr_conf->next;
 		while (conf_str) {
 			name = strsep(&conf_str, ",");
-			if (name) {
-				err = android_enable_function(dev, conf, name);
-				if (err)
-					pr_err("android_usb: Cannot enable %s",
-						name);
+			is_ffs = 0;
+			strlcpy(aliases, dev->ffs_aliases, sizeof(aliases));
+			a = aliases;
+
+			while (a) {
+				char *alias = strsep(&a, ",");
+				if (alias && !strcmp(name, alias)) {
+					is_ffs = 1;
+					break;
+				}
 			}
+
+			if (is_ffs) {
+				if (ffs_enabled)
+					continue;
+				err = android_enable_function(dev, conf, "ffs");
+				if (err)
+					pr_err("android_usb: Cannot enable ffs (%d)",
+										err);
+				else
+					ffs_enabled = 1;
+				continue;
+			}
+			err = android_enable_function(dev, conf, name);
+			if (err)
+				pr_err("android_usb: Cannot enable '%s' (%d)",
+								   name, err);
 		}
-		/* HID driver always enabled, it's the whole point of this kernel patch */
-		android_enable_function(dev, conf, "hid");
 	}
 
 	/* Free uneeded configurations if exists */
@@ -2419,7 +2604,6 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 	bool audio_enabled = false;
 	static DEFINE_RATELIMIT_STATE(rl, 10*HZ, 1);
 	int err = 0;
-
 
 	if (!cdev)
 		return -ENODEV;
@@ -2619,6 +2803,10 @@ static void android_unbind_config(struct usb_configuration *c)
 {
 	struct android_dev *dev = cdev_to_android_dev(c->cdev);
 
+	if (c->cdev->gadget->streaming_enabled) {
+		c->cdev->gadget->streaming_enabled = false;
+		pr_debug("setting streaming_enabled to false.\n");
+	}
 	android_unbind_enabled_functions(dev, c);
 }
 
@@ -2797,8 +2985,10 @@ static void android_suspend(struct usb_gadget *gadget)
 	unsigned long flags;
 
 	spin_lock_irqsave(&cdev->lock, flags);
-	dev->suspended = 1;
-	schedule_work(&dev->work);
+	if (!dev->suspended) {
+		dev->suspended = 1;
+		schedule_work(&dev->work);
+	}
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
 	composite_suspend(gadget);
@@ -2811,8 +3001,10 @@ static void android_resume(struct usb_gadget *gadget)
 	unsigned long flags;
 
 	spin_lock_irqsave(&cdev->lock, flags);
-	dev->suspended = 0;
-	schedule_work(&dev->work);
+	if (dev->suspended) {
+		dev->suspended = 0;
+		schedule_work(&dev->work);
+	}
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
 	composite_resume(gadget);
@@ -2947,7 +3139,7 @@ static int __devinit android_probe(struct platform_device *pdev)
 	struct android_usb_platform_data *pdata;
 	struct android_dev *android_dev;
 	struct resource *res;
-	int ret = 0;
+	int ret = 0, i, len = 0;
 
 	if (pdev->dev.of_node) {
 		dev_dbg(&pdev->dev, "device tree enabled\n");
@@ -2964,6 +3156,33 @@ static int __devinit android_probe(struct platform_device *pdev)
 				"qcom,android-usb-cdrom");
 		pdata->internal_ums = of_property_read_bool(pdev->dev.of_node,
 				"qcom,android-usb-internal-ums");
+		len = of_property_count_strings(pdev->dev.of_node,
+				"qcom,streaming-func");
+		if (len > MAX_STREAMING_FUNCS) {
+			pr_err("Invalid number of functions used.\n");
+			return -EINVAL;
+		}
+
+		for (i = 0; i < len; i++) {
+			const char *name = NULL;
+
+			of_property_read_string_index(pdev->dev.of_node,
+				"qcom,streaming-func", i, &name);
+			if (!name)
+				continue;
+
+			if (sizeof(name) > FUNC_NAME_LEN) {
+				pr_err("Function name is bigger than allowed.\n");
+				continue;
+			}
+
+			strlcpy(pdata->streaming_func[i], name,
+				sizeof(pdata->streaming_func[i]));
+			pr_debug("name of streaming function:%s\n",
+				pdata->streaming_func[i]);
+		}
+
+		pdata->streaming_func_count = len;
 	} else {
 		pdata = pdev->dev.platform_data;
 	}

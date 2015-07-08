@@ -33,17 +33,7 @@ static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
 	 * here that the generic code does not try to make a pci_dev from our
 	 * dev struct in order to setup MSI
 	 */
-	xhci->quirks |= XHCI_BROKEN_MSI;
-
-        /*
-         * In some xhci controllers which follows xhci 1.0 spec gives a spurious
-         * success event after a short transfer. This quirk will ignore such
-         * spurious event. Hit this issue in synopsis xhci controllers with
-         * hci_version > 0.96
-         */
-
-        if (xhci->hci_version > 0x96)
-                xhci->quirks |= XHCI_SPURIOUS_SUCCESS;
+	xhci->quirks |= XHCI_PLAT;
 
 	if (!pdata)
 		return;
@@ -59,6 +49,17 @@ static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
 static int xhci_plat_setup(struct usb_hcd *hcd)
 {
 	return xhci_gen_setup(hcd, xhci_plat_quirks);
+}
+
+static void xhci_plat_phy_autosuspend(struct usb_hcd *hcd,
+						int enable_autosuspend)
+{
+	if (!phy || !phy->set_phy_autosuspend)
+		return;
+
+	usb_phy_set_autosuspend(phy, enable_autosuspend);
+
+	return;
 }
 
 static const struct hc_driver xhci_plat_xhci_driver = {
@@ -108,6 +109,7 @@ static const struct hc_driver xhci_plat_xhci_driver = {
 	.hub_status_data =	xhci_hub_status_data,
 	.bus_suspend =		xhci_bus_suspend,
 	.bus_resume =		xhci_bus_resume,
+	.set_autosuspend =	xhci_plat_phy_autosuspend,
 };
 
 static int xhci_plat_probe(struct platform_device *pdev)
@@ -147,7 +149,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		goto put_hcd;
 	}
 
-	hcd->regs = ioremap(hcd->rsrc_start, hcd->rsrc_len);
+	hcd->regs = ioremap_nocache(hcd->rsrc_start, hcd->rsrc_len);
 	if (!hcd->regs) {
 		dev_dbg(&pdev->dev, "error mapping memory\n");
 		ret = -EFAULT;

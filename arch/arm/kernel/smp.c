@@ -24,6 +24,7 @@
 #include <linux/percpu.h>
 #include <linux/clockchips.h>
 #include <linux/completion.h>
+#include <linux/cpufreq.h>
 
 #include <linux/atomic.h>
 #include <asm/smp.h>
@@ -71,30 +72,9 @@ void __init smp_set_ops(struct smp_operations *ops)
 		smp_ops = *ops;
 };
 
-int __cpuinit __cpu_up(unsigned int cpu, struct task_struct *tidle)
+int __cpuinit __cpu_up(unsigned int cpu, struct task_struct *idle)
 {
-	struct cpuinfo_arm *ci = &per_cpu(cpu_data, cpu);
-	struct task_struct *idle = ci->idle;
 	int ret;
-
-	/*
-	 * Spawn a new process manually, if not already done.
-	 * Grab a pointer to its task struct so we can mess with it
-	 */
-	if (!idle) {
-		idle = fork_idle(cpu);
-		if (IS_ERR(idle)) {
-			printk(KERN_ERR "CPU%u: fork() failed\n", cpu);
-			return PTR_ERR(idle);
-		}
-		ci->idle = idle;
-	} else {
-		/*
-		 * Since this idle thread is being re-used, call
-		 * init_idle() to reinitialize the thread structure.
-		 */
-		init_idle(idle, cpu);
-	}
 
 	/*
 	 * We need to tell the secondary core where to find
@@ -219,8 +199,11 @@ int __cpu_disable(void)
 	/*
 	 * Flush user cache and TLB mappings, and then remove this CPU
 	 * from the vm mask set of all processes.
+	 *
+	 * Caches are flushed to the Level of Unification Inner Shareable
+	 * to write-back dirty lines to unified caches shared by all CPUs.
 	 */
-	flush_cache_all();
+	flush_cache_louis();
 	local_flush_tlb_all();
 
 	read_lock(&tasklist_lock);
@@ -247,6 +230,13 @@ void __cpu_die(unsigned int cpu)
 	}
 	pr_debug("CPU%u: shutdown\n", cpu);
 
+	/*
+	 * platform_cpu_kill() is generally expected to do the powering off
+	 * and/or cutting of clocks to the dying CPU.  Optionally, this may
+	 * be done by the CPU which is dying in preference to supporting
+	 * this call, but that means there is _no_ synchronisation between
+	 * the requesting CPU and the dying CPU actually losing power.
+	 */
 	if (!platform_cpu_kill(cpu))
 		printk("CPU%u: unable to kill\n", cpu);
 }
@@ -266,14 +256,41 @@ void __ref cpu_die(void)
 	idle_task_exit();
 
 	local_irq_disable();
-	mb();
 
-	/* Tell __cpu_die() that this CPU is now safe to dispose of */
+	/*
+	 * Flush the data out of the L1 cache for this CPU.  This must be
+	 * before the completion to ensure that data is safely written out
+	 * before platform_cpu_kill() gets called - which may disable
+	 * *this* CPU and power down its cache.
+	 */
+	flush_cache_louis();
+
+	/*
+	 * Tell __cpu_die() that this CPU is now safe to dispose of.  Once
+	 * this returns, power and/or clocks can be removed at any point
+	 * from this CPU and its cache by platform_cpu_kill().
+	 */
 	complete(&cpu_died);
 
 	/*
-	 * actual CPU shutdown procedure is at least platform (if not
-	 * CPU) specific.
+	 * Ensure that the cache lines associated with that completion are
+	 * written out.  This covers the case where _this_ CPU is doing the
+	 * powering down, to ensure that the completion is visible to the
+	 * CPU waiting for this one.
+	 */
+	flush_cache_louis();
+
+	/*
+	 * The actual CPU shutdown procedure is at least platform (if not
+	 * CPU) specific.  This may remove power, or it may simply spin.
+	 *
+	 * Platforms are generally expected *NOT* to return from this call,
+	 * although there are some which do because they have no way to
+	 * power down the CPU.  These platforms are the _only_ reason we
+	 * have a return path which uses the fragment of assembly below.
+	 *
+	 * The return path should not be used for platforms which can
+	 * power off the CPU.
 	 */
 	platform_cpu_die(cpu);
 
@@ -310,22 +327,30 @@ static void __cpuinit smp_store_cpu_info(unsigned int cpuid)
 asmlinkage void __cpuinit secondary_start_kernel(void)
 {
 	struct mm_struct *mm = &init_mm;
-	unsigned int cpu = smp_processor_id();
+	unsigned int cpu;
+
+	/*
+	 * The identity mapping is uncached (strongly ordered), so
+	 * switch away from it before attempting any exclusive accesses.
+	 */
+	cpu_switch_mm(mm->pgd, mm);
+	local_flush_bp_all();
+	enter_lazy_tlb(mm, current);
+	local_flush_tlb_all();
 
 	/*
 	 * All kernel threads share the same mm context; grab a
 	 * reference and switch to it.
 	 */
+	cpu = smp_processor_id();
 	atomic_inc(&mm->mm_count);
 	current->active_mm = mm;
 	cpumask_set_cpu(cpu, mm_cpumask(mm));
-	cpu_switch_mm(mm->pgd, mm);
-	enter_lazy_tlb(mm, current);
-	local_flush_tlb_all();
+
+	cpu_init();
 
 	pr_debug("CPU%u: Booted secondary processor\n", cpu);
 
-	cpu_init();
 	preempt_disable();
 	trace_hardirqs_off();
 
@@ -379,9 +404,7 @@ void __init smp_cpus_done(unsigned int max_cpus)
 
 void __init smp_prepare_boot_cpu(void)
 {
-	unsigned int cpu = smp_processor_id();
-
-	per_cpu(cpu_data, cpu).idle = current;
+	set_my_cpu_offset(per_cpu_offset(smp_processor_id()));
 }
 
 void __init smp_prepare_cpus(unsigned int max_cpus)
@@ -696,19 +719,9 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 
 void smp_send_reschedule(int cpu)
 {
+	BUG_ON(cpu_is_offline(cpu));
 	smp_cross_call(cpumask_of(cpu), IPI_RESCHEDULE);
 }
-
-#ifdef CONFIG_HOTPLUG_CPU
-static void smp_kill_cpus(cpumask_t *mask)
-{
-	unsigned int cpu;
-	for_each_cpu(cpu, mask)
-		platform_cpu_kill(cpu);
-}
-#else
-static void smp_kill_cpus(cpumask_t *mask) { }
-#endif
 
 void smp_send_stop(void)
 {
@@ -727,8 +740,6 @@ void smp_send_stop(void)
 
 	if (num_active_cpus() > 1)
 		pr_warning("SMP: failed to stop secondary CPUs\n");
-
-	smp_kill_cpus(&mask);
 }
 
 /*
@@ -738,3 +749,56 @@ int setup_profiling_timer(unsigned int multiplier)
 {
 	return -EINVAL;
 }
+
+#ifdef CONFIG_CPU_FREQ
+
+static DEFINE_PER_CPU(unsigned long, l_p_j_ref);
+static DEFINE_PER_CPU(unsigned long, l_p_j_ref_freq);
+static unsigned long global_l_p_j_ref;
+static unsigned long global_l_p_j_ref_freq;
+
+static int cpufreq_callback(struct notifier_block *nb,
+					unsigned long val, void *data)
+{
+	struct cpufreq_freqs *freq = data;
+	int cpu = freq->cpu;
+
+	if (freq->flags & CPUFREQ_CONST_LOOPS)
+		return NOTIFY_OK;
+
+	if (!per_cpu(l_p_j_ref, cpu)) {
+		per_cpu(l_p_j_ref, cpu) =
+			per_cpu(cpu_data, cpu).loops_per_jiffy;
+		per_cpu(l_p_j_ref_freq, cpu) = freq->old;
+		if (!global_l_p_j_ref) {
+			global_l_p_j_ref = loops_per_jiffy;
+			global_l_p_j_ref_freq = freq->old;
+		}
+	}
+
+	if ((val == CPUFREQ_PRECHANGE  && freq->old < freq->new) ||
+	    (val == CPUFREQ_POSTCHANGE && freq->old > freq->new) ||
+	    (val == CPUFREQ_RESUMECHANGE || val == CPUFREQ_SUSPENDCHANGE)) {
+		loops_per_jiffy = cpufreq_scale(global_l_p_j_ref,
+						global_l_p_j_ref_freq,
+						freq->new);
+		per_cpu(cpu_data, cpu).loops_per_jiffy =
+			cpufreq_scale(per_cpu(l_p_j_ref, cpu),
+					per_cpu(l_p_j_ref_freq, cpu),
+					freq->new);
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block cpufreq_notifier = {
+	.notifier_call  = cpufreq_callback,
+};
+
+static int __init register_cpufreq_notifier(void)
+{
+	return cpufreq_register_notifier(&cpufreq_notifier,
+						CPUFREQ_TRANSITION_NOTIFIER);
+}
+core_initcall(register_cpufreq_notifier);
+
+#endif

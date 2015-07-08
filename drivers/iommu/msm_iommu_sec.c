@@ -26,6 +26,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/kmemleak.h>
+#include <linux/dma-mapping.h>
 
 #include <asm/sizes.h>
 
@@ -60,6 +61,12 @@
 
 
 static struct iommu_access_ops *iommu_access_ops;
+
+static const struct of_device_id msm_smmu_list[] = {
+	{ .compatible = "qcom,msm-smmu-v1", },
+	{ .compatible = "qcom,msm-smmu-v2", },
+	{ }
+};
 
 struct msm_scm_paddr_list {
 	unsigned int list;
@@ -117,7 +124,7 @@ static int msm_iommu_dump_fault_regs(int smmu_id, int cb_num,
 	struct msm_scm_fault_regs_dump_req {
 		uint32_t id;
 		uint32_t cb_num;
-		phys_addr_t buff;
+		uint32_t buff;
 		uint32_t len;
 	} req_info;
 	int resp;
@@ -290,14 +297,19 @@ static int msm_iommu_sec_ptbl_init(void)
 		unsigned int size;
 		unsigned int spare;
 	} pinit;
-	unsigned int *buf;
 	int psize[2] = {0, 0};
 	unsigned int spare;
 	int ret, ptbl_ret = 0;
 	int version;
+	/* Use a dummy device for dma_alloc_coherent allocation */
+	struct device dev = { 0 };
+	void *cpu_addr;
+	dma_addr_t paddr;
+	DEFINE_DMA_ATTRS(attrs);
 
-	for_each_compatible_node(np, NULL, "qcom,msm-smmu-v1")
-		if (of_find_property(np, "qcom,iommu-secure-id", NULL))
+	for_each_matching_node(np, msm_smmu_list)
+		if (of_find_property(np, "qcom,iommu-secure-id", NULL) &&
+				of_device_is_available(np))
 			break;
 
 	if (!np)
@@ -336,15 +348,17 @@ static int msm_iommu_sec_ptbl_init(void)
 		goto fail;
 	}
 
-	buf = kmalloc(psize[0], GFP_KERNEL);
-	if (!buf) {
+	dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &attrs);
+	dev.coherent_dma_mask = DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+	cpu_addr = dma_alloc_attrs(&dev, psize[0], &paddr, GFP_KERNEL, &attrs);
+	if (!cpu_addr) {
 		pr_err("%s: Failed to allocate %d bytes for PTBL\n",
 			__func__, psize[0]);
 		ret = -ENOMEM;
 		goto fail;
 	}
 
-	pinit.paddr = virt_to_phys(buf);
+	pinit.paddr = (unsigned int)paddr;
 	pinit.size = psize[0];
 
 	ret = scm_call(SCM_SVC_MP, IOMMU_SECURE_PTBL_INIT, &pinit,
@@ -358,12 +372,10 @@ static int msm_iommu_sec_ptbl_init(void)
 		goto fail_mem;
 	}
 
-	kmemleak_not_leak(buf);
-
 	return 0;
 
 fail_mem:
-	kfree(buf);
+	dma_free_coherent(&dev, psize[0], cpu_addr, paddr);
 fail:
 	return ret;
 }
@@ -599,6 +611,7 @@ static int msm_iommu_attach_dev(struct iommu_domain *domain, struct device *dev)
 
 		ret = msm_iommu_sec_program_iommu(iommu_drvdata->sec_id);
 
+		SET_MICRO_MMU_CTRL_RESERVED(iommu_drvdata->base, 0x3);
 		/* bfb settings are always programmed by HLOS */
 		program_iommu_bfb_settings(iommu_drvdata->base,
 					   iommu_drvdata->bfb_settings);

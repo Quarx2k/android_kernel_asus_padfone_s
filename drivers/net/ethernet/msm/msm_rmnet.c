@@ -3,7 +3,7 @@
  * Virtual Ethernet Interface for MSM7K Networking
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2012, 2014, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -142,7 +142,7 @@ static ssize_t timeout_suspend_show(struct device *d,
 				    char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%lu\n",
-		(unsigned long) timeout_suspend_us);
+			(unsigned long) timeout_suspend_us);
 }
 
 static DEVICE_ATTR(timeout_suspend, 0664, timeout_suspend_show, timeout_suspend_store);

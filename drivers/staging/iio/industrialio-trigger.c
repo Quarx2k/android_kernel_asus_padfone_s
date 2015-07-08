@@ -367,7 +367,7 @@ static ssize_t iio_trigger_write_current(struct device *dev,
 	return len;
 }
 
-static DEVICE_ATTR(current_trigger, S_IRUGO | S_IWUGO, //ASUS_BSP ++ Jason2 Chang "Porting 9-axis sensor"
+static DEVICE_ATTR(current_trigger, S_IRUGO | S_IWUSR,
 		   iio_trigger_read_current,
 		   iio_trigger_write_current);
 

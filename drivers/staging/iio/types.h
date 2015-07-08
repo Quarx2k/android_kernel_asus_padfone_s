@@ -27,9 +27,6 @@ enum iio_chan_type {
 	IIO_ANGL,
 	IIO_TIMESTAMP,
 	IIO_CAPACITANCE,
-//ASUS_BSP +++ Jason Chang "[A86][Sensor][NA][Spec] Porting 9-axis sensor"
-	IIO_QUATERNION,
-//ASUS_BSP --- Jason Chang "[A86][Sensor][NA][Spec] Porting 9-axis sensor"
 };
 
 enum iio_modifier {
@@ -47,9 +44,6 @@ enum iio_modifier {
 	IIO_MOD_X_OR_Y_OR_Z,
 	IIO_MOD_LIGHT_BOTH,
 	IIO_MOD_LIGHT_IR,
-//ASUS_BSP +++ Jason Chang "[A86][Sensor][NA][Spec] Porting 9-axis sensor"
-        IIO_MOD_R,
-//ASUS_BSP --- Jason Chang "[A86][Sensor][NA][Spec] Porting 9-axis sensor"
 };
 
 #define IIO_VAL_INT 1
