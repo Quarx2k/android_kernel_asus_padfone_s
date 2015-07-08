@@ -640,7 +640,7 @@ static int a68_set_backlight(value)
 //a68----
 //#ifdef ASUS_A91_PROJECT
 #ifdef CONFIG_EEPROM_NUVOTON
-extern int is_pad_power_off;
+//extern int is_pad_power_off;
 int pad_set_backlight(int value)
 {
 	struct a86_backlight_data *pdata = a86_led_device.dev.platform_data;
@@ -654,10 +654,10 @@ int pad_set_backlight(int value)
         return 0;
     	}
 //ASUS BSP Wei +++
-     if(is_pad_power_off){
-	 	printk("[BL] pad mode shutdowning don't set pad backlight\n");
-		return 0;
-     }
+//     if(is_pad_power_off){
+//	 	printk("[BL] pad mode shutdowning don't set pad backlight\n");
+//		return 0;
+//     }
 //ASUS BSP Wei ---	 
      if (value == pdata->timaout_backlight_level) {
         printk("[BL] %s Auto dim backlight value\n",__func__);
