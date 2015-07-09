@@ -62,10 +62,15 @@
 #else
 #define MDSS_FB_NUM 2
 #endif
-extern void qpnp_wled_ctrl(bool enable); //Quarx Asus
+
 #define MAX_FBI_LIST 32
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
+
+extern void qpnp_wled_ctrl(bool enable); //Quarx Asus
+static int asus_fbi_list_index;
+struct fb_info *asus_fbi_list[MAX_FBI_LIST];
+int g_padfone_state = 0;    //0:phone mode, 1:hdmi tv, 2:pad mode
 
 static u32 mdss_fb_pseudo_palette[16] = {
 	0x00000000, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -880,6 +885,10 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	fbi_list[fbi_list_index++] = fbi;
 
+	//ASUS_BSP: Louis, point to each fbi_info +++
+	asus_fbi_list[asus_fbi_list_index++] = fbi;
+	//ASUS_BSP, Louis ---
+
 	platform_set_drvdata(pdev, mfd);
 
 	rc = mdss_fb_register(mfd);
@@ -1221,6 +1230,12 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	} else {
 		mfd->unset_bl_level = 0;
 	}
+
+#ifdef CONFIG_ASUS_HDMI
+/*ASUS jacob add for do not set backlight via mdss_fb in pad mode */
+	if(g_padfone_state == 2)
+		return;
+#endif
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
@@ -2815,7 +2830,9 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 	if (!ret)
 		mdss_fb_update_backlight(mfd);
 
-	//qpnp_wled_ctrl(1); //Quarx //Asus
+	if ((g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) && g_padfone_state != 2) {
+		qpnp_wled_ctrl(1);
+	}
 
 	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
 		mdss_fb_release_kickoff(mfd);

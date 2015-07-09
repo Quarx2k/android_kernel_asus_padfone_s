@@ -1790,6 +1790,28 @@ exit:
 	return ret;
 }
 
+void mdss_mdp_pp_argc_setup(struct msm_fb_data_type *mfd, bool bOn)
+{
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+	struct mdss_mdp_ctl *ctl = mdp5_data->ctl;
+	int disp_num;
+
+	if ((!ctl->mfd) || (!mdss_pp_res)) {
+		pr_err("%s: Fail to setup fb%d", __func__, mfd->fbi->node);
+		return;
+	}
+	disp_num = mfd->index;
+	pr_info("%s, fb%d, disp_num=%d\n",__func__, mfd->fbi->node, disp_num);
+	
+	if (bOn)
+		mdss_pp_res->pgc_disp_cfg[disp_num].flags = MDP_PP_OPS_ENABLE;
+	else
+		mdss_pp_res->pgc_disp_cfg[disp_num].flags = MDP_PP_OPS_DISABLE;
+	mdss_pp_res->pp_disp_flags[disp_num] |= PP_FLAGS_DIRTY_PGC;
+	mdss_mdp_pp_setup(ctl);
+}
+EXPORT_SYMBOL(mdss_mdp_pp_argc_setup);
+
 /*
  * Set dirty and write bits on features that were enabled so they will be
  * reconfigured

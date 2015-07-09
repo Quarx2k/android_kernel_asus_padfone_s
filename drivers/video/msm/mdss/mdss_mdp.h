@@ -175,6 +175,11 @@ struct mdss_mdp_perf_params {
 	u32 mdp_clk_rate;
 };
 
+struct mdss_mdp_bus_client_quota {
+    u64 bus_ab_quota;
+    u64 bus_ib_quota;
+};
+
 struct mdss_mdp_ctl {
 	u32 num;
 	char __iomem *base;

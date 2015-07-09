@@ -31,7 +31,7 @@
 #include <linux/fs.h>
 #include <linux/mfd/pm8xxx/pm8921.h>
 #include <linux/proc_fs.h>
-#include <linux/asusdebug.h>
+//#include <linux/asusdebug.h>
 #include <linux/of_gpio.h>
 
 #ifdef CONFIG_FASTBOOT
@@ -48,7 +48,7 @@ static int g_gpio_rf_sw_2=-1;
 #endif
 unsigned int g_firmwareSize = 16*1024;
 
-extern int PadFone_IN_OUT(int isin);
+extern int PadFone_IN_OUT(int isin); 
 static int is_first_bootup = 1;
 extern enum DEVICE_HWID g_ASUS_hwID;
 
@@ -215,11 +215,12 @@ int is_Mode_APROM(void){
 
 static void microp_reconnected(void);
 
-//extern bool asus_padstation_exist_realtime(void); //ASUS_BSP:joe1_++
+
+extern bool asus_padstation_exist_realtime(void); //ASUS_BSP:joe1_++ 
 
 // need modification
 bool pad_exist(void){
-        return 0;//asus_padstation_exist_realtime()?1:0; //ASUS_BSP:joe1_++
+        return asus_padstation_exist_realtime()?1:0; //ASUS_BSP:joe1_++
 }
 static int uP_i2c_read(u8 addr, int len, void *data)
 {
@@ -853,7 +854,7 @@ static void initP01(struct work_struct *work){
 			g_uPadErrStatus=0;      // reset error status to 0
 			switch_set_state(&pad_err_notify, 0);
 
-                    PadFone_IN_OUT(1); //notify wlan, pad is in
+                     PadFone_IN_OUT(1); //notify wlan, pad is in
 
 		}
 		else{
@@ -1959,6 +1960,7 @@ static int microp_resume( struct device *dev )
                 && uP_nuvoton_read_reg(MICROP_GPIO_OUTPUT_LEVEL, &out_reg) > 0
                 && uP_nuvoton_read_reg(MICROP_OPERATING_STATE, &state) > 0)
                     printk("[PAD DEBUG] state=%d, uP In=0x%8x, Out=0x%8x, gpio 9=%d\r\n", state, reg_input, out_reg, gpio_get_value(9));
+                //    ASUSEvtlog("[PAD DEBUG] state=%d, uP In=0x%8x, Out=0x%8x, gpio 9=%d\r\n", state, reg_input, out_reg, gpio_get_value(9));
                     if(st_MICROP_Off==state){
                             uP_nuvoton_read_reg(MICROP_POWER_ON_REASON, &reg_powerOnReason);
                             printk("reg_powerOnReason=%d\r\n", reg_powerOnReason);

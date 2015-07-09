@@ -315,6 +315,23 @@ EXPORT_SYMBOL(g_ASUS_hwID);
  }
  __setup("HW_ID=", set_hardware_id);
 
+bool g_Pad_Bootup = false;
+bool g_Android_Boot_Complete = false;
+EXPORT_SYMBOL(g_Pad_Bootup);
+EXPORT_SYMBOL(g_Android_Boot_Complete);
+
+static int set_bootup_mode(char *str)
+{
+    if ( strcmp("PAD", str) == 0 )
+        g_Pad_Bootup = true;
+    else
+        g_Pad_Bootup = false;
+
+    printk("g_Pad_Bootup = %d\n", g_Pad_Bootup);
+    return 0;
+}
+__setup("BOOT_UP=", set_bootup_mode);
+
 static const char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 static const char *panic_later, *panic_param;

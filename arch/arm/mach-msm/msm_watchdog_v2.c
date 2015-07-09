@@ -42,6 +42,9 @@
 #define SCM_SVC_SEC_WDOG_DIS	0x7
 
 static struct workqueue_struct *wdog_wq;
+//ASUS  BSP Eason_Chang +++
+static struct msm_watchdog_data *wdog_dd_asus = NULL;
+//ASUS  BSP Eason_Chang ---
 
 struct msm_watchdog_data {
 	unsigned int __iomem phys_base;
@@ -521,6 +524,15 @@ static int __devinit msm_wdog_dt_to_pdata(struct platform_device *pdev,
 	return 0;
 }
 
+//ASUS  BSP Eason_Chang +++
+void ASUS_pet_watchdog_v2(void)
+{
+	if (wdog_dd_asus->do_ipi_ping)
+		ping_other_cpus(wdog_dd_asus);
+	pet_watchdog(wdog_dd_asus);
+	printk("[WatchDogV2]\n");
+}
+//ASUS  BSP Eason_Chang ---
 static int __devinit msm_watchdog_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -535,6 +547,9 @@ static int __devinit msm_watchdog_probe(struct platform_device *pdev)
 	if (!pdev->dev.of_node || !enable)
 		return -ENODEV;
 	wdog_dd = kzalloc(sizeof(struct msm_watchdog_data), GFP_KERNEL);
+	//ASUS  BSP Eason_Chang +++
+	wdog_dd_asus = wdog_dd;
+	//ASUS  BSP Eason_Chang ---
 	if (!wdog_dd)
 		return -EIO;
 	ret = msm_wdog_dt_to_pdata(pdev, wdog_dd);

@@ -57,6 +57,8 @@ enum DEVICE_HWID
 	A90_UNKNOWN = 0xFF
 };
 extern enum DEVICE_HWID g_ASUS_hwID;
+extern bool g_Pad_Bootup;
+extern bool g_Android_Boot_Complete;
 
 static inline bool isPadfoneS(void) {
 	if (g_ASUS_hwID == PF500KL_ER1 ||

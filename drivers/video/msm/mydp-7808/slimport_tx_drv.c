@@ -29,6 +29,19 @@ extern int spreading_ctrl1;
 extern int spreading_ctrl2;
 extern int spreading_ctrl3;
 
+//+++ ASUS BSP Bernard
+//extern_asus_debug_mask(MYDP);
+
+#ifndef ASUS_DEV_WARN
+#define ASUS_DEV_WARN(args...) printk("[MYDP TX DRV] " args)
+#endif
+
+#ifndef ASUS_DEV_INFO
+#define ASUS_DEV_INFO(args... ) printk("[MYDP TX DRV] " args)
+#endif
+//--- ASUS BSP Bernard
+
+
 void mydp_dymSSC(const char *msg, int index){
 	sscanf(msg,"%*s 0x%x 0x%x 0x%x",&spreading_ctrl1,&spreading_ctrl2,&spreading_ctrl3);
 	DEV_DBG("#### %s : spreading_ctrl1= %d , spreading_ctrl2 = %d, spreading_ctrl3= %d ###\n", __FUNCTION__,spreading_ctrl1,spreading_ctrl2,spreading_ctrl3);
@@ -37,6 +50,8 @@ void mydp_dymSSC(const char *msg, int index){
 
 //ASUS BSP Wei ---
 
+extern ktime_t wakeup_starttime;
+extern bool measure_pad_wakeup_time;
 static int pad_resume_time_mask = 0;
 module_param_named(debug_mask, pad_resume_time_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -1076,14 +1091,14 @@ unchar sp_tx_chip_located(void)
 	unchar c3; //+++ ASUS BSP Bernard add
 	struct anx7808_platform_data *pdata; //+++ ASUS BSP Bernard add
 
-	printk("### start check myDP chip ###\n");
+	ASUS_DEV_INFO("### start check myDP chip ###\n");
 	
 	sp_tx_hardware_poweron(anx7808_client);
 	sp_read_reg(TX_P2, SP_TX_DEV_IDL_REG, &c1);
 	sp_read_reg(TX_P2, SP_TX_DEV_IDH_REG, &c2);
 //+++ ASUS BSP Bernard: extra for the 7805 env.
 	sp_read_reg(TX_P2, SP_TX_DEV_REV_REG , &c3);
-	printk("dev IDL = %.2x, deb IDH = %.2x, REV= %.2x\n",c1,c2,c3);
+	ASUS_DEV_WARN("dev IDL = %.2x, deb IDH = %.2x, REV= %.2x\n",c1,c2,c3);
 //--- ASUS BSP Bernard: extra for the 7805 env.
       
 	if ((c1 == 0x08) && (c2 == 0x78)) {
@@ -1980,7 +1995,9 @@ uint sp_tx_link_err_check(void)
 
 	DEV_ERR(" Err of Lane = %d, swing = %d\n", errl, g_swing_value);
     if (errl > 5){
+	//	ASUSEvtlog(" Err of Lane = %d, swing = %d\n", errl, g_swing_value);
     }	
+
 	return errl;
 }
 
@@ -2001,6 +2018,7 @@ uint sp_tx_link_err_check_1(void)
 
        if (errl){
 		DEV_ERR(" ## Err of Lane = %d\n", errl);
+		//ASUSEvtlog(" ## Err of Lane = %d\n", errl);
        }
 	   
 	return errl;
@@ -2255,6 +2273,7 @@ unchar sp_tx_get_cable_type(void)
 	unchar ds_port_preset = 0;
 	unchar ds_port_recoginze = 0;
 	int i,j;
+	int auxFailcount = 0;
 //ANX +++: (ver:20130105)
 	unchar c, ocm_status;
 //ANX ---: (ver:20130105)
@@ -2302,17 +2321,26 @@ unchar sp_tx_get_cable_type(void)
 
 		ds_port_recoginze = 1;
 
-		printk("--- Downstream ASUS Pad HDMI ---\n");
+		ASUS_DEV_INFO("--- Downstream ASUS Pad HDMI ---\n");
 		}
 		else
 		{
+		
 		DEV_NOTICE("Downstream is ASUS Pad DP\n");
 		sp_tx_rx_type = RX_DP;		
 		ds_port_recoginze = 1;
-
-		printk("--- Downstream ASUS Pad DP ---\n");
+		for (i = 0; i < 5; i++) {
+			if (AUX_ERR == sp_tx_aux_dpcdread_bytes(0x00, 0x02, DPCD_SINK_COUNT, 1, &c)) {
+				DEV_ERR(" AUX access error");
+				auxFailcount++;
+				msleep(200);
+			}
+		}
+		ASUS_DEV_INFO("--- Downstream ASUS Pad DP ---\n");
 		
 		}
+		if(auxFailcount > 3 )
+			return 0;
 		if (ds_port_recoginze)
 			return 1;
 	}
@@ -2443,7 +2471,7 @@ bool sp_tx_get_asus_id(void)
  	int try_count=5;
  	if (myDP_force_pad_mode)
  	{
-		printk("force pad mode\n");
+		ASUS_DEV_WARN("force pad mode\n");
  		return 1;
  	}
  	if (!myDP_TV_mode)
@@ -2451,7 +2479,7 @@ bool sp_tx_get_asus_id(void)
 
 			while(try_count){
 				ret = MyDP_asus_padstation_exist_realtime();
-				printk("check Pad status = (%d)\n", ret);
+				ASUS_DEV_WARN("check Pad status = (%d)\n", ret);
 				if(ret==1)
 					return ret;
 				else
@@ -2462,7 +2490,7 @@ bool sp_tx_get_asus_id(void)
  	}
 	else
 	{
-		printk("TV mode\n");
+		ASUS_DEV_WARN("TV mode\n");
 		return 0;
 	}
 }
@@ -2495,7 +2523,7 @@ bool sp_tx_get_dp_connection(void)
 //ASUS BSP +++ : larry lai for pad solution
 	if(sp_tx_asus_pad) 
 	{
-		printk("sp_tx_get_dp_connection (ignore DP connection check)\n");
+		ASUS_DEV_INFO("sp_tx_get_dp_connection (ignore DP connection check)\n");
 
 		msleep(50);
 //=============================================================================
@@ -2509,7 +2537,7 @@ bool sp_tx_get_dp_connection(void)
             if (c & 0x20)
                sp_tx_aux_dpcdwrite_byte(0x00, 0x06, 0x00, 0x20);
 #endif
-            printk("sp_tx_get_dp_connection by pass check sink count\n");
+            ASUS_DEV_INFO("sp_tx_get_dp_connection by pass check sink count\n");
 			return TRUE;															
 
 //ASUS BSP --- : larry#20140106 speed up suspend/resume timing in pad
@@ -2889,7 +2917,7 @@ void dp_ac_charger(bool enable)
 
 int dp_registerChargerInOutNotification(void (*callback)(int))
 {
-	printk("%s +++\n",__FUNCTION__);
+	ASUS_DEV_WARN("%s +++\n",__FUNCTION__);
 
 	notify_ac_charger_func_ptr = callback;
 	return 0;
@@ -2947,6 +2975,7 @@ static void sp_tx_irq_isr(void)
 					if(g_MyDP_HDCP_FAIL_COUNT>5){
 						g_MyDP_HDCP_FAIL_COUNT=0;
 						DEV_ERR("%s:MyDP_HDCP_SYNC_LOST ++++\n",__func__);
+						//ASUSEvtlog("%s:MyDP_HDCP_SYNC_LOST ++++\n",__func__);
 						hdcp_enable=0;
 					}
 				}
@@ -3270,6 +3299,7 @@ void sp_tx_hdcp_process(void)
 		sp_tx_power_down(SP_TX_PWR_HDCP);
 		sp_tx_video_mute(0);
 		sp_tx_set_sys_state(STATE_PLAY_BACK);
+		//ASUSEvtlog("[MyDP] MyDP run TV mode in Pad \n");
 		return;
 	}
 //ANX +++: (ver0.4)
@@ -3570,7 +3600,14 @@ void sp_tx_sw_hdcp_process(void)
 //ASUS BSP Wei ---
 
 extern int g_isMyDP_poweron; //ASUS BSP wei +++
-
+//ASUS BSP wei +++
+#ifdef CONFIG_EEPROM_NUVOTON
+#include <linux/microp.h>
+#include <linux/microp_api.h>
+#include <linux/microp_pin_def.h>
+#endif
+//extern int g_pad_speaker_retry;
+//ASUS BSP wei ---
 void sp_tx_set_sys_state(enum SP_TX_System_State ss)
 {
 #ifdef CONFIG_ASUS_HDMI
@@ -3615,7 +3652,30 @@ void sp_tx_set_sys_state(enum SP_TX_System_State ss)
 		break;
 	case STATE_PLAY_BACK:
 		sp_tx_system_state = STATE_PLAY_BACK;
-		DEV_NOTICE("STATE_PLAY_BACK");	
+		DEV_NOTICE("STATE_PLAY_BACK");
+	#if 0
+		if(g_pad_speaker_retry) {
+			DEV_NOTICE("Enable pad_speaker\n");
+			AX_MicroP_setGPIOOutputPin(OUT_uP_SPK_EN, 1);
+			g_pad_speaker_retry = 0;
+		}
+	#endif
+	
+#ifdef CONFIG_ASUS_RESUME_TIME_CALCULATION
+//ASUS BSP++ Vincent
+		if(measure_pad_wakeup_time){
+			rettime = ktime_get();
+			usecs64 = ktime_to_ns(ktime_sub(rettime, wakeup_starttime));
+			do_div(usecs64, NSEC_PER_USEC);
+			usecs = usecs64;					
+			measure_pad_wakeup_time = false;
+			if(pad_resume_time_mask || ((usecs / USEC_PER_MSEC) + 400 > 2500)){
+				printk("\n[PM]Pad MYDP ready after %ld ms\n", usecs / USEC_PER_MSEC);			
+				printk("[PM]Pad system-wakeup takes about %ld ms\n", (usecs / USEC_PER_MSEC) + 400);
+			}
+		}
+//ASUS BSP-- Vincent	
+#endif
 
 //ASUS BSP Wei +++
 #ifdef CONFIG_ASUS_HDMI
@@ -3652,6 +3712,7 @@ void sp_tx_int_irq_handler(void)
 	   	    DEV_DBG("sp_tx_int   C1=0x%x,c2=0x%x,c3=0x%x,c4=0x%x,c5=0x%x\n",c1,c2,c3,c4,c5);
 		    if (g_hdmi_rx_vsync_change > 1)
 			{
+			  //  ASUSEvtlog("[myDP]sp_tx_int   C1=0x%x,c2=0x%x,c3=0x%x,c4=0x%x,c5=0x%x\n",c1,c2,c3,c4,c5);
 			}
 		}
 	}
@@ -3842,6 +3903,7 @@ static void hdmi_rx_restart_audio_chk(void)
 static void hdmi_rx_set_sys_state(enum HDMI_RX_System_State ss)
 {
 	if (hdmi_system_state != ss) {
+		ASUS_DEV_INFO("");
 		hdmi_system_state = ss;
 
 		switch (ss) {
@@ -4738,7 +4800,7 @@ error:
 
 		if ( (iFailCount % HPD_RECHECK) == 0 )
 		{
-			printk("%s: iFailCount=%d; recheck hpd status!  (return_value=%d) \n", __func__, iFailCount,return_value);
+			ASUS_DEV_WARN("%s: iFailCount=%d; recheck hpd status!  (return_value=%d) \n", __func__, iFailCount,return_value);
 #ifdef CONFIG_ASUS_HDMI
 		//	hdmi_hpd_state_recheck();
 #endif
@@ -4748,7 +4810,7 @@ error:
 	{
 		iFailCount = 0;
 	//	hdmi_tryCount=0;
-		printk("%s: clear iFailCount=>%d  (return_value=%d) \n", __func__, iFailCount,return_value);
+		ASUS_DEV_INFO("%s: clear iFailCount=>%d  (return_value=%d) \n", __func__, iFailCount,return_value);
 	}
 //ASUS_BSP: joe1_++: for hpd re-check
 
@@ -4759,6 +4821,7 @@ error:
 //ANX +++: (ver0.4)			
 
 extern int g_Pad_LT_Fail_Count;
+extern int gMyDPCTSconfig;
 #ifdef CONFIG_EEPROM_NUVOTON
 extern void reportPadStationI2CFail(char *devname);
 #endif
@@ -4826,7 +4889,7 @@ unchar sp_tx_config_hdmi_pad(void)
 	sp_write_reg(TX_P0, SP_TX_DOWN_SPREADING_CTRL2, 0x01);
 	sp_write_reg(TX_P0, SP_TX_DOWN_SPREADING_CTRL3, 0x76);
 */	
-	printk("*** Config SSC 0.4 ***");
+	ASUS_DEV_INFO("*** Config SSC 0.4 ***");
 
 	if(g_enable_dynamic_ssc){
 		DEV_NOTICE("%s: enable dynamic ssc SPREADING_CTRL1:%d,SPREADING_CTRL2:%d,SPREADING_CTRL3:%d, \n",__func__,spreading_ctrl1,spreading_ctrl2,spreading_ctrl3);
@@ -4868,11 +4931,11 @@ unchar sp_tx_config_hdmi_pad(void)
 		
 		sp_write_reg(TX_P0, 0xA3, (g_swing_value)  | (g_pre_emphis_value << 3) );	
 		sp_read_reg(TX_P0, 0xA3, &bSwing);
-		printk("@@@ lane0,Swing/Emp = %x @@@\n", bSwing);	  //0x2E , 600 mv , 3.5db	 
+		ASUS_DEV_WARN("@@@ lane0,Swing/Emp = %x @@@\n", bSwing);	  //0x2E , 600 mv , 3.5db	 
 	}
 	else
 	{
-		printk("@@@ not force swing value @@@\n");			
+		ASUS_DEV_WARN("@@@ not force swing value @@@\n");			
 	}
 
 	sp_tx_enhancemode_set();
@@ -4891,7 +4954,7 @@ unchar sp_tx_config_hdmi_pad(void)
 		pad_sp_tx_lt_done_int_handler();
 
 		sp_tx_aux_dpcdread_bytes(0x00, 0x02, 0x02, 1, bytebuf);		
-		printk("sp_tx_config_hdmi_pad , LANE0_1_STATUS = 0x%x\n", bytebuf[0]);
+		ASUS_DEV_WARN("sp_tx_config_hdmi_pad , LANE0_1_STATUS = 0x%x\n", bytebuf[0]);
 		
 		if ((bytebuf[0] & 0x07) != 0x07) {
 			sp_tx_hw_lt_enable = 0;
@@ -4900,7 +4963,7 @@ unchar sp_tx_config_hdmi_pad(void)
 		} else {
 			sp_tx_hw_lt_done = 1;
 			sp_read_reg(TX_P0, 0xA3, &bSwing);	
-			printk("after link training, lane0,Swing/Emp = %d\n", bSwing);	
+			ASUS_DEV_WARN("after link training, lane0,Swing/Emp = %d\n", bSwing);	
 			if (myDP_DP_Dongle)
 			{
 	                        if (g_force_swing_value)
@@ -4917,18 +4980,21 @@ unchar sp_tx_config_hdmi_pad(void)
 						//ASUS BSP wei +++
 						if(g_Pad_LT_Fail_Count>=5){
 							g_Pad_LT_Fail_Count=0;
-#ifdef CONFIG_EEPROM_NUVOTON
-							reportPadStationI2CFail("MyDP");
-#endif
 							DEV_NOTICE("____________Hardware LT Fail in Pad mode \n");
-							return 1;	
+							if(gMyDPCTSconfig !=1){
+#ifdef CONFIG_EEPROM_NUVOTON
+							 reportPadStationI2CFail("MyDP");
+#endif
+							 return 1;	
+							}
+							
 						}
 						//ASUS BSP wei ---
 						sp_write_reg(TX_P0, 0xA3, (g_swing_value)  | (g_pre_emphis_value << 3) );	
 						sp_read_reg(TX_P0, 0xA3, &bSwing);
-						printk("lane0,Swing/Emp = %x @@@\n", bSwing);	  //0x2E , 600 mv , 3.5db	 
+						ASUS_DEV_WARN("lane0,Swing/Emp = %x @@@\n", bSwing);	  //0x2E , 600 mv , 3.5db	 
 						sp_tx_aux_dpcdread_bytes(0x00, 0x02, 0x06, 1, &c);
-				              printk("sp_tx_config_hdmi_pad , ADJUST_REQUEST_LANE0_1 = 0x%x\n", c);
+				              ASUS_DEV_WARN("sp_tx_config_hdmi_pad , ADJUST_REQUEST_LANE0_1 = 0x%x\n", c);
 					}
 				}
 			}
@@ -4987,6 +5053,7 @@ void hdmi_rx_int_irq_handler(void)
 
 		    if (g_hdmi_rx_vsync_change > 1)
 		    	{
+			    //ASUSEvtlog("[myDP]hdmi rx:c4=0x%x,vsync change=0x%x\n",c4, g_hdmi_rx_vsync_change);
 		        DEV_DBG("vsync change = 0x%x\n", g_hdmi_rx_vsync_change);					 
 		    	}
 			
@@ -5215,7 +5282,7 @@ void sp_tx_hdmi_error_power_down(void)
 {
 	mutex_lock(&g_anx7808->lock);
 	if(g_anx7808 && sp_tx_pd_mode==0){
-		printk("HDMI call MyDP error power down\n");
+		ASUS_DEV_WARN("HDMI call MyDP error power down\n");
 		sp_tx_vbus_powerdown();
 	//ANX : (ver0.4)					
 		sp_tx_pull_down_id(FALSE);

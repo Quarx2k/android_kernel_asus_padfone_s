@@ -22,8 +22,18 @@ static BLOCKING_NOTIFIER_HEAD(microp_chain_head);
 
 
 int micropSendNotify(unsigned long val)
-{ 
-	return 0;
+{
+       int ret=0;
+       pr_debug("%s++ , val =%lu\r\n",__FUNCTION__,val);
+       if(val==P01_ADD || val==P01_REMOVE)
+               ret=(blocking_notifier_call_chain(&microp_chain_head, val, (void *)"microp") == NOTIFY_BAD) ? -EINVAL : 0;
+       else
+               ret=(blocking_notifier_call_chain(&microp_chain_head, val, (void *)"microp") == NOTIFY_BAD) ? -EINVAL : 0;
+       pr_debug("%s-- , val =%lu\r\n",__FUNCTION__,val);
+       if(-EINVAL==ret)
+            printk("notify callback %lu failed and terminated\r\n", val);
+       
+	return ret;
 }
 EXPORT_SYMBOL_GPL(micropSendNotify);
 

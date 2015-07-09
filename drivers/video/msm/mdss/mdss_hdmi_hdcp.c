@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2013 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,13 +14,22 @@
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+//ASUS bsp wei +++
+#include <linux/wakelock.h>  
+//ASUS bsp wei ---
 #include <linux/stat.h>
 
 #include "mdss_hdmi_hdcp.h"
 #include "video/msm_hdmi_hdcp_mgr.h"
-
+#define ASUS_P06_STATUS_GPIO 75
 #define HDCP_STATE_NAME (hdcp_state_name(hdcp_ctrl->hdcp_state))
-
+//ASUS bsp wei +++ 
+int hdcp_fail_count=0;
+#ifdef CONFIG_SLIMPORT_ANX7808
+extern int g_isMyDP_poweron;     
+#endif
+int hdcp_part1_failed_count=0;
+//ASUS bsp wei ---
 /* HDCP Keys state based on HDMI_HDCP_LINK0_STATUS:KEYS_STATE */
 #define HDCP_KEYS_STATE_NO_KEYS		0
 #define HDCP_KEYS_STATE_NOT_CHECKED	1
@@ -43,8 +52,9 @@ struct hdmi_hdcp_ctrl {
 	struct work_struct hdcp_int_work;
 	struct completion r0_checked;
 	struct hdmi_hdcp_init_data init_data;
+	struct wake_lock hdcp_wake_lock;	//ASUS bsp wei +++ 
 };
-
+struct hdmi_hdcp_ctrl *g_hdcp_ctrl = NULL;	//ASUS bsp wei +++ 
 const char *hdcp_state_name(enum hdmi_hdcp_state hdcp_state)
 {
 	switch (hdcp_state) {
@@ -155,7 +165,7 @@ static void hdmi_hdcp_hw_ddc_clean(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	u32 ddc_xfer_done, ddc_xfer_req, ddc_hw_done;
 	u32 ddc_hw_not_ready;
 	u32 timeout_count;
-
+	return; //ASUS Wei_Lai+++
 	if (!hdcp_ctrl || !hdcp_ctrl->init_data.core_io) {
 		DEV_ERR("%s: invalid input\n", __func__);
 		return;
@@ -287,6 +297,7 @@ static int hdmi_hdcp_authentication_part1(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	if (rc) {
 		DEV_ERR("%s: %s: BCAPS read failed\n", __func__,
 			HDCP_STATE_NAME);
+		hdcp_part1_failed_count++;
 		goto error;
 	}
 	DEV_DBG("%s: %s: BCAPS=%02x\n", __func__, HDCP_STATE_NAME, bcaps);
@@ -902,7 +913,7 @@ static void hdmi_hdcp_notify_topology(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	DEV_DBG("%s Event Sent: %s msgID = %s srcID = %s\n", __func__,
 			envp[0], envp[1], envp[2]);
 }
-
+extern bool asus_padstation_exist_realtime(void); 
 static void hdmi_hdcp_int_work(struct work_struct *work)
 {
 	struct hdmi_hdcp_ctrl *hdcp_ctrl = container_of(work,
@@ -916,30 +927,50 @@ static void hdmi_hdcp_int_work(struct work_struct *work)
 	mutex_lock(hdcp_ctrl->init_data.mutex);
 	hdcp_ctrl->hdcp_state = HDCP_STATE_AUTH_FAIL;
 	mutex_unlock(hdcp_ctrl->init_data.mutex);
-
+	if(asus_padstation_exist_realtime())
+		hdcp_fail_count++;
 	if (hdcp_ctrl->init_data.notify_status) {
 		hdcp_ctrl->init_data.notify_status(
 			hdcp_ctrl->init_data.cb_data,
 			hdcp_ctrl->hdcp_state);
 	}
 } /* hdmi_hdcp_int_work */
-
+//ASUS BSP wei +++
+#ifdef CONFIG_SLIMPORT_ANX7808
+extern void sp_tx_hdmi_error_power_down(void);
+#endif
+//ASUS BSP wei ---
 static void hdmi_hdcp_auth_work(struct work_struct *work)
 {
-	int rc;
+	int rc=1; //ASUS bsp wei +++ 
 	struct delayed_work *dw = to_delayed_work(work);
 	struct hdmi_hdcp_ctrl *hdcp_ctrl = container_of(dw,
 		struct hdmi_hdcp_ctrl, hdcp_auth_work);
 	struct dss_io_data *io;
-
+	int mydpPowerCount=50; //ASUS bsp wei +++ 
 	if (!hdcp_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
 		return;
 	}
-
+	DEV_DBG("HDMI:check MyDP power \n");
+	wake_lock(&hdcp_ctrl->hdcp_wake_lock);
+#ifdef CONFIG_SLIMPORT_ANX7808
+	while(g_isMyDP_poweron==0 && mydpPowerCount>0){
+			msleep(10);
+			mydpPowerCount--;
+	}
+#endif
+	if(mydpPowerCount!=0)
+		DEV_INFO("%s:HDMI:MyDP is power on\n",__func__);
+	else{
+		DEV_INFO("%s:HDMI:MyDP is power off\n",__func__);
+		goto error;
+	}
+	 
 	if (HDCP_STATE_AUTHENTICATING != hdcp_ctrl->hdcp_state) {
-		DEV_DBG("%s: %s: invalid state. returning\n", __func__,
+		DEV_INFO("%s: %s: invalid state. returning\n", __func__,
 			HDCP_STATE_NAME);
+		wake_unlock(&hdcp_ctrl->hdcp_wake_lock);
 		return;
 	}
 
@@ -950,7 +981,7 @@ static void hdmi_hdcp_auth_work(struct work_struct *work)
 
 	rc = hdmi_hdcp_authentication_part1(hdcp_ctrl);
 	if (rc) {
-		DEV_DBG("%s: %s: HDCP Auth Part I failed\n", __func__,
+		DEV_ERR("%s: %s: HDCP Auth Part I failed\n", __func__,
 			HDCP_STATE_NAME);
 		goto error;
 	}
@@ -958,7 +989,7 @@ static void hdmi_hdcp_auth_work(struct work_struct *work)
 	if (hdcp_ctrl->current_tp.ds_type == DS_REPEATER) {
 		rc = hdmi_hdcp_authentication_part2(hdcp_ctrl);
 		if (rc) {
-			DEV_DBG("%s: %s: HDCP Auth Part II failed\n", __func__,
+			DEV_ERR("%s: %s: HDCP Auth Part II failed\n", __func__,
 				HDCP_STATE_NAME);
 			goto error;
 		}
@@ -981,8 +1012,17 @@ error:
 	if (HDCP_STATE_AUTHENTICATING == hdcp_ctrl->hdcp_state) {
 		if (rc) {
 			hdcp_ctrl->hdcp_state = HDCP_STATE_AUTH_FAIL;
-		} else {
+			if(hdcp_part1_failed_count>5 ){
+				hdcp_part1_failed_count=0;
+#ifdef CONFIG_SLIMPORT_ANX7808
+				sp_tx_hdmi_error_power_down();
+#endif
+				msleep(10);
+			}
+		}
+		else{
 			hdcp_ctrl->hdcp_state = HDCP_STATE_AUTHENTICATED;
+			hdcp_part1_failed_count=0;
 			hdcp_ctrl->auth_retries = 0;
 			hdmi_hdcp_cache_topology(hdcp_ctrl);
 			hdmi_hdcp_notify_topology(hdcp_ctrl);
@@ -998,10 +1038,11 @@ error:
 				hdcp_ctrl->hdcp_state);
 		}
 	} else {
-		DEV_DBG("%s: %s: HDCP state changed during authentication\n",
+		DEV_INFO("%s: %s: HDCP state changed during authentication\n",
 			__func__, HDCP_STATE_NAME);
 		mutex_unlock(hdcp_ctrl->init_data.mutex);
 	}
+	wake_unlock(&hdcp_ctrl->hdcp_wake_lock);	//ASUS bsp wei +++ 
 	return;
 } /* hdmi_hdcp_auth_work */
 
@@ -1015,12 +1056,12 @@ int hdmi_hdcp_authenticate(void *input)
 	}
 
 	if (HDCP_STATE_INACTIVE != hdcp_ctrl->hdcp_state) {
-		DEV_DBG("%s: %s: already active or activating. returning\n",
+		DEV_INFO("%s: %s: already active or activating. returning\n",
 			__func__, HDCP_STATE_NAME);
 		return 0;
 	}
 
-	DEV_DBG("%s: %s: Queuing work to start HDCP authentication", __func__,
+	DEV_INFO("%s: %s: Queuing work to start HDCP authentication", __func__,
 		HDCP_STATE_NAME);
 	mutex_lock(hdcp_ctrl->init_data.mutex);
 	hdcp_ctrl->hdcp_state = HDCP_STATE_AUTHENTICATING;
@@ -1039,6 +1080,7 @@ int hdmi_hdcp_authenticate(void *input)
  * Reduce hdcp link to regular hdmi data link with hdcp disabled so any
  * un-secure like UI & menu still can be sent over HDMI and display.
  */
+ #if 0
 #define AUTH_RETRIES_TIME (30)
 static int hdmi_msm_if_abort_reauth(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 {
@@ -1060,6 +1102,7 @@ static int hdmi_msm_if_abort_reauth(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 
 	return ret;
 }
+#endif 
 
 int hdmi_hdcp_reauthenticate(void *input)
 {
@@ -1104,14 +1147,14 @@ int hdmi_hdcp_reauthenticate(void *input)
 	DSS_REG_W(hdcp_ctrl->init_data.core_io, HDMI_HPD_CTRL,
 		DSS_REG_R(hdcp_ctrl->init_data.core_io,
 		HDMI_HPD_CTRL) | BIT(28));
-
+#if 0
 	ret = hdmi_msm_if_abort_reauth(hdcp_ctrl);
 
 	if (ret) {
 		DEV_ERR("%s: abort reauthentication!\n", __func__);
 		return ret;
 	}
-
+#endif
 	/* Restart authentication attempt */
 	DEV_DBG("%s: %s: Scheduling work to start HDCP authentication",
 		__func__, HDCP_STATE_NAME);
@@ -1359,7 +1402,28 @@ void hdmi_hdcp_deinit(void *input)
 
 	kfree(hdcp_ctrl);
 } /* hdmi_hdcp_deinit */
-
+//ASUS BSP wei +++
+ void hdmi_hdcp_recheck(void){
+ 			DEV_INFO("HDMI:HDCP recheck\n");
+			return;
+			if(g_hdcp_ctrl)
+				if(HDCP_STATE_AUTHENTICATED == g_hdcp_ctrl->hdcp_state){
+#if 0
+					queue_work(g_hdcp_ctrl->init_data.workq,
+					&g_hdcp_ctrl->hdcp_int_work);
+#endif
+					mutex_lock(g_hdcp_ctrl->init_data.mutex);
+					g_hdcp_ctrl->hdcp_state = HDCP_STATE_AUTH_FAIL;
+					mutex_unlock(g_hdcp_ctrl->init_data.mutex);
+					if (g_hdcp_ctrl->init_data.notify_status) {
+						g_hdcp_ctrl->init_data.notify_status(
+							g_hdcp_ctrl->init_data.cb_data,
+							g_hdcp_ctrl->hdcp_state);
+					}
+			}
+ }
+// EXPORT_SYMBOL(hdmi_hdcp_recheck);
+//ASUS BSP wei ---
 void *hdmi_hdcp_init(struct hdmi_hdcp_init_data *init_data)
 {
 	struct hdmi_hdcp_ctrl *hdcp_ctrl = NULL;
@@ -1379,7 +1443,7 @@ void *hdmi_hdcp_init(struct hdmi_hdcp_init_data *init_data)
 	}
 
 	hdcp_ctrl->init_data = *init_data;
-
+	wake_lock_init(&hdcp_ctrl->hdcp_wake_lock, WAKE_LOCK_SUSPEND, "HDCP_WAKE"); //ASUS BSP Wei +++
 	if (sysfs_create_group(init_data->sysfs_kobj,
 				&hdmi_hdcp_fs_attr_group)) {
 		DEV_ERR("%s: hdcp sysfs group creation failed\n", __func__);
@@ -1390,6 +1454,7 @@ void *hdmi_hdcp_init(struct hdmi_hdcp_init_data *init_data)
 	INIT_WORK(&hdcp_ctrl->hdcp_int_work, hdmi_hdcp_int_work);
 
 	hdcp_ctrl->hdcp_state = HDCP_STATE_INACTIVE;
+	g_hdcp_ctrl=hdcp_ctrl ;  //ASUS BSP wei +++
 	init_completion(&hdcp_ctrl->r0_checked);
 	DEV_DBG("%s: HDCP module initialized. HDCP_STATE=%s", __func__,
 		HDCP_STATE_NAME);
