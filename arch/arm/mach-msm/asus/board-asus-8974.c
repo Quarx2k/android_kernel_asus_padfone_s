@@ -212,7 +212,6 @@ static struct platform_device *msm_a91_sensor_devices[] = {
  */
 void __init msm8974_add_drivers(void)
 {
-	msm_smem_init();
 	msm_init_modem_notifier_list();
 	msm_smd_init();
 	msm_rpm_driver_init();
