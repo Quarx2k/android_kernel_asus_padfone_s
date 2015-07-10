@@ -273,7 +273,7 @@ obj-$(CONFIG_ARCH_MSM9615) += clock-local.o clock-9615.o acpuclock-9615.o clock-
 obj-$(CONFIG_ARCH_APQ8084) += board-8084.o board-8084-gpiomux.o
 obj-$(CONFIG_ARCH_APQ8084) += clock-8084.o
 ifdef CONFIG_ASUS_PF500KL
-obj-$(CONFIG_ARCH_MSM8974) += asus/board-asus-8974.o board-8974-gpiomux.o asus/asus_gpio_pinmux.o
+obj-$(CONFIG_ARCH_MSM8974) += asus/ board-8974-gpiomux.o
 else
 obj-$(CONFIG_ARCH_MSM8974) += board-8974.o board-8974-gpiomux.o
 endif
