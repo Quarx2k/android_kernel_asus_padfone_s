@@ -48,7 +48,7 @@ struct i2c_client *anx7808_client;
 
 int g_i2c_error_count = 0;
 unchar g_hdmi_rx_vsync_change = 0;
-
+static int cableInserted = 0;
 //+++ ASUS BSP Bernard
 //asus_debug_mask(MYDP);
 
@@ -98,6 +98,12 @@ int g_enable_dynamic_ssc=0;
 int spreading_ctrl1=0xc0;
 int spreading_ctrl2=0x00;
 int spreading_ctrl3=0x75;
+
+
+int isHdmiConnected(void) {
+	printk("Cable: %d\n", cableInserted);
+	return cableInserted;
+}
 
 struct mydp_command mydp_cmd_tb[] = {
 	{DYM_SSC,sizeof(DYM_SSC),mydp_dymSSC}
@@ -1726,13 +1732,14 @@ static irqreturn_t anx7808_cbl_det_isr(int irq, void *data)
 	
 	if (gpio_get_value(anx7808->pdata->gpio_cbl_det) && (g_i2c_error_count<=20))  {
        		wake_lock(&anx7808->slimport_lock);
+		cableInserted = 1;
 		DEV_NOTICE("%s : detect cable insertion\n", __func__);
 			queue_delayed_work(anx7808->workqueue, &anx7808->work, 0);
 
 	
 	} else {
 		DEV_NOTICE("%s : detect cable removal\n", __func__);
-
+		cableInserted = 0;
 //ASUS_BSP: joe1_++: clear edid while hdmi plug out
 		memset( bedid_firstblock, 0, sizeof(bedid_firstblock) );
 		memset( bedid_extblock, 0, sizeof(bedid_extblock) );
