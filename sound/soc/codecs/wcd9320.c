@@ -6845,8 +6845,8 @@ void ApplyA68SPKGain(void)
     rx7_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL);
     lineout1 = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN);
     lineout2 = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN);
-   // printk("[Audio][MaxxAudio] before spkdrvgain:0x%x rx7_vol:0x%x lineout1:0x%x lineout2:0x%x\n",
-   //         spkdrvgain, rx7_vol, lineout1, lineout2);
+    printk("[Audio][MaxxAudio] before spkdrvgain:0x%x rx7_vol:0x%x lineout1:0x%x lineout2:0x%x\n",
+            spkdrvgain, rx7_vol, lineout1, lineout2);
 
     if (g_taiko->spkr_pa_widget_on) {
         wcd9xxx_reg_write(&g_wcd9xxx->core_res, TAIKO_A_SPKR_DRV_GAIN, 0x05);
@@ -6864,7 +6864,7 @@ void ApplyA68SPKGain(void)
     rx7_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL);
     lineout1 = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_1_GAIN);
     lineout2 = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_RX_LINE_2_GAIN);
-  //  printk("[Audio][MaxxAudio] after spkdrvgain:0x%x rx7_vol:0x%x lineout1:0x%x lineout2:0x%x\n", spkdrvgain, rx7_vol, lineout1, lineout2);
+    printk("[Audio][MaxxAudio] after spkdrvgain:0x%x rx7_vol:0x%x lineout1:0x%x lineout2:0x%x\n", spkdrvgain, rx7_vol, lineout1, lineout2);
 }
 EXPORT_SYMBOL_GPL(ApplyA68SPKGain);
 
@@ -6873,7 +6873,7 @@ void ApplyHeadsetGain(void)
 	u32 rx1_vol, rx2_vol;
 	rx1_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL);
 	rx2_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL);
-//	printk("[Audio] before rx1_vol:0x%x rx2_vol:0x%x\n", rx1_vol, rx2_vol);
+	printk("[Audio] before rx1_vol:0x%x rx2_vol:0x%x\n", rx1_vol, rx2_vol);
 
 	if (g_taiko->spkr_pa_widget_on) {
 		if (gOutAcdbId == 205) {
@@ -6894,7 +6894,7 @@ void ApplyHeadsetGain(void)
 
 	rx1_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL);
 	rx2_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX2_VOL_CTL_B2_CTL);
-	//printk("[Audio] after rx1_vol:0x%x rx2_vol:0x%x\n", rx1_vol, rx2_vol);
+	printk("[Audio] after rx1_vol:0x%x rx2_vol:0x%x\n", rx1_vol, rx2_vol);
 }
 EXPORT_SYMBOL_GPL(ApplyHeadsetGain);
 #endif

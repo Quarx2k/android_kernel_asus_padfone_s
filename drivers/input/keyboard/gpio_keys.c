@@ -526,12 +526,12 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 //ASUS BSP freddy+++ fix TT 281235:Power key suspend/resume fail
 	if ((g_keystate != state) && (!state))
 	{
-	//	printk("[Gpio_keys] %s: short_pressed case \n",__func__);
+		printk("[Gpio_keys] %s: short_pressed case \n",__func__);
 		state = g_keystate;
 	}
 //ASUS BSP freddy--- fix TT 281235:Power key suspend/resume fail
-//	printk("[Gpio_keys] %s:key code=%d  state=%s \n",__func__,
-//		button->code,state ? "press" : "release");  //ASUS BSP freddy+ add log for report keycode function.
+	printk("[Gpio_keys] %s:key code=%d  state=%s \n",__func__,
+		button->code,state ? "press" : "release");  //ASUS BSP freddy+ add log for report keycode function.
 //ASUS_BSP + [ASDF]long press power key 6sec,reset device.. ++
 	if (gpio_get_value_cansleep(power_key) == 0)
 	{
@@ -589,7 +589,7 @@ static void gpio_keys_gpio_timer(unsigned long _data)
 //ASUS BSP freddy+++ fix TT 281235:Power key suspend/resume fail
 	const struct gpio_keys_button *button = bdata->button;
 	g_keystate = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;//memo button->active_low==1;
-//	printk("[Gpio_keys] after debounce,gpio=%d key state=%d \n",button->gpio, g_keystate);
+	printk("[Gpio_keys] after debounce,gpio=%d key state=%d \n",button->gpio, g_keystate);
 //ASUS BSP freddy--- fix TT 281235:Power key suspend/resume fail
 	schedule_work(&bdata->work);
 }
@@ -598,8 +598,8 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 {
 	struct gpio_button_data *bdata = dev_id;
 //ASUS BSP freddy+++ fix TT 281235:Power key suspend/resume fail
-	//const struct gpio_keys_button *button = bdata->button;
-	//int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;//memo button->active_low==1;
+	const struct gpio_keys_button *button = bdata->button;
+	int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;//memo button->active_low==1;
 	BUG_ON(irq != bdata->irq);
 	g_keycheck_abort = 1;
 //ASUS BSP freddy--- fix TT 281235:Power key suspend/resume fail
@@ -608,7 +608,7 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 			jiffies + msecs_to_jiffies(bdata->timer_debounce));
 	else
 		schedule_work(&bdata->work);
-//	printk("[Gpio_keys]debouncing,irq_number=%d key state=%d \n",irq, state);
+	printk("[Gpio_keys]debouncing,irq_number=%d key state=%d \n",irq, state);
 	return IRQ_HANDLED;
 }
 

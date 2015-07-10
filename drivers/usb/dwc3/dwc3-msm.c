@@ -2407,7 +2407,7 @@ static enum power_supply_property dwc3_msm_pm_power_props_usb[] = {
 	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_SCOPE,
 };
-#ifndef CONFIG_SLIMPORT_ANX7808
+
 static void dwc3_init_adc_work(struct work_struct *w);
 
 static void dwc3_ext_notify_online(void *ctx, int on)
@@ -2593,7 +2593,6 @@ static ssize_t adc_enable_store(struct device *dev,
 
 static DEVICE_ATTR(adc_enable, S_IRUGO | S_IWUSR, adc_enable_show,
 		adc_enable_store);
-#endif
 
 static int dwc3_msm_ext_chg_open(struct inode *inode, struct file *file)
 {
@@ -2744,6 +2743,10 @@ unreg_chrdev:
 }
 
 #ifdef CONFIG_SLIMPORT_ANX7808
+static void asus_dwc3_set_id_state(int online);
+#endif
+
+#ifdef CONFIG_SLIMPORT_ANX7808
 static void asus_dwc3_set_id_state(int online)
 {
 	if (online) {
@@ -2762,9 +2765,7 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	struct dwc3_msm *mdwc;
 	struct resource *res;
 	void __iomem *tcsr;
-#ifndef CONFIG_SLIMPORT_ANX7808
 	unsigned long flags;
-#endif
 	int ret = 0;
 	int len = 0;
 	u32 tmp[3];
@@ -2786,10 +2787,8 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&mdwc->resume_work, dwc3_resume_work);
 	INIT_WORK(&mdwc->restart_usb_work, dwc3_restart_usb_work);
 	INIT_WORK(&mdwc->usb_block_reset_work, dwc3_block_reset_usb_work);
-#ifndef CONFIG_SLIMPORT_ANX7808
 	INIT_WORK(&mdwc->id_work, dwc3_id_work);
 	INIT_DELAYED_WORK(&mdwc->init_adc_work, dwc3_init_adc_work);
-#endif
 	init_completion(&mdwc->ext_chg_wait);
 
 	ret = dwc3_msm_config_gdsc(mdwc, 1);
@@ -2969,7 +2968,7 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 		}
 		enable_irq_wake(mdwc->hs_phy_irq);
 	}
-#ifndef CONFIG_SLIMPORT_ANX7808
+
 	if (mdwc->ext_xceiv.otg_capability) {
 		mdwc->pmic_id_irq =
 			platform_get_irq_byname(pdev, "pmic_id_irq");
@@ -3014,7 +3013,7 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 			mdwc->pmic_id_irq = 0;
 		}
 	}
-#endif
+
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	if (!res) {
 		dev_dbg(&pdev->dev, "missing TCSR memory resource\n");
