@@ -4707,7 +4707,7 @@ bypass_checksum_failed_packet:
 
 			if(touch_debug_mask & DEF_POINT_INFO){
 				if(point_printed){
-					printk("[Touch_H] Touch Up!!\n");
+					//printk("[Touch_H] Touch Up!!\n");
 #ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
 							if (dt2w_switch > 0 && ts_suspend == true) {
 								input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, -1); //DoubleTap
