@@ -67,7 +67,7 @@ uint32_t msm_jpeg_platform_v2p(struct msm_jpeg_device *pgmn_dev, int fd,
 	rc = ion_map_iommu(pgmn_dev->jpeg_client, *ionhandle, domain_num, 0,
 		SZ_4K, 0, &paddr, (unsigned long *)&size, 0, 0);
 	JPEG_DBG("%s:%d] addr 0x%x size %ld", __func__, __LINE__,
-		(uint32_t)paddr, size);
+		paddr, size);
 
 	if (rc < 0) {
 		JPEG_PR_ERR("%s: ion_map_iommu fd %d error %d\n", __func__, fd,
@@ -347,8 +347,12 @@ int msm_jpeg_platform_release(struct resource *mem, void *base, int irq,
 		JPEG_DBG("%s:%d]", __func__, __LINE__);
 	}
 #endif
+	if (pgmn_dev->jpeg_bus_client) {
+		msm_bus_scale_client_update_request(
+			pgmn_dev->jpeg_bus_client, 0);
+		msm_bus_scale_unregister_client(pgmn_dev->jpeg_bus_client);
+	}
 
-	msm_bus_scale_unregister_client(pgmn_dev->jpeg_bus_client);
 	msm_cam_clk_enable(&pgmn_dev->pdev->dev, jpeg_8x_clk_info,
 	pgmn_dev->jpeg_clk, ARRAY_SIZE(jpeg_8x_clk_info), 0);
 	JPEG_DBG("%s:%d] clock disbale done", __func__, __LINE__);

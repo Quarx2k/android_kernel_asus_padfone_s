@@ -93,7 +93,7 @@ static unsigned int g_div = 100;
 //static int g_initialized_1280_960=0;
 //static int g_initialized_1080p=0;
 #endif
-
+static int exif_debug=0; //Asus jason_yeh add exif_debug message
 #define ISP_TORCH_INT_GPIO 19
 #define ISP_INT_GPIO 25
 
@@ -112,7 +112,7 @@ static int iCatch_is_updating = 0;
 static bool g_enable_roi_debug = false;
 extern struct msm_sensor_ctrl_t mt9m114_s_ctrl;
 extern struct msm_sensor_ctrl_t ov2720asus_s_ctrl;
-
+//struct msm_sensor_ctrl_t ov2720asus_s_ctrl;
 static int dbg_i7002a_page_index = 2047;
 static bool g_afmode=0; //0: Auto AF, 1:Full search AF
 static int g_flash_mode = 0;	// ASUS_BSP jim3_lin "LED mode for EXIF"
@@ -176,6 +176,9 @@ cam_area_t g_AF_ROI;
 cam_area_t g_AE_ROI;
 cam_focus_mode_type g_AF_MODE;
 struct exif_cfg g_JpegExif; 
+
+int AF_timecount=0;//ASUS BSP ryan_kuo+++ use for cancel AF if AF take too much time 
+
 
 /*********************** boot from host ************************/
 //ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
@@ -1966,10 +1969,9 @@ static void iCtach_flash_status_restore(void)
 static void iCatch_torch_off_work(struct work_struct *work)
 {
 	pr_info("%s E\n",__func__);
-	if (g_flash_mode != 3) 
-		led_pmic_torch_enable(false,false);
+       led_pmic_torch_enable(false,false);
        //led_pmic_flash_enable(true,true);
-	iCtach_flash_status_restore();
+       iCtach_flash_status_restore();
 	pr_info("%s X\n",__func__);
 	return;
 }
@@ -2463,6 +2465,12 @@ int sensor_set_mode_second_camera(int res)
                 sensor_write_reg(ov2720asus_s_ctrl.sensor_i2c_client->client, 0x7106, 0x04);  //1280x720
                 sensor_write_reg(ov2720asus_s_ctrl.sensor_i2c_client->client, 0x7120, 0x00);  //preview mode
                 break;            
+            case MSM_SENSOR_RES_FULL:       //MODE_4 - BF Preview
+                pr_info("%s: MODE_4 - BF Preview \n",__func__);
+                setCaptureVideoMode(1);
+                sensor_write_reg(ov2720asus_s_ctrl.sensor_i2c_client->client, 0x7106, 0x1A);  // 800x600
+                sensor_write_reg(ov2720asus_s_ctrl.sensor_i2c_client->client, 0x7120, 0x00);  //preview mode
+                break;
             default:
                 pr_err("%s: not support resolution res %d\n",__func__, res);
         	  return -EINVAL;                          
@@ -4159,7 +4167,10 @@ void iCatch_get_exif(struct exif_cfg *exif)
 #endif
 	
             if((g_cur_res != MSM_SENSOR_RES_QTR)||frontcam_capture_status){
-        	    pr_info("[EXIF] ISO(%d), ET(%d/%d), FLASH(%d), EDGE(%d), Yaverage(%d), Scene_info(%d)\n", exif->iso, exif->exp_time_num, exif->exp_time_denom, exif->flash_mode,exif->edge,exif->Yaverage,exif->scene_info);
+		exif_debug++;
+		if(exif_debug%100==0)
+        	  pr_info("[EXIF] ISO(%d), ET(%d/%d), FLASH(%d), EDGE(%d), Yaverage(%d), Scene_info(%d)\n", exif->iso, exif->exp_time_num, exif->exp_time_denom, exif->flash_mode,exif->edge,exif->Yaverage,exif->scene_info);
+		  exif_debug=1;
             }
 	     frontcam_capture_status =false;		
             memcpy(&g_JpegExif, exif, sizeof(struct exif_cfg));
@@ -4369,23 +4380,22 @@ void iCatch_set_led_mode(int16_t mode)
     switch(mode)
     {
         case CAM_FLASH_MODE_ON: 
-            pr_info("jim CAM_FLASH_MODE_ON");
+            // pr_info("jim CAM_FLASH_MODE_ON");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x02);
             g_flash_mode = 1;
             break;
         case CAM_FLASH_MODE_OFF: 
-            pr_info("jim CAM_FLASH_MODE_OFF");
-            led_pmic_torch_enable(false, false);
+            // pr_info("jim CAM_FLASH_MODE_OFF");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x01);
             g_flash_mode = 0;
             break;
         case CAM_FLASH_MODE_AUTO: 
-            pr_info("jim CAM_FLASH_MODE_AUTO");
+            // pr_info("jim CAM_FLASH_MODE_AUTO");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x00);
             g_flash_mode = 2;
             break;
         case CAM_FLASH_MODE_TORCH: 
-            pr_info("jim CAM_FLASH_MODE_TORCH");
+            // pr_info("jim CAM_FLASH_MODE_TORCH");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x04);
             g_flash_mode = 3;
             break;
@@ -4793,27 +4803,37 @@ uint16_t iCatch_get_AF_result(struct msm_sensor_ctrl_t *s_ctrl)
 	u16 afresult,afdone;
        enum sensor_af_t status;
 	
-	pr_info("%s +++\n",__func__);
+//	pr_info("%s +++\n",__func__);
        g_isAFDone = false;
        
 	if(!caf_mode){
 		//Read AF result
 		sensor_read_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x72a0, &afdone);
 		sensor_read_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x72a1, &afresult);
-              pr_info("afdone(%d), afresult(%d)\n",afdone,afresult);
+//              pr_info("afdone(%d), afresult(%d)\n",afdone,afresult);
               if(afdone == 0x00){  //AF idle
                     if(afresult == 0x00){
                         status = SENSOR_AF_FOCUSSED;   //AF success
+			     							pr_info("%s  AF success\n",__func__);
                     }else{
                         status = SENSOR_AF_NOT_FOCUSSED;   //AF fail
-			}
+			     							pr_info("%s  AF fail\n",__func__);
+				  }
+				  AF_timecount = 0; //after afdone reset AF_timecount  ASUS BSP Ryan_Kuo
+				  printk("%s(%d) AF done. \n", __func__, __LINE__);
               }else{    //AF busy
                     if(true == g_isAFCancel){
                         status = SENSOR_AF_CANCEL;
                     }else{
-                        status = SENSOR_AF_SCANNING;
+                    	AF_timecount++;//ASUS BSP Ryan_kuo+++
+                      status = SENSOR_AF_SCANNING;
+					if (AF_timecount >39){//ASUS BSP Ryan_kuo+++
+						status = SENSOR_AF_NOT_FOCUSSED;
+						AF_timecount = 0; //after AF timeout reset AF_timecount  ASUS_BSP  Bryant_Yu
+						printk("%s(%d) AF timeout \n", __func__, __LINE__);
+					}
+				}
 			}
-		}
 	}
 	else{
 		status = SENSOR_AF_NOT_FOCUSSED;
@@ -4830,7 +4850,7 @@ uint16_t iCatch_get_AF_result(struct msm_sensor_ctrl_t *s_ctrl)
             }              
        }
        
-	pr_info("%s status(%d)---\n",__func__,status);
+	//pr_info("%s status(%d)---\n",__func__,status);
 	return status;
 }
 //ASUS_BSP --- LiJen "[A68][13M][NA][Others]add 13M camera TAF support
@@ -5242,6 +5262,7 @@ void iCatch_release_sensor(void)
 	if(retry<10)
 		pr_info("%s : [PJ] DIT process AF done success and retry = %d. \n",__func__,retry);
 //ASUS_BSP --- PJ "[A91][Camera][NA][Others] wait DIT process AF release"	    
+	g_isAFDone = true;//ASUS BSP Evan : fix sometimes release icath sensor faiL;
 }
 
 

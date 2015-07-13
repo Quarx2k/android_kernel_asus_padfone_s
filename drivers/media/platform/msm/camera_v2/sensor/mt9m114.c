@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -56,13 +56,20 @@ DEFINE_MSM_MUTEX(mt9m114_mut);
 #include <linux/of_gpio.h>
 
 #ifndef CAM_BOOT
-#define CAM_BOOT "/data/asusfw/camera/BOOT_A91.BIN"
+#define CAM_BOOT "/asusfw/camera/BOOT_A91.BIN"
 #endif
 //ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
+#if 0
 #define ACALI_PATH "/data/asusdata/camera_calibration/ACC0/3ACALI.BIN"
 #define LSC_PATH "/data/asusdata/camera_calibration/ACC0/LSC.BIN"
 #define LSCDQ_PATH "/data/asusdata/camera_calibration/ACC0/LSC_DQ.BIN"
 #define CALIOPT_PATH "/data/asusdata/camera_calibration/ACC0/calibration_option.BIN"
+#else
+#define ACALI_PATH "/factory/camera_calibration/ACC0/3ACALI.BIN"
+#define LSC_PATH "/factory/camera_calibration/ACC0/LSC.BIN"
+#define LSCDQ_PATH "/factory/camera_calibration/ACC0/LSC_DQ.BIN"
+#define CALIOPT_PATH "/factory/camera_calibration/ACC0/calibration_option.BIN"
+#endif
 static bool rear_calibrated = false;
 static u8 *pacali = NULL;
 static u8 *plsc = NULL;
@@ -1485,7 +1492,7 @@ static int32_t mt9m114_platform_probe(struct platform_device *pdev)
        rc = i2c_add_driver(&mt9m114_i2c_driver);
 	if ( rc != 0 )
 		pr_err("i2c_add_driver fail, Error : %d\n",rc); 
-	probe_power_isp = false;
+	//probe_power_isp = false;
 //ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 
 	return rc;
@@ -1679,6 +1686,15 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		for (i = 0; i < SUB_MODULE_MAX; i++)
 			cdata->cfg.sensor_info.subdev_id[i] =
 				s_ctrl->sensordata->sensor_info->subdev_id[i];
+		cdata->cfg.sensor_info.is_mount_angle_valid =
+			s_ctrl->sensordata->sensor_info->is_mount_angle_valid;
+		cdata->cfg.sensor_info.sensor_mount_angle =
+			s_ctrl->sensordata->sensor_info->sensor_mount_angle;
+		cdata->cfg.sensor_info.position =
+			s_ctrl->sensordata->sensor_info->position;
+		cdata->cfg.sensor_info.modes_supported =
+			s_ctrl->sensordata->sensor_info->modes_supported;
+		
 		CDBG("%s:%d sensor name %s\n", __func__, __LINE__,
 			cdata->cfg.sensor_info.sensor_name);
 		CDBG("%s:%d session id %d\n", __func__, __LINE__,
@@ -1686,6 +1702,9 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		for (i = 0; i < SUB_MODULE_MAX; i++)
 			CDBG("%s:%d subdev_id[%d] %d\n", __func__, __LINE__, i,
 				cdata->cfg.sensor_info.subdev_id[i]);
+		CDBG("%s:%d mount angle valid %d value %d\n", __func__,
+			__LINE__, cdata->cfg.sensor_info.is_mount_angle_valid,
+			cdata->cfg.sensor_info.sensor_mount_angle);
 
 		break;
 	case CFG_SET_INIT_SETTING:
@@ -1739,8 +1758,12 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
             
 		break;
 	case CFG_GET_SENSOR_INIT_PARAMS:
-		cdata->cfg.sensor_init_params =
-			*s_ctrl->sensordata->sensor_init_params;
+		cdata->cfg.sensor_init_params.modes_supported =
+			s_ctrl->sensordata->sensor_info->modes_supported;
+		cdata->cfg.sensor_init_params.position =
+			s_ctrl->sensordata->sensor_info->position;
+		cdata->cfg.sensor_init_params.sensor_mount_angle =
+			s_ctrl->sensordata->sensor_info->sensor_mount_angle;
 		CDBG("%s:%d init params mode %d pos %d mount %d\n", __func__,
 			__LINE__,
 			cdata->cfg.sensor_init_params.modes_supported,
@@ -1749,11 +1772,12 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		break;
 	case CFG_SET_SLAVE_INFO: {
 		struct msm_camera_sensor_slave_info sensor_slave_info;
-		struct msm_sensor_power_setting_array *power_setting_array;
+		struct msm_camera_power_ctrl_t *p_ctrl;
+		uint16_t size;
 		int slave_index = 0;
 		if (copy_from_user(&sensor_slave_info,
-		    (void *)cdata->cfg.setting,
-		    sizeof(struct msm_camera_sensor_slave_info))) {
+			(void *)cdata->cfg.setting,
+			sizeof(struct msm_camera_sensor_slave_info))) {
 			pr_err("%s:%d failed\n", __func__, __LINE__);
 			rc = -EFAULT;
 			break;
@@ -1769,27 +1793,30 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 			sensor_slave_info.addr_type;
 
 		/* Update power up / down sequence */
-		s_ctrl->power_setting_array =
-			sensor_slave_info.power_setting_array;
-		power_setting_array = &s_ctrl->power_setting_array;
-		power_setting_array->power_setting = kzalloc(
-			power_setting_array->size *
-			sizeof(struct msm_sensor_power_setting), GFP_KERNEL);
-		if (!power_setting_array->power_setting) {
-			pr_err("%s:%d failed\n", __func__, __LINE__);
-			rc = -ENOMEM;
-			break;
+		p_ctrl = &s_ctrl->sensordata->power_info;
+		size = sensor_slave_info.power_setting_array.size;
+		if (p_ctrl->power_setting_size < size) {
+			struct msm_sensor_power_setting *tmp;
+			tmp = kmalloc(sizeof(struct msm_sensor_power_setting)
+				      * size, GFP_KERNEL);
+			if (!tmp) {
+				pr_err("%s: failed to alloc mem\n", __func__);
+				rc = -ENOMEM;
+				break;
+			}
+			kfree(p_ctrl->power_setting);
+			p_ctrl->power_setting = tmp;
 		}
-		if (copy_from_user(power_setting_array->power_setting,
-		    (void *)sensor_slave_info.power_setting_array.power_setting,
-		    power_setting_array->size *
-		    sizeof(struct msm_sensor_power_setting))) {
-			kfree(power_setting_array->power_setting);
+		p_ctrl->power_setting_size = size;
+
+		rc = copy_from_user(p_ctrl->power_setting, (void *)
+			sensor_slave_info.power_setting_array.power_setting,
+			size * sizeof(struct msm_sensor_power_setting));
+		if (rc) {
 			pr_err("%s:%d failed\n", __func__, __LINE__);
 			rc = -EFAULT;
 			break;
 		}
-		s_ctrl->free_power_setting = true;
 		CDBG("%s sensor id %x\n", __func__,
 			sensor_slave_info.slave_addr);
 		CDBG("%s sensor addr type %d\n", __func__,
@@ -1799,19 +1826,14 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		CDBG("%s sensor id %x\n", __func__,
 			sensor_slave_info.sensor_id_info.sensor_id);
 		for (slave_index = 0; slave_index <
-			power_setting_array->size; slave_index++) {
+			p_ctrl->power_setting_size; slave_index++) {
 			CDBG("%s i %d power setting %d %d %ld %d\n", __func__,
 				slave_index,
-				power_setting_array->power_setting[slave_index].
-				seq_type,
-				power_setting_array->power_setting[slave_index].
-				seq_val,
-				power_setting_array->power_setting[slave_index].
-				config_val,
-				power_setting_array->power_setting[slave_index].
-				delay);
+				p_ctrl->power_setting[slave_index].seq_type,
+				p_ctrl->power_setting[slave_index].seq_val,
+				p_ctrl->power_setting[slave_index].config_val,
+				p_ctrl->power_setting[slave_index].delay);
 		}
-		kfree(power_setting_array->power_setting);
 		break;
 	}
 	case CFG_WRITE_I2C_ARRAY: {
@@ -1894,8 +1916,7 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 
 	case CFG_POWER_DOWN:
 		if (s_ctrl->func_tbl->sensor_power_down)
-			rc = s_ctrl->func_tbl->sensor_power_down(
-				s_ctrl);
+			rc = s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 		else
 			rc = -EFAULT;
 		break;
@@ -2145,6 +2166,99 @@ int32_t mt9m114_boot_from_host(struct msm_sensor_ctrl_t *s_ctrl)
     return (rc==SUCCESS)?0:-1;
 }
 
+int32_t mt9m114_boot_from_host_first_time(struct msm_sensor_ctrl_t *s_ctrl)
+{
+     int32_t rc = SUCCESS;
+     struct file *fp = NULL;
+//ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
+     struct file *acali_fp = NULL;
+     struct file *lsc_fp = NULL;
+     struct file *lscdq_fp =NULL;
+     struct file *caliopt_fp = NULL;
+     char acali_path[80] = ACALI_PATH;
+     char lsc_path[80] = LSC_PATH;
+     char lscdq_path[80] = LSCDQ_PATH;
+     char caliopt_path[80] = CALIOPT_PATH;
+//ASUS_BSP--- jim3_lin "Add for ATD CameraTest"
+     mm_segment_t old_fs;
+     struct inode *inode;
+     const int bootbin_size = ISP_FW_SIZE;
+     char binfile_path[80] = CAM_BOOT;
+
+    if(g_ASUS_hwID < A91_SR1){
+        //do nothing
+    }else{
+/*************************  boot from host *************************/
+        if(false == probe_power_isp){
+            // boot from host - load firmware data
+            if(false == g_is_fw_loaded){
+                fp = filp_open(binfile_path, O_RDONLY, 0);
+                if ( !IS_ERR_OR_NULL(fp) ){
+                    pr_info("filp_open success fp:%p\n", fp);
+                    inode = fp->f_dentry->d_inode;
+                    //pr_info("%s: fp->f_dentry->d_inode->i_size=%d\n", __FUNCTION__, bootbin_size);
+                    old_fs = get_fs();
+                    set_fs(KERNEL_DS);
+                    if(fp->f_op != NULL && fp->f_op->read != NULL){
+                        int byte_count= 0;
+                        pr_info("Start to read %s\n", binfile_path);
+                        byte_count = fp->f_op->read(fp, g_pbootBuf, bootbin_size, &fp->f_pos);
+                        if (byte_count <= 0) {
+                            pr_err("iCatch: EOF or error. last byte_count= %d;\n", byte_count);
+                        } else
+                            pr_info("iCatch: BIN file size= %d bytes\n", bootbin_size);
+                    }
+                    set_fs(old_fs);
+                    filp_close(fp, NULL);
+                    g_is_fw_loaded = true;
+                }else{
+                    pr_err("filp_open fail fp:%p\n", fp);
+                    return -1;
+                }
+            }else{
+                //do nothing
+                pr_info("firmware data has been loaded\n");
+            }
+
+            // boot from host - load back calibration data
+           if(false == g_is_fw_back_cal_loaded){
+                //ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
+                acali_fp = filp_open(acali_path,O_RDONLY, 0);
+                if(!IS_ERR_OR_NULL(acali_fp)){
+                    lsc_fp = filp_open(lsc_path,O_RDONLY, 0);
+                    if(!IS_ERR_OR_NULL(lsc_fp)){
+                        lscdq_fp = filp_open(lscdq_path,O_RDONLY, 0);
+                        if(!IS_ERR_OR_NULL(lscdq_fp)){
+                            caliopt_fp = filp_open(caliopt_path,O_RDONLY, 0);
+                            if(!IS_ERR_OR_NULL(caliopt_fp)){
+                            rear_calibrated = true;
+                            }
+                        }
+                    }
+                }
+
+                if(rear_calibrated){
+                   pr_info("calibration has successed!\n");
+                   pacali = read_bin_to_buf(acali_fp, g_pbootBuf != NULL);
+                   plsc = read_bin_to_buf(lsc_fp, g_pbootBuf != NULL);
+                   plscdq = read_bin_to_buf(lscdq_fp, g_pbootBuf != NULL);
+                   pcaliopt = read_bin_to_buf(caliopt_fp, g_pbootBuf != NULL);
+                }
+                g_is_fw_back_cal_loaded = true;
+                //ASUS_BSP--- jim3_lin "Add for ATD CameraTest"
+            }else{
+                pr_info("back calibration data has been loaded\n");
+            }
+        }else{
+            //do nothing
+            pr_info("probe don't need to load code\n");
+        }
+/****************************************************************/
+    }
+
+    return (rc==SUCCESS)?0:-1;
+}
+
 //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
 int32_t mt9m114_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 {
@@ -2183,10 +2297,11 @@ int32_t mt9m114_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
         pr_err("%s msm_sensor_power_up fail\n",__func__);
         goto power_up_fail;
     }
-    
+
     rc = mt9m114_boot_from_host(s_ctrl);
     if(rc < 0){
         pr_err("%s mt9m114_boot_from_host fail\n",__func__);
+	msm_sensor_power_down(s_ctrl);
         goto power_up_fail;
     }  
     
@@ -2394,6 +2509,34 @@ static ssize_t mt9m114_proc_write_camera_power(struct file *filp, const char __u
 				break;
 			case '1':
 				mt9m114_s_ctrl.func_tbl->sensor_power_up(&mt9m114_s_ctrl);
+				break;
+			case '3':
+				probe_power_isp=false;
+				mt9m114_boot_from_host_first_time(&mt9m114_s_ctrl);
+				break;
+			case '4':
+				g_spi->max_speed_hz=50000000;
+				printk("max_speed_hz=50000000\n");
+				break;
+			case '5':
+				g_spi->max_speed_hz=960000;
+				printk("max_speed_hz=960000\n");
+				break;
+			case '6':
+				g_spi->max_speed_hz=4800000;
+				printk("max_speed_hz=4800000\n");
+				break;
+			case '7':
+				g_spi->max_speed_hz=9600000;
+				printk("max_speed_hz=9600000\n");
+				break;
+			case '8':
+				g_spi->max_speed_hz=19200000;
+				printk("max_speed_hz=19200000\n");
+				break;
+			case '9':
+				g_spi->max_speed_hz=25000000;
+				printk("max_speed_hz=25000000\n");
 				break;
 			default:
 				//pr_err("[Camera] POWER command not support!!\n");

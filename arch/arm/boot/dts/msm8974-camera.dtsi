@@ -185,6 +185,8 @@
 		reg-names = "cci";
 		interrupts = <0 50 0>;
 		interrupt-names = "cci";
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+/*		
 		gpios = <&msmgpio 19 0>,
 			<&msmgpio 20 0>,
 			<&msmgpio 21 0>,
@@ -195,6 +197,14 @@
 				      "CCI_I2C_CLK0",
 				      "CCI_I2C_DATA1",
 				      "CCI_I2C_CLK1";
+*/
+		gpios = <&msmgpio 21 0>,
+			<&msmgpio 22 0>;
+		qcom,gpio-tbl-num = <0 1>;
+		qcom,gpio-tbl-flags = <1 1>;
+		qcom,gpio-tbl-label = "CCI_I2C_DATA0",
+				      "CCI_I2C_CLK0";	
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 		master0: qcom,cci-master0 {
 			status = "disabled";
 		};
@@ -202,6 +212,30 @@
 			status = "disabled";
 		};
 	};
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	i2c@f9926000 {
+		qcom,camera@3c {
+			compatible = "qcom,mt9m114";
+			reg = <0x3c>;
+			cam_vdig-supply = <&pm8941_lvs2>;
+			cam_vana-supply = <&pm8941_l22>;
+			cam_vio-supply = <&pm8941_l23>;
+			cam_vaf-supply = <&pm8941_l17>;				
+		};
+	};
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting
+//ASUS_BSP+++ CR_0000 Randy_Change@asus.com.tw [2013/6/10] Modify Begin
+	i2c@f9926000 {
+		qcom,camera@6a {
+			compatible = "qcom,ov2720asus";
+			reg = <0x6a>;
+			cam_vdig-supply = <&pm8941_lvs2>;
+			cam_vana-supply = <&pm8941_l22>;
+			cam_vio-supply = <&pm8941_l23>;
+			cam_vaf-supply = <&pm8941_l17>;				
+		};
+	};
+//ASUS_BSP--- CR_0000 Randy_Change@asus.com.tw [2013/6/10] Modify End
 };
 
 &master0 {
