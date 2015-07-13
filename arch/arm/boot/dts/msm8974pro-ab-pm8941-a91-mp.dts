@@ -20,3 +20,7 @@
 	compatible = "qcom,msm8974-cdp", "qcom,msm8974", "qcom,cdp";
 	qcom,board-id = <37 0>;	//ASUS_BSP : add for ASUS DT ID : a91-mp
 };
+&sdhc_1 {
+	qcom,pad-pull-on = <0x0 0x3 0x3 0x1>; /* no-pull, pull-up, pull-up, pull-down */
+	qcom,pad-pull-off = <0x0 0x3 0x3 0x1>; /* no-pull, pull-up, pull-up, pull-down */
+};
