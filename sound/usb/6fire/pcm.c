@@ -135,6 +135,9 @@ static void usb6fire_pcm_stream_stop(struct pcm_runtime *rt)
 	struct control_runtime *ctrl_rt = rt->chip->control;
 
 	if (rt->stream_state != STREAM_DISABLED) {
+
+		rt->stream_state = STREAM_STOPPING;
+
 		for (i = 0; i < PCM_N_URBS; i++) {
 			usb_kill_urb(&rt->in_urbs[i].instance);
 			usb_kill_urb(&rt->out_urbs[i].instance);
@@ -540,7 +543,7 @@ static snd_pcm_uframes_t usb6fire_pcm_pointer(
 	snd_pcm_uframes_t ret;
 
 	if (rt->panic || !sub)
-		return SNDRV_PCM_STATE_XRUN;
+		return SNDRV_PCM_POS_XRUN;
 
 	spin_lock_irqsave(&sub->lock, flags);
 	ret = sub->dma_off;

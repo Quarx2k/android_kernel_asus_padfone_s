@@ -68,6 +68,8 @@
 #define AUDIO_SET_SRS_TRUMEDIA_PARAM _IOW(AUDIO_IOCTL_MAGIC, 43, unsigned)
 
 // ASUS_BSP Paul +++
+#define AUDIO_SET_BT_TYPE           _IOW(AUDIO_IOCTL_MAGIC, 60, unsigned)
+#define AUDIO_GET_BT_TYPE           _IOR(AUDIO_IOCTL_MAGIC, 61, unsigned)
 #define AUDIO_SET_OUT_ACDB_ID       _IOW(AUDIO_IOCTL_MAGIC, 62, unsigned)
 #define AUDIO_GET_OUT_ACDB_ID       _IOR(AUDIO_IOCTL_MAGIC, 63, unsigned)
 #define AUDIO_SET_RINGTONE_PROFILE  _IOW(AUDIO_IOCTL_MAGIC, 64, unsigned)
@@ -178,6 +180,13 @@
 #define VOC_REC_UPLINK		0x00
 #define VOC_REC_DOWNLINK	0x01
 #define VOC_REC_BOTH		0x02
+
+// ASUS_BSP Paul +++
+#define BT_TYPE_NONE		0
+#define BT_TYPE_HEADSET		1
+#define BT_TYPE_A2DP		2
+#define BT_TYPE_BTPEN		3
+// ASUS_BSP Paul ---
 
 struct msm_audio_config {
 	uint32_t buffer_size;

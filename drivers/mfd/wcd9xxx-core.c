@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -53,6 +53,9 @@
  * registration of Slimbus of I2C bus for each codec
  */
 #define NUM_WCD9XXX_REG_RET	8
+
+#define SLIM_USR_MC_REPEAT_CHANGE_VALUE 0x0
+#define SLIM_REPEAT_WRITE_MAX_SLICE 16
 
 struct wcd9xxx_i2c {
 	struct i2c_client *client;
@@ -263,6 +266,79 @@ static int wcd9xxx_slim_read_device(struct wcd9xxx *wcd9xxx, unsigned short reg,
 
 	return ret;
 }
+
+static int wcd9xxx_slim_get_allowed_slice(struct wcd9xxx *wcd9xxx,
+					  int bytes)
+{
+	int allowed_sz = bytes;
+
+	if (likely(bytes == SLIM_REPEAT_WRITE_MAX_SLICE))
+		allowed_sz = 16;
+	else if (bytes >= 12)
+		allowed_sz = 12;
+	else if (bytes >= 8)
+		allowed_sz = 8;
+	else if (bytes >= 6)
+		allowed_sz = 6;
+	else if (bytes >= 4)
+		allowed_sz = 4;
+	else
+		allowed_sz = bytes;
+
+	return allowed_sz;
+}
+
+/*
+ * wcd9xxx_slim_write_repeat: Write the same register with multiple values
+ * @wcd9xxx: handle to wcd core
+ * @reg: register to be written
+ * @bytes: number of bytes to be written to reg
+ * @src: buffer with data content to be written to reg
+ * This API will write reg with bytes from src in a single slimbus
+ * transaction. All values from 1 to 16 are supported by this API.
+ */
+
+int wcd9xxx_slim_write_repeat(struct wcd9xxx *wcd9xxx, unsigned short reg,
+			      int bytes, void *src)
+{
+	int ret = 0, bytes_to_write = bytes, bytes_allowed;
+	struct slim_ele_access slim_msg;
+
+	slim_msg.start_offset = WCD9XXX_REGISTER_START_OFFSET + reg;
+	slim_msg.comp = NULL;
+
+	if (unlikely(bytes > SLIM_REPEAT_WRITE_MAX_SLICE)) {
+		dev_err(wcd9xxx->dev, "%s: size %d not supported\n",
+			__func__, bytes);
+		return -EINVAL;
+	}
+
+	while (bytes_to_write > 0) {
+		bytes_allowed = wcd9xxx_slim_get_allowed_slice(wcd9xxx,
+				       bytes_to_write);
+
+		slim_msg.num_bytes = bytes_allowed;
+		mutex_lock(&wcd9xxx->xfer_lock);
+		ret = slim_user_msg(wcd9xxx->slim, wcd9xxx->slim->laddr,
+				    SLIM_MSG_MT_DEST_REFERRED_USER,
+				    SLIM_USR_MC_REPEAT_CHANGE_VALUE,
+				    &slim_msg, src, bytes_allowed);
+		mutex_unlock(&wcd9xxx->xfer_lock);
+
+		if (ret) {
+			dev_err(wcd9xxx->dev, "%s: failed, ret = %d\n",
+				__func__, ret);
+			break;
+		}
+
+		bytes_to_write = bytes_to_write - bytes_allowed;
+		src = ((u8 *)src) + bytes_allowed;
+	};
+
+	return ret;
+}
+EXPORT_SYMBOL(wcd9xxx_slim_write_repeat);
+
 /* Interface specifies whether the write is to the interface or general
  * registers.
  */
@@ -555,7 +631,6 @@ static const struct intr_data intr_tbl_v2[] = {
 	{WCD9XXX_IRQ_EAR_PA_OCPL_FAULT, false},
 	{WCD9XXX_IRQ_HPH_L_PA_STARTUP, false},
 	{WCD9XXX_IRQ_HPH_R_PA_STARTUP, false},
-	{WCD9320_IRQ_EAR_PA_STARTUP, false},
 	{WCD9XXX_IRQ_RESERVED_0, false},
 	{WCD9XXX_IRQ_RESERVED_1, false},
 	{WCD9XXX_IRQ_MAD_AUDIO, false},
@@ -564,7 +639,6 @@ static const struct intr_data intr_tbl_v2[] = {
 	{WCD9XXX_IRQ_SPEAKER_CLIPPING, false},
 	{WCD9XXX_IRQ_VBAT_MONITOR_ATTACK, false},
 	{WCD9XXX_IRQ_VBAT_MONITOR_RELEASE, false},
-	{WCD9XXX_IRQ_RESERVED_2, false},
 };
 
 static int wcd9xxx_device_init(struct wcd9xxx *wcd9xxx)
@@ -605,7 +679,7 @@ static int wcd9xxx_device_init(struct wcd9xxx *wcd9xxx)
 				wcd9xxx->codec_type->num_irqs,
 				wcd9xxx_num_irq_regs(wcd9xxx),
 				wcd9xxx_reg_read, wcd9xxx_reg_write,
-				wcd9xxx_bulk_read);
+				wcd9xxx_bulk_read, wcd9xxx_bulk_write);
 
 	if (wcd9xxx_core_irq_init(&wcd9xxx->core_res))
 		goto err;
@@ -1720,7 +1794,6 @@ static int wcd9xxx_slim_device_down(struct slim_device *sldev)
 {
 	struct wcd9xxx *wcd9xxx = slim_get_devicedata(sldev);
 
-	dev_info(wcd9xxx->dev, "%s: device down\n", __func__);
 	if (!wcd9xxx) {
 		pr_err("%s: wcd9xxx is NULL\n", __func__);
 		return -EINVAL;

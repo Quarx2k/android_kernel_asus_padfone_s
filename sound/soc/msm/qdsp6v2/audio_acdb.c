@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -969,6 +969,8 @@ done:
 
 int get_spk_protection_cfg(struct msm_spk_prot_cfg *prot_cfg)
 {
+	prot_cfg->mode = MSM_SPKR_PROT_DISABLED;
+#if 0
 	int result = 0;
 	pr_debug("%s,\n", __func__);
 
@@ -982,10 +984,11 @@ int get_spk_protection_cfg(struct msm_spk_prot_cfg *prot_cfg)
 		result = -EINVAL;
 	}
 	mutex_unlock(&acdb_data.acdb_mutex);
-
-	return result;
+#endif
+	return 0;
 }
-#ifndef ASUS_PF500KL_PROJECT
+
+#if 0
 static int get_spk_protection_status(struct msm_spk_prot_status *status)
 {
 	int					result = 0;
@@ -1011,6 +1014,7 @@ static int get_spk_protection_status(struct msm_spk_prot_status *status)
 	return result;
 }
 #endif
+
 static int register_vocvol_table(void)
 {
 	int result = 0;
@@ -1151,13 +1155,6 @@ static int unmap_cal_tables(void)
 		result = result2;
 	}
 
-	result2 = q6lsm_unmap_cal_blocks();
-	if (result2 < 0) {
-		pr_err("%s: lsm_unmap_cal_blocks failed, err = %d\n",
-			__func__, result2);
-		result = result2;
-	}
-
 	result2 = q6asm_unmap_cal_blocks();
 	if (result2 < 0) {
 		pr_err("%s: asm_unmap_cal_blocks failed, err = %d\n",
@@ -1264,6 +1261,7 @@ int gVR_state = 0;      //Bruno++
 int gHAC_mode;     //ASUS Tim++
 int gdevice_change = 0;  //ASUS Tim++
 int gGarmin_state = 0;    //ASUS Tim++
+int gBluetoothType = 0; // ASUS_BSP Paul +++
 int gOutAcdbId = 0; // ASUS_BSP Paul +++
 int gRingtoneProfile = 0; // ASUS_BSP Paul +++
 
@@ -1392,6 +1390,20 @@ static long acdb_ioctl(struct file *f,
 		result = store_hw_delay(TX_CAL, (void *)arg);
 		goto done;
 // ASUS_BSP Paul +++
+	case AUDIO_SET_BT_TYPE:
+		if (copy_from_user(&gBluetoothType, (void *)arg,
+				sizeof(gBluetoothType))) {
+			pr_err("%s: fail to copy gBluetoothType!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_GET_BT_TYPE:
+		if (copy_to_user((void *)arg, &gBluetoothType,
+				sizeof(gBluetoothType))) {
+			pr_err("%s: fail to copy gBluetoothType!!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
 	case AUDIO_SET_OUT_ACDB_ID:
 		if (copy_from_user(&gOutAcdbId, (void *)arg,
 				sizeof(gOutAcdbId))) {

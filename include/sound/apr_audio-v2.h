@@ -2264,6 +2264,7 @@ struct afe_port_cmdrsp_get_param_v2 {
 #define VPM_TX_SM_ECNS_COPP_TOPOLOGY			0x00010F71
 #define VPM_TX_DM_FLUENCE_COPP_TOPOLOGY			0x00010F72
 #define VPM_TX_QMIC_FLUENCE_COPP_TOPOLOGY		0x00010F75
+#define VPM_TX_DM_RFECNS_COPP_TOPOLOGY			0x00010F86
 
 /* Memory map regions command payload used by the
  * #ASM_CMD_SHARED_MEM_MAP_REGIONS ,#ADM_CMD_SHARED_MEM_MAP_REGIONS
@@ -4025,6 +4026,9 @@ struct asm_stream_cmd_open_write_v3 {
 
 /* Absolute timestamp is identified by this value.*/
 #define ASM_ABSOLUTEIMESTAMP      1
+
+/* Bit value for Low Latency Tx stream subfield */
+#define ASM_LOW_LATENCY_TX_STREAM_SESSION			1
 
 /* Bit shift for the stream_perf_mode subfield. */
 #define ASM_SHIFT_STREAM_PERF_MODE_FLAG_IN_OPEN_READ              29
