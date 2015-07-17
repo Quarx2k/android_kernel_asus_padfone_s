@@ -1148,6 +1148,12 @@ config MACH_FSM9XXX_SURF
 	  chipset based SURF evaluation board and
 	  FFA board.
 
+config ASUS_PF500KL
+	depends on ARCH_MSM8974
+	bool "ASUS PF500KL"
+	help
+	  Support for the Asus Padfone S/X.
+
 endmenu
 
 config MSM_STACKED_MEMORY

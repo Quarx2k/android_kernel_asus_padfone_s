@@ -47,48 +47,48 @@ endif
 
 # MSM8974
    zreladdr-$(CONFIG_ARCH_MSM8974)	:= 0x00008000
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-cdp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-fluid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-liquid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-mtp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-rumi.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-sim.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-cdp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-fluid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-liquid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-mtp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.0-1-cdp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.0-1-liquid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.0-1-dragonboard.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.2-cdp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.2-liquid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.2-dragonboard.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-cdp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-fluid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-liquid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-mtp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ab-pm8941-cdp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ab-pm8941-fluid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ab-pm8941-liquid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ab-pm8941-mtp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pm8941-cdp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pm8941-liquid.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pm8941-mtp.dtb
-#        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pma8084-pm8941-mtp.dtb
-
-#ifdef ASUS_PF500KL_PROJECT
-	dtb-y += msm8974pro-ab-pm8941-pf500kl.dtb
-	dtb-y += msm8974pro-ac-pm8941-pf500kl.dtb
-	dtb-y += msm8974pro-ab-pm8941-a91-sr1.dtb
-	dtb-y += msm8974pro-ab-pm8941-a91-sr3.dtb
-	dtb-y += msm8974pro-ab-pm8941-a91-sr4.dtb
-	dtb-y += msm8974pro-ab-pm8941-a91-sr5.dtb
-	dtb-y += msm8974pro-ab-pm8941-a91-pr.dtb
-	dtb-y += msm8974pro-ab-pm8941-a91-mp.dtb
-	dtb-y += msm8974pro-ab-pm8941-a91-er1.dtb
-	dtb-y += msm8974pro-ab-pm8941-a90-evb0.dtb
-	dtb-y += msm8974pro-ab-pm8941-a90-evb.dtb
-#endif
+	ifndef CONFIG_ASUS_PF500KL
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-cdp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-fluid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-liquid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-mtp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-rumi.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v1-sim.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-cdp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-fluid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-liquid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-mtp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.0-1-cdp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.0-1-liquid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.0-1-dragonboard.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.2-cdp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.2-liquid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074-v2.2-dragonboard.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-cdp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-fluid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-liquid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-mtp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ab-pm8941-cdp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ab-pm8941-fluid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ab-pm8941-liquid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ab-pm8941-mtp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pm8941-cdp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pm8941-liquid.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pm8941-mtp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pma8084-pm8941-mtp.dtb
+	else
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-pf500kl.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ac-pm8941-pf500kl.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-sr1.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-sr3.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-sr4.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-sr5.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-pr.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-mp.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-er1.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a90-evb0.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a90-evb.dtb
+	endif
 
 # APQ8084
    zreladdr-$(CONFIG_ARCH_APQ8084)	:= 0x00008000
