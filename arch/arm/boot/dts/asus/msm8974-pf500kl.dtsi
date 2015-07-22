@@ -16,11 +16,55 @@
 
 / {
 	aliases {
+		spi9 = &spi_9; //ASUS BSP Evan
 		serial0 = &blsp1_uart1;
 	};
 };
 
 &soc {
+
+//ASUS BSP LiJen +++
+	spi_9: spi@f9965000 { /* BLSP2 QUP2 */
+		compatible = "qcom,spi-qup-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "spi_physical", "spi_bam_physical";
+		reg = <0xf9965000 0x1000>,
+		      <0xf9944000 0x19000>;
+		interrupt-names = "spi_irq", "spi_bam_irq";
+		interrupts = <0 103 0>, <0 239 0>;
+
+//		reg-names = "spi_physical";
+//		reg = <0xf9965000 0x1000>;
+//		interrupt-names = "spi_irq";
+//		interrupts = <0 103 0>;
+
+		spi-max-frequency = <50000000>;
+		qcom,gpio-mosi = <&msmgpio 49 0>;
+		qcom,gpio-miso = <&msmgpio 50 0>;
+		qcom,gpio-clk  = <&msmgpio 52 0>;
+		qcom,gpio-cs0  = <&msmgpio 51 0>;
+
+		spi_cpol;
+		spi_cpha;
+		
+		qcom,infinite-mode = <0>;
+		qcom,use-bam;
+		qcom,ver-reg-exists;
+		qcom,bam-consumer-pipe-index = <16>;
+		qcom,bam-producer-pipe-index = <17>;
+		qcom,master-id = <84>;
+		qcom-spi-test@0{
+			compatible = "qcom,spi-test";
+			reg = <0>;
+			spi-max-frequency = <50000000>;
+			qcom,use-bam;
+			qcom,bam-consumer-pipe-index = <16>;
+			qcom,bam-producer-pipe-index = <17>;
+
+			//interrupt-parent = <&msmgpio>;
+ 		};
+	};
 
 // +++.....................................................I2C bus part....................................................+++//
 //+++ ASUS BSP Eason......."BLSP1 : Wireless charger"

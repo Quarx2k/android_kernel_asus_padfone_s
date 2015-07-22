@@ -18,8 +18,8 @@
 	interrupt-parent = <&intc>;
 
 	aliases {
-		spi0 = &spi_0;
-		spi7 = &spi_7;
+		//spi0 = &spi_0; //Asus change
+		//spi7 = &spi_7; //Asus change
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
 		sdhc3 = &sdhc_3; /* SDC3 SDIO slot */
@@ -645,7 +645,8 @@
 		qcom,bam-dma-res-pipes = <6>;
 	};
 
-	spi_7: spi_epm: spi@f9966000 { /* BLSP2 QUP4 */
+	//spi_7: spi_epm: spi@f9966000 { /* BLSP2 QUP4 */
+	/* Asus Change
 		compatible = "qcom,spi-qup-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -668,7 +669,7 @@
 		qcom,bam-producer-pipe-index = <19>;
 		qcom,master-id = <84>;
 	};
-
+*/
 	tspp: msm_tspp@f99d8000 {
 		compatible = "qcom,msm_tspp";
 		cell-index = <0>;
@@ -901,8 +902,8 @@
 		qcom,sda-gpio = <&msmgpio 6 0>;
 	};
 
-	spi_0: spi@f9923000 { /* BLSP1 QUP1 */
-		compatible = "qcom,spi-qup-v2";
+//	spi_0: spi@f9923000 { /* BLSP1 QUP1 */ Asus change
+/*		compatible = "qcom,spi-qup-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg-names = "spi_physical", "spi_bam_physical";
@@ -924,7 +925,7 @@
 		qcom,bam-producer-pipe-index = <13>;
 		qcom,master-id = <86>;
 	};
-
+*/
 	qcom,clock-krait@f9016000 {
 		compatible = "qcom,clock-krait-8974";
 		reg = <0xf9016000 0x20>,
