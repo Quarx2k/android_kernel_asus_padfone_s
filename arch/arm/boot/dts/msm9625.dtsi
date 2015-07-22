@@ -385,7 +385,7 @@
 		qcom,pmic-arb-ee = <0>;
 		qcom,pmic-arb-channel = <0>;
 	};
-/*
+
 	i2c@f9925000 {
 		cell-index = <3>;
 		compatible = "qcom,i2c-qup";
@@ -398,7 +398,7 @@
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <24000000>;
 	};
-*/
+
 	sdcc2: qcom,sdcc@f98a4000 {
 		cell-index = <2>; /* SDC2 SD card slot */
 		compatible = "qcom,msm-sdcc";
@@ -568,7 +568,6 @@
 		interrupt-names = "qup_err_intr";
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <24000000>;
-		qcom,clk-ctl-xfer;
 
 		wcd9xxx_codec@0d{
 			compatible = "qcom,wcd9xxx-i2c";

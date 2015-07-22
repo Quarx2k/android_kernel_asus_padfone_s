@@ -275,24 +275,6 @@
 	};
 };
 
-&sdcc1 {
-       status = "disabled";
-};
-
-&sdcc2 {
-	#address-cells = <0>;
-	interrupt-parent = <&sdcc2>;
-	interrupts = <0 1 2>;
-	#interrupt-cells = <1>;
-	interrupt-map-mask = <0xffffffff>;
-	interrupt-map = <0 &intc 0 125 0
-			1 &intc 0 220 0
-			2 &msmgpio 62 0x3>;
-	interrupt-names = "core_irq", "bam_irq", "status_irq";
-	cd-gpios = <&msmgpio 62 0x1>;
-	status = "disabled";
-};
-
 &sdhc_1 {
 	vdd-supply = <&pm8941_l20>;
 	vdd-io-supply = <&pm8941_s3>;
@@ -347,14 +329,6 @@
  * But since the driver has been been using the below values from the start
  * without any problems, continue to use those.
  */
-&sdcc1 {
-	qcom,pad-drv-on = <0x7 0x4 0x4>; /* 16mA, 10mA, 10mA */
-};
-
-&sdcc2 {
-	qcom,pad-drv-on = <0x7 0x4 0x4>; /* 16mA, 10mA, 10mA */
-};
-
 &sdhc_1 {
 	qcom,pad-drv-on = <0x7 0x4 0x4>; /* 16mA, 10mA, 10mA */
 };
@@ -585,17 +559,12 @@
 		qcom,master-en = <1>;
 	};
 
-	//+++Porting NFC's kernel:config NFC' firmware download pin+++
- 	gpio@d700 { /* GPIO 24 */
-		qcom,mode = <1>;		/* QPNP_PIN_MODE_DIG_OUT */
-		qcom,output-type = <0>;		/* QPNP_PIN_OUT_BUF_CMOS */
-		qcom,pull = <5>;		/* QPNP_PIN_PULL_NO */
-		qcom,vin-sel = <2>;		/* QPNP_PIN_VIN2 */
-		qcom,out-strength = <2>;	/* QPNP_PIN_OUT_STRENGTH_MED */
-		qcom,src-sel = <0>;		/* QPNP_PIN_SEL_FUNC_CONSTANT */
+	gpio@d700 { /* GPIO 24 */
+		qcom,mode = <1>;          /* QPNP_PIN_MODE_DIG_OUT */
+		qcom,out-strength = <1>;  /* QPNP_PIN_OUT_STRENGTH_LOW */
+		qcom,src-sel = <2>;       /* QPNP_PIN_SEL_FUNC_1  */
 		qcom,master-en = <1>;
- 	};
-	//---Porting NFC's kernel:config NFC' firmware download pin---
+	};
 
 	gpio@d800 { /* GPIO 25 */
 		qcom,mode = <1>;          /* QPNP_PIN_MODE_DIG_OUT */
