@@ -855,8 +855,8 @@
 		qcom,pmic-arb-channel = <0>;
 	};
 
-	i2c_0: i2c@f9967000 { /* BLSP#11 */
-		cell-index = <0>;
+	//i2c_0: i2c@f9967000 { /* BLSP#11 */
+/*		cell-index = <0>;
 		compatible = "qcom,i2c-qup";
 		reg = <0Xf9967000 0x1000>;
 		#address-cells = <1>;
@@ -868,7 +868,7 @@
 		qcom,i2c-src-freq = <19200000>;
 		qcom,master-id = <84>;
 	};
-
+*/
 	i2c_1: i2c@f9923000 {
 		cell-index = <1>;
 		compatible = "qcom,i2c-qup";

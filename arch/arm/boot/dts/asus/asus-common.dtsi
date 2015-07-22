@@ -938,3 +938,11 @@
 	};
 };
 
+&gdsc_venus {
+	qcom,clock-names = "core_clk";
+	qcom,skip-logic-collapse;
+	qcom,retain-periph;
+	qcom,retain-mem;
+	status = "ok";
+};
+
