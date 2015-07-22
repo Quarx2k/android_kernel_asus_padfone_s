@@ -22,7 +22,11 @@
 #include <linux/usb/otg.h>
 #include "power.h"
 
+#ifndef CONFIG_ASUS_PF500KL
 #define DWC3_IDEV_CHG_MAX 1500
+#else
+#define DWC3_IDEV_CHG_MAX 2000
+#endif
 
 struct dwc3_charger;
 
