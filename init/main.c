@@ -152,7 +152,6 @@ __setup("reset_devices", set_reset_devices);
 
 enum DEVICE_HWID g_ASUS_hwID=A90_UNKNOWN;
 char hwid_info[32]={0};
-
 EXPORT_SYMBOL(g_ASUS_hwID);
 
  static int set_hardware_id(char *str)
@@ -303,6 +302,12 @@ EXPORT_SYMBOL(g_ASUS_hwID);
 		strcat(hwid_info,str);
 		printk("Kernel HW ID = PF500KL_MP\n");
 	}
+	else if ( strcmp("PF500KL_MP2", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_MP2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_MP2\n");
+	}
  	else
  	{
  		g_ASUS_hwID = A91_ER1;
@@ -310,11 +315,10 @@ EXPORT_SYMBOL(g_ASUS_hwID);
  		printk("Kernel HW ID = UNKNOWN HW_ID (FORCE to A91_ER1)\n");
  	}
  
-	printk("g_Asus_hwID = %d, PadfoneS: %d\n", g_ASUS_hwID, isPadfoneS());
+	printk("g_Asus_hwID = %d\n", g_ASUS_hwID);
  	return 0;
  }
  __setup("HW_ID=", set_hardware_id);
-
 bool g_Pad_Bootup = false;
 bool g_Android_Boot_Complete = false;
 EXPORT_SYMBOL(g_Pad_Bootup);

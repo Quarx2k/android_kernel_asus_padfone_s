@@ -53,9 +53,12 @@ enum DEVICE_HWID
 	PF500KL_ER2_2 = 0x32,
 	PF500KL_PR  = 0x33,
 	PF500KL_MP  = 0x34,
+	PF500KL_MP2  = 0x35,
 
 	A90_UNKNOWN = 0xFF
 };
+
+
 extern enum DEVICE_HWID g_ASUS_hwID;
 extern bool g_Pad_Bootup;
 extern bool g_Android_Boot_Complete;
@@ -65,7 +68,8 @@ static inline bool isPadfoneS(void) {
 		g_ASUS_hwID == PF500KL_ER2 ||	
 		g_ASUS_hwID == PF500KL_ER2_2 ||
 		g_ASUS_hwID == PF500KL_PR ||
-		g_ASUS_hwID == PF500KL_MP)
+		g_ASUS_hwID == PF500KL_MP ||
+		g_ASUS_hwID == PF500KL_MP2)
 	{
 		return true;
 	} else {
