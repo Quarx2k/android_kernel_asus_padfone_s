@@ -11,8 +11,6 @@
  * GNU General Public License for more details.
  */
 
-/include/ "asus-leds.dtsi"
-/include/ "asus-panels.dtsi"
 &soc {
 	qcom,cci@fda0C000 {
 		cell-index = <0>;

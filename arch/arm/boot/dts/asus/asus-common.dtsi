@@ -10,6 +10,14 @@
  * GNU General Public License for more details.
  */
 
+/include/ "asus-leds.dtsi"
+/include/ "asus-panels.dtsi"
+/include/ "asus-camera-common.dtsi"
+
+/ {
+	qcom,msm-id = <218 0x10000>;
+};
+
 &soc {
 	qcom,hdmi_tx@fd922100 {
 		status = "ok";

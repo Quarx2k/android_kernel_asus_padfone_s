@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+/include/ "../msm8974-mdss-panels.dtsi"
 /include/ "dsi-panel-asus-a90-1080p-video.dtsi"
 /include/ "dsi-panel-asus-a90-innolux-1080p-video.dtsi"
 /include/ "dsi-panel-asus-a90-innolux-1080p-cmd.dtsi"

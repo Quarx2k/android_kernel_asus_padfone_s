@@ -16,6 +16,7 @@
 
 / {
 	aliases {
+		spi9 = &spi_9; //ASUS BSP Evan
 		serial0 = &blsp1_uart1;
 	};
 };
@@ -54,25 +55,24 @@
 	};
 //--- ASUS BSP Eason......."BLSP1 : Wireless charger"
 
-// +++ ASUS_BSP : add for ASUS touch 
-	i2c@f9924000 {
+ // +++ ASUS_BSP : add for ASUS touch 
+ 	i2c@f9924000 {
 		himax_hx8528_d48@48 {
 			compatible = "himax,himax-ts";
 			reg = <0x48>;
-			interrupt-parent = <&msmgpio>;
+ 			interrupt-parent = <&msmgpio>;
 			interrupts = <0 0x2>;
 			vdd_ana-supply = <&pm8941_l23>;
-			vcc_i2c-supply = <&pm8941_lvs1>;
+ 			vcc_i2c-supply = <&pm8941_lvs1>;
 			himax,reset-gpio = <&msmgpio 60 0x00>;
 			himax,irq-gpio = <&msmgpio 0 0x00>;
 			himax,pcb-id0 = <&msmgpio 69 0x00>;
 			himax,pcb-id1 = <&msmgpio 90 0x00>;
-		};
-	};
-// --- ASUS_BSP : add for ASUS touch 
-
-// +++ ASUS BSP......."BLSP6 : Pad bus"
-i2c@f9928000 {
+ 		};
+ 	};
+ // --- ASUS_BSP : add for ASUS touch
+ //+++ ASUS BSP......."BLSP6 : Pad bus"
+	i2c@f9928000 {
 		//+++ ASUS_BSP Eason +++
 		microp@15 {
 			compatible = "nuvoton,microp";
@@ -109,8 +109,25 @@ i2c@f9928000 {
 	};
 //--- ASUS BSP......."BLSP6 : Pad bus"
 
-	i2c@f9966000 {
+// +++ ASUS BSP Bernard Ong: mydp 7808
+	i2c@f9925000{
+		colorado_i2c@39 {
+			compatible = "analogix,slimport";
+			reg = <0x39>;
+			interrupt-parent = <&msmgpio>;
+			#interrupt-cells = <2>;
+			interrupts = <82 0x2 61 0x2>;
+			vcc_1v-supply = <&pm8941_l3>;
+			slimport,gpio_rst = <&msmgpio 45 0x00>; //Reset, MYDP_RESETN_N
+			slimport,gpio_cbl_det = <&msmgpio 61 0x00>; //cable detect, MYDP_CABLE_DET
+			slimport,gpio_pw_dwn = <&msmgpio 31 0x00>; //chip power down, MYDP_EN_N
+			slimport,gpio_usb_id = <&msmgpio 82 0x00>; //usb_hs_id
+			slimport,hdmi-tx-map = <&mdss_hdmi_tx>;  //ASUS BSP Wei +++
+		};
+	};
+//--- ASUS BSP Bernard Ong: mydp 7808
 
+	i2c@f9966000 {
 //ASUS BSP freddy+++ Porting Driving IC for Vibraotr		
 		on_semi_i2c@49 {
 			compatible = "ON_Semi,LC898301";
@@ -149,7 +166,6 @@ i2c@f9928000 {
 	};
 
 //ASUS BSP freddy++ set gpio_keys	
-
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
@@ -161,7 +177,7 @@ i2c@f9928000 {
 			interrupts = <92 0x2>; 
 			linux,input-type = <1>;
 			linux,code = <115>;
-			//gpio-key,wakeup;
+			gpio-key,wakeup;
 			debounce-interval = <1>;
 		};
 
@@ -172,7 +188,7 @@ i2c@f9928000 {
 			interrupts = <95 0x2>;
 			linux,input-type = <1>;
 			linux,code = <114>;
-			//gpio-key,wakeup;
+			gpio-key,wakeup;
 			debounce-interval = <1>;
 		};
 
@@ -194,7 +210,7 @@ i2c@f9928000 {
 		input-name = "backlight";
 		BL_5V-supply = <&pm8941_boost>;
 		pan-backlight-levels = <1 255>;
-		bl-tout-defau-levels = <7 58>;
+		bl-tout-defau-levels = <6 58>;
 		normod-bl-param = <17 151 412>;
 		outmod-bl-param = <58 255 340>;
 		autmod-bl-param = <17 255 272>;
@@ -205,6 +221,44 @@ i2c@f9928000 {
 		status = "okay";
 	};
 	//ASUS BSP Jacob kung +++
+//ASUS BSP LiJen +++
+	spi_9: spi@f9965000 { /* BLSP2 QUP2 */
+		compatible = "qcom,spi-qup-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "spi_physical", "spi_bam_physical";
+		reg = <0xf9965000 0x1000>,
+		      <0xf9944000 0x19000>;
+		interrupt-names = "spi_irq", "spi_bam_irq";
+		interrupts = <0 103 0>, <0 239 0>;
+//		reg-names = "spi_physical";
+//		reg = <0xf9965000 0x1000>;
+//		interrupt-names = "spi_irq";
+//		interrupts = <0 103 0>;
+		spi-max-frequency = <50000000>;
+		qcom,gpio-mosi = <&msmgpio 49 0>;
+		qcom,gpio-miso = <&msmgpio 50 0>;
+		qcom,gpio-clk  = <&msmgpio 52 0>;
+		qcom,gpio-cs0  = <&msmgpio 51 0>;
+		spi_cpol;
+		spi_cpha;
+		qcom,infinite-mode = <0>;
+		qcom,use-bam;
+		qcom,ver-reg-exists;
+		qcom,bam-consumer-pipe-index = <16>;
+		qcom,bam-producer-pipe-index = <17>;
+		qcom,master-id = <84>;
+		qcom-spi-test@0{
+			compatible = "qcom,spi-test";
+			reg = <0>;
+			spi-max-frequency = <50000000>;
+			qcom,use-bam;
+			qcom,bam-consumer-pipe-index = <16>;
+			qcom,bam-producer-pipe-index = <17>;
+			//interrupt-parent = <&msmgpio>;
+ 		};
+	};
+//ASUS BSP LiJen ---
 	sound {
 		qcom,model = "msm8974-taiko-cdp-snd-card";
 		qcom,hdmi-audio-rx;
@@ -796,22 +850,22 @@ i2c@f9928000 {
 };
 
 &dsi_nt35595_1080_cmd {
-	status = "ok";
-	qcom,cont-splash-enabled;
+    status = "ok";
+       qcom,cont-splash-enabled;
 };
 
 &dsi_nt35595_1080_video {
-	status = "ok";
-	qcom,cont-splash-enabled;
+    status = "ok";
+       qcom,cont-splash-enabled;
 };
 //ASUS_BSP: Louis, for A91 display ---
 
 &dsi_generic_720p_cmd {
-	qcom,cont-splash-enabled;
+       qcom,cont-splash-enabled;
 };
 
 &dsi_jdi_1080_vid {
-	qcom,cont-splash-enabled;
+       qcom,cont-splash-enabled;
 };
 
 &dsi_dual_jdi_video_0 {
