@@ -155,6 +155,193 @@ static int __init set_reset_devices(char *str)
 
 __setup("reset_devices", set_reset_devices);
 
+
+enum DEVICE_HWID g_ASUS_hwID=A90_UNKNOWN;
+char hwid_info[32]={0};
+EXPORT_SYMBOL(g_ASUS_hwID);
+
+ static int set_hardware_id(char *str)
+ {
+	strcpy(hwid_info,"HW ID : ");
+ 	if ( strcmp("A90_EVB0", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_EVB0;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_EVB0\n");
+ 		printk("Kernel HW ID = %d\n",g_ASUS_hwID);
+ 	}
+ 	else if ( strcmp("A90_EVB", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_EVB;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_EVB\n");
+ 	}
+	else if ( strcmp("A90_SR1", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_SR1;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_SR1\n");
+ 	}
+ 	else if ( strcmp("A90_SR2", str) == 0 )
+ 	{
+		g_ASUS_hwID = A90_SR2;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_SR2\n");
+ 	}
+ 	else if ( strcmp("A90_SR3", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_SR3;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_SR3\n");
+ 	}		
+ 	else if ( strcmp("A90_ER1", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_ER1;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_ER1\n");
+ 	}
+	else if ( strcmp("A90_PR", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_PR;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_PR\n");
+ 	}
+	else if ( strcmp("A90_MP", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_MP;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_MP\n");
+ 	}
+	else if ( strcmp("A91_SR1", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR1;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR1\n");
+	}
+	else if ( strcmp("A91_SR2", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR2\n");
+	}
+	else if ( strcmp("A91_SR3", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR3;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR3\n");
+	}
+	else if ( strcmp("A91_SR4", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR4;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR4\n");
+	}
+	else if ( strcmp("A91_SR5", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR5;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR5\n");
+	}	
+	else if ( strcmp("A91_ER1", str) == 0 )
+	{
+		g_ASUS_hwID = A91_ER1;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_ER1\n");
+	}
+	else if ( strcmp("PF500KL_2_ER1", str) == 0 )
+	{
+		g_ASUS_hwID = A91_ER1;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_2_ER1\n");
+	}
+	else if ( strcmp("A91_ER2", str) == 0 )
+	{
+		g_ASUS_hwID = A91_ER2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_ER2\n");
+	}
+	else if ( strcmp("PF500KL_2", str) == 0 )
+	{
+		g_ASUS_hwID = A91_ER2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_2\n");
+	}
+	else if ( strcmp("A91_PR", str) == 0 )
+	{
+		g_ASUS_hwID = A91_PR;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_PR\n");
+	}
+	else if ( strcmp("A91_MP", str) == 0 )
+	{
+		g_ASUS_hwID = A91_MP;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_MP\n");
+	}
+	else if ( strcmp("PF500KL_ER1", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_ER1;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_ER1\n");
+	}
+	else if ( strcmp("PF500KL_ER2", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_ER2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_ER2\n");
+	}
+	else if ( strcmp("PF500KL_ER2_2", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_ER2_2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_ER2_2\n");
+	}
+	else if ( strcmp("PF500KL_PR", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_PR;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_PR\n");
+	}
+	else if ( strcmp("PF500KL_MP", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_MP;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_MP\n");
+	}
+	else if ( strcmp("PF500KL_MP2", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_MP2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_MP2\n");
+	}
+ 	else
+ 	{
+ 		g_ASUS_hwID = A91_ER1;
+		strcat(hwid_info,"Unknown");
+ 		printk("Kernel HW ID = UNKNOWN HW_ID (FORCE to A91_ER1)\n");
+ 	}
+ 
+	printk("g_Asus_hwID = %d\n", g_ASUS_hwID);
+ 	return 0;
+ }
+ __setup("HW_ID=", set_hardware_id);
+bool g_Pad_Bootup = false;
+bool g_Android_Boot_Complete = false;
+EXPORT_SYMBOL(g_Pad_Bootup);
+EXPORT_SYMBOL(g_Android_Boot_Complete);
+
+static int set_bootup_mode(char *str)
+{
+    if ( strcmp("PAD", str) == 0 )
+        g_Pad_Bootup = true;
+    else
+        g_Pad_Bootup = false;
+
+    printk("g_Pad_Bootup = %d\n", g_Pad_Bootup);
+    return 0;
+}
+__setup("BOOT_UP=", set_bootup_mode);
+
 static const char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 static const char *panic_later, *panic_param;

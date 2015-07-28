@@ -1,5 +1,6 @@
 ifeq ($(CONFIG_OF),y)
 
+ifndef CONFIG_ASUS_PF500KL
 dtb-$(CONFIG_ARCH_MSM8974) += msm8974-v1-cdp.dtb \
 	msm8974-v1-fluid.dtb \
 	msm8974-v1-liquid.dtb \
@@ -28,6 +29,20 @@ dtb-$(CONFIG_ARCH_MSM8974) += msm8974-v1-cdp.dtb \
 	msm8974pro-ac-pm8941-liquid.dtb \
 	msm8974pro-ac-pm8941-mtp.dtb \
 	msm8974pro-ac-pma8084-pm8941-mtp.dtb
+else
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-pf500kl-er2_2.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-pf500kl-er1.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-pf500kl-pr.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-sr1.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-sr3.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-sr4.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-sr5.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-pr.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-mp.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-er1.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a90-evb0.dtb
+dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a90-evb.dtb
+endif
 dtb-$(CONFIG_ARCH_MSM8909) += msm8909-sim.dtb \
 	msm8909-rumi.dtb \
 	msm8909-qrd-skua.dtb \
