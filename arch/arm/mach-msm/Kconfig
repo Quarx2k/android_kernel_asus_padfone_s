@@ -388,6 +388,12 @@ config MSM_REMOTE_SPINLOCK_LDREX
 config MSM_REMOTE_SPINLOCK_SFPB
 	bool
 
+config ASUS_PF500KL
+	depends on ARCH_MSM8974
+	bool "ASUS PF500KL"
+	help
+	  Support for the Asus Padfone S/X.
+
 config MSM_STACKED_MEMORY
 	bool "Stacked Memory"
 	default y

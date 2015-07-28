@@ -1,0 +1,184 @@
+/*
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	qcom,cci@fda0C000 {
+		cell-index = <0>;
+		compatible = "qcom,cci";
+		reg = <0xfda0C000 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "cci";
+		interrupts = <0 50 0>;
+		interrupt-names = "cci";
+		gpios = <&msmgpio 21 0>,
+			<&msmgpio 22 0>;
+		qcom,gpio-tbl-num = <0 1>;
+		qcom,gpio-tbl-flags = <1 1>;
+		qcom,gpio-tbl-label = "CCI_I2C_DATA0",
+				      "CCI_I2C_CLK0";	
+		master0: qcom,cci-master0 {
+			status = "disabled";
+		};
+		master1: qcom,cci-master1 {
+			status = "disabled";
+		};
+	};
+
+	i2c@f9926000 {
+		qcom,camera@3c {
+			compatible = "qcom,mt9m114";
+			reg = <0x3c>;
+			cam_vdig-supply = <&pm8941_lvs2>;
+			cam_vana-supply = <&pm8941_l22>;
+			cam_vio-supply = <&pm8941_l23>;
+			cam_vaf-supply = <&pm8941_l17>;				
+		};
+	};
+	i2c@f9926000 {
+		qcom,camera@6a {
+			compatible = "qcom,ov2720asus";
+			reg = <0x6a>;
+			cam_vdig-supply = <&pm8941_lvs2>;
+			cam_vana-supply = <&pm8941_l22>;
+			cam_vio-supply = <&pm8941_l23>;
+			cam_vaf-supply = <&pm8941_l17>;				
+		};
+	};
+};
+&cci {
+
+	actuator0: qcom,actuator@18 {
+		cell-index = <0>;
+		reg = <0x18>;
+		compatible = "qcom,actuator";
+		qcom,cci-master = <0>;
+	};
+
+	actuator1: qcom,actuator@36 {
+		cell-index = <1>;
+		reg = <0x36>;
+		compatible = "qcom,actuator";
+		qcom,cci-master = <0>;
+	};
+
+	qcom,camera@3c {
+		compatible = "qcom,mt9m114";
+		reg = <0x3c>;
+		qcom,slave-id = <0x78 0x72c6 0x00>;
+		qcom,csiphy-sd-index = <0>;
+		qcom,csid-sd-index = <0>;
+		qcom,mount-angle = <90>;
+		qcom,sensor-name = "mt9m114";
+		qcom,vdd-cx-supply = <&pm8841_s2>;
+		qcom,vdd-cx-name = "qcom,vdd-cx";
+		cam_vdig-supply = <&pm8941_lvs2>;
+		cam_vana-supply = <&pm8941_l22>;
+		cam_vio-supply = <&pm8941_l23>;
+		cam_vaf-supply = <&pm8941_l17>;
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana", "cam_vaf";
+		qcom,cam-vreg-type = <1 0 0 0>;
+		qcom,cam-vreg-min-voltage = <0 2800000 2800000 2800000>;
+		qcom,cam-vreg-max-voltage = <0 2800000 2800000 2800000>;
+		qcom,cam-vreg-op-mode = <0 2800000 2800000 2800000>;
+		qcom,gpio-no-mux = <0>;
+		gpios = <&msmgpio 57 0>,
+			<&msmgpio 21 0>,
+			<&msmgpio 22 0>,
+			<&pm8941_gpios 10 0x1>,
+			<&pm8941_gpios 11 0x1>,
+			<&msmgpio 25 0>,
+			<&msmgpio 78 0>,
+			<&msmgpio 84 0>,
+			<&msmgpio 91 0>,
+			<&msmgpio 94 0>;
+		qcom,gpio-isp_1p2_en = <3>;
+		qcom,gpio-isp_1p8_en = <4>;
+		qcom,gpio-isp_int = <5>;
+		qcom,gpio-isp_suspend = <6>;
+		qcom,gpio-vga_mclk_en = <7>;
+		qcom,gpio-fled_driver_ent = <8>;
+		qcom,gpio-isp_reset = <9>;
+		qcom,gpio-req-tbl-num = <0 1 2 3 4 5 6 7 8 9>;
+		qcom,gpio-req-tbl-flags = <1 1 1 0 0 1 0 0 0 0>;
+		qcom,gpio-req-tbl-label = "CAMIF_MCLK",
+					  "CAMIF_I2C_DATA",
+					  "CAMIF_I2C_CLK",
+					  "ISP_1P2_EN",
+					  "ISP_1P8_EN",
+					  "ISP_INT",
+					  "ISP_SUSPEND",
+					  "VGA_MCLK_EN",
+					  "FLED_DRIVER_EN",
+					  "ISP_RESET";
+		qcom,gpio-set-tbl-num = <0 1 2 3 4 6 7 9>;
+		qcom,gpio-set-tbl-flags = <1 1 1 1 1 1 1 1>;
+		qcom,gpio-set-tbl-delay = <1000 1000 1000 1000 1000 1000 1000 1000>;
+		qcom,csi-lane-assign = <0x4320>;
+		qcom,csi-lane-mask = <0x1F>;
+		qcom,sensor-position = <0>;
+		qcom,sensor-mode = <1>;
+		qcom,cci-master = <0>;
+	};
+	qcom,camera@6a {
+		compatible = "qcom,ov2720asus";
+		reg = <0x6a>;
+		qcom,slave-id = <0x78 0x72c6 0x00>;
+		qcom,csiphy-sd-index = <0>;
+		qcom,csid-sd-index = <0>;
+		qcom,mount-angle = <90>;
+		qcom,sensor-name = "ov2720asus";
+		qcom,vdd-cx-supply = <&pm8841_s2>;
+		qcom,vdd-cx-name = "qcom,vdd-cx";
+		cam_vdig-supply = <&pm8941_lvs2>;
+		cam_vana-supply = <&pm8941_l22>;
+		cam_vio-supply = <&pm8941_l23>;
+		cam_vaf-supply = <&pm8941_l17>;
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana", "cam_vaf";
+		qcom,cam-vreg-type = <1 0 0 0>;
+		qcom,cam-vreg-min-voltage = <0 2800000 2800000 2800000>;
+		qcom,cam-vreg-max-voltage = <0 2800000 2800000 2800000>;
+		qcom,cam-vreg-op-mode = <0 2800000 2800000 2800000>;
+		qcom,gpio-no-mux = <0>;
+		gpios = <&msmgpio 57 0>,
+			<&msmgpio 21 0>,
+			<&msmgpio 22 0>,
+			<&pm8941_gpios 10 0x1>,
+			<&pm8941_gpios 11 0x1>,
+			<&msmgpio 25 0>,
+			<&msmgpio 78 0>,
+			<&msmgpio 84 0>,
+			<&msmgpio 91 0>,
+			<&msmgpio 94 0>;
+		qcom,gpio-isp_1p2_en = <3>;
+		qcom,gpio-isp_1p8_en = <4>;
+		qcom,gpio-isp_int = <5>;
+		qcom,gpio-isp_suspend = <6>;
+		qcom,gpio-vga_mclk_en = <7>;
+		qcom,gpio-fled_driver_ent = <8>;
+		qcom,gpio-isp_reset = <9>;
+		qcom,gpio-req-tbl-num = <0 1 2>;
+		qcom,gpio-req-tbl-flags = <1 1 1>;
+		qcom,gpio-req-tbl-label = "CAMIF_MCLK",
+					  "CAMIF_I2C_DATA",
+					  "CAMIF_I2C_CLK";
+		qcom,gpio-set-tbl-num = <0 1 2>;
+		qcom,gpio-set-tbl-flags = <1 1 1>;
+		qcom,gpio-set-tbl-delay = <1000 1000 1000>;
+		qcom,csi-lane-assign = <0x4320>;
+		qcom,csi-lane-mask = <0x1f>;
+		qcom,sensor-position = <1>;
+		qcom,sensor-mode = <1>;
+		qcom,cci-master = <0>;
+	};
+};

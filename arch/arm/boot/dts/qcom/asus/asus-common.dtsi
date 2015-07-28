@@ -1,0 +1,279 @@
+/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "asus-leds.dtsi"
+#include "asus-panels.dtsi"
+#include "asus-camera-common.dtsi"
+
+/ {
+	qcom,msm-id = <218 0x10000>;
+};
+
+&soc {
+	i2c@f9966000 { /*BLSP#10 */
+		cell-index = <10>;
+		compatible = "qcom,i2c-qup";
+		reg = <0xf9966000 0x500>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		interrupts = <0 104 0>;
+		interrupt-names = "qup_err_intr";
+		qcom,i2c-bus-freq = <100000>;
+		qcom,i2c-src-freq = <19200000>;
+		qcom,clk-ctl-xfer;
+		qcom,master-id = <84>;
+		qcom,active-only;
+		qcom,use-bam;
+		qcom,ver-reg-exists;
+	};
+
+	i2c@f9968000 {
+		cell-index = <12>;
+		compatible = "qcom,i2c-qup";
+		reg = <0xf9968000 0x500>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		interrupts = <0 106 0>;
+		interrupt-names = "qup_err_intr";
+		qcom,i2c-bus-freq = <100000>;
+		qcom,i2c-src-freq = <19200000>;
+		qcom,clk-ctl-xfer;
+		qcom,master-id = <84>;
+	};
+
+//+++ ASUS BSP......."BLSP3 : Mydp"
+	i2c_3: i2c@f9925000 {
+		cell-index = <3>;
+		compatible = "qcom,i2c-qup";
+		reg = <0xf9925000 0x500>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		interrupts = <0 97 0>;
+		interrupt-names = "qup_err_intr";
+		qcom,i2c-bus-freq = <100000>;
+		qcom,i2c-src-freq = <19200000>;
+		qcom,clk-ctl-xfer;
+		qcom,master-id = <86>;
+	};
+//--- ASUS BSP
+
+//+++ ASUS BSP......."BLSP4 : Camera"
+	i2c_4: i2c@f9926000 {
+		cell-index = <4>;
+		compatible = "qcom,i2c-qup";
+		reg = <0xf9926000 0x500>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		interrupts = <0 98 0>;
+		interrupt-names = "qup_err_intr";
+		qcom,i2c-bus-freq = <100000>;
+		qcom,i2c-src-freq = <19200000>;
+		qcom,clk-ctl-xfer;
+		qcom,master-id = <86>;
+	};
+//--- ASUS BSP
+
+//+++ ASUS BSP......."BLSP6 : Pad bus"
+	i2c_6: i2c@f9928000 {
+		cell-index = <6>;
+		compatible = "qcom,i2c-qup";
+		reg = <0xf9928000 0x500>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		interrupts = <0 100 0>;
+		interrupt-names = "qup_err_intr";
+		qcom,i2c-bus-freq = <100000>;
+		qcom,i2c-src-freq = <19200000>;
+		qcom,clk-ctl-xfer;
+		qcom,master-id = <86>;
+		qcom,scl-gpio = <&msmgpio 29 0>;
+		qcom,sda-gpio = <&msmgpio 30 0>;
+	};
+
+	slim@fe12f000 {
+		taiko_codec {
+			qcom,cdc-dmic-sample-rate = <2400000>;
+			qcom,cdc-micbias-cfilt3-mv = <2700>;
+		};
+	};
+
+	qcom,mdss_dsi@fd922800 {
+		qcom,platform-reset-gpio = <&msmgpio 47 1>;
+	};
+
+	qcom,msm-adsp-sensors {
+		compatible = "qcom,msm-adsp-sensors";
+		qcom,src-id = <11>;
+		qcom,dst-id = <604>;
+		qcom,ab = <32505856>;
+		qcom,ib = <32505856>;
+	};
+
+	sound {
+		qcom,model = "msm8974-taiko-cdp-snd-card";
+		qcom,hsmic_bias = <&pm8941_gpios 23 0>;
+		qcom,audio-routing =
+			"AIF4 VI", "MCLK",
+			"RX_BIAS", "MCLK",
+			"LDO_H", "MCLK",
+			"AIF4 MAD", "MCLK",
+			"Lineout_1 amp", "LINEOUT1",
+			"Lineout_2 amp", "LINEOUT2",
+			"Lineout_3 amp", "LINEOUT3",
+			"AMIC1", "MIC BIAS1 Internal1",
+			"MIC BIAS1 Internal1", "Handset Mic",
+			"AMIC2", "MIC BIAS2 External",
+			"MIC BIAS2 External", "Headset Mic",
+			"AMIC3", "MIC BIAS2 External",
+			"MIC BIAS2 External", "ANCRight Headset Mic",
+			"AMIC4", "MIC BIAS2 External",
+			"MIC BIAS2 External", "ANCLeft Headset Mic",
+			"DMIC1", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Digital Mic1",
+			"DMIC2", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Digital Mic2",
+			"DMIC3", "MIC BIAS3 External",
+			"MIC BIAS3 External", "Digital Mic3",
+			"DMIC4", "MIC BIAS3 External",
+			"MIC BIAS3 External", "Digital Mic4",
+			"DMIC5", "MIC BIAS4 External",
+			"MIC BIAS4 External", "Digital Mic5",
+			"DMIC6", "MIC BIAS4 External",
+			"MIC BIAS4 External", "Digital Mic6";
+
+		button {
+			label = "button";
+			gpios = <&msmgpio 80 0x00>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <80 0x2>;
+		};
+		jack {
+			label = "jack";
+			gpios = <&msmgpio 1 0x00>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <1 0x2>;
+		};
+		hs_path_en {
+			label = "hs_path_en";
+			gpios = <&msmgpio 13 0x00>;
+		};
+	};
+
+};
+&rpm_bus {
+	rpm-regulator-ldoa3 {
+		pm8941_l3: regulator-l3 {
+			regulator-min-microvolt = <1000000>;
+			regulator-max-microvolt = <1000000>;
+			qcom,init-voltage = <1000000>;
+		};
+	};
+
+	rpm-regulator-ldoa17 {
+		pm8941_l17: regulator-l17 {
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			qcom,init-voltage = <2800000>;
+		};
+	};
+
+	rpm-regulator-ldoa18 {
+		pm8941_l18: regulator-l18 {
+			regulator-always-on; // ASUS_BSP ++ Jiunhau_Wang "[A86][Sensor][NA][Spec] Porting 9-axis sensor"
+		};
+	};
+
+	rpm-regulator-ldoa22 {
+		pm8941_l22: regulator-l22 {
+			regulator-min-microvolt = <2800000>;
+			qcom,init-voltage = <2800000>;
+		};
+	};
+
+	rpm-regulator-ldoa23 {
+		pm8941_l23: regulator-l23 {
+			regulator-min-microvolt = <2800000>;
+			qcom,init-voltage = <2800000>;
+		};
+	};
+
+	rpm-regulator-vsa1 {
+		pm8941_lvs1: regulator-lvs1 {
+			regulator-always-on; /* +++ ASUS_BSP : add for ASUS touch */
+		};
+	};
+
+	rpm-regulator-vsa2 {
+		pm8941_lvs2: regulator-lvs2 {
+			regulator-always-on; /* +++ ASUS_BSP Peter_Lu : Enable 1.8V for support I2C devices */
+		};
+	};
+
+	rpm-regulator-vsa3 {
+		pm8941_lvs3: regulator-lvs3 {
+			regulator-always-on; /* +++ ASUS_BSP Peter_Lu : Enable 1.8V for support I2C devices */
+		};
+	};
+
+};
+&pm8941_lsid1 {
+	qcom,vibrator@c000 {
+		compatible = "qcom,qpnp-vibrator";
+		reg = <0xc000 0x100>;
+		label = "vibrator";
+		status = "okay";
+            	qcom,vib-timeout-ms = <15000>;
+            	qcom,vib-vtg-level-mV = <3000>;
+	};
+
+};
+
+&pm8941_lsid0 {
+	qcom,power-on@800 {
+		qcom,pon_2 {
+			qcom,support-reset = <0>;
+		};
+
+		qcom,pon_3 {
+			qcom,support-reset = <0>;
+		};
+	};
+};
+
+&usb_otg {
+	qcom,hsusb-otg-otg-control = <2>;
+};
+
+&pm8941_gpios {
+	gpio@df00 {
+		/* NFC clk request */
+		qcom,mode = <0>;                /* QPNP_PIN_MODE_DIG_IN */
+		qcom,pull = <5>;                /* QPNP_PIN_PULL_NO */
+		qcom,vin-sel = <2>;             /* QPNP_PIN_VIN2 */
+		qcom,src-sel = <2>;             /* QPNP_PIN_SEL_FUNC_1 */
+		qcom,master-en = <1>;
+	};
+};
+
+&gdsc_venus {
+	qcom,clock-names = "core_clk";
+	qcom,skip-logic-collapse;
+	qcom,retain-periph;
+	qcom,retain-mem;
+	status = "ok";
+};
+

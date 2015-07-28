@@ -15,6 +15,60 @@
 #include <asm/byteorder.h>
 #include <uapi/linux/kernel.h>
 
+// +++ ASUS_BSP : add for miniporting
+enum DEVICE_HWID
+{
+	//A90 ????
+	A90_EVB0 = 0x0,
+	A90_EVB = 0x1,
+	A90_SR1 = 0x2,
+	A90_SR2 = 0x3,
+	A90_SR3 = 0x4,
+	A90_ER1 = 0x5,
+	A90_PR  = 0x6,
+	A90_MP  = 0x7,
+
+	//A91 PadFone X
+	A91_SR1 = 0x20,
+	A91_SR2 = 0x21,
+	A91_SR3 = 0x22,
+	A91_SR4 = 0x23,
+	A91_SR5 = 0x24,		
+	A91_ER1 = 0x25,
+	A91_ER2 = 0x26,
+	A91_PR  = 0x27,
+	A91_MP  = 0x28,
+
+	//PF500KL PadFone S
+	PF500KL_ER1 = 0x30,
+	PF500KL_ER2 = 0x31,
+	PF500KL_ER2_2 = 0x32,
+	PF500KL_PR  = 0x33,
+	PF500KL_MP  = 0x34,
+	PF500KL_MP2  = 0x35,
+
+	A90_UNKNOWN = 0xFF
+};
+
+
+extern enum DEVICE_HWID g_ASUS_hwID;
+extern bool g_Pad_Bootup;
+extern bool g_Android_Boot_Complete;
+
+static inline bool isPadfoneS(void) {
+	if (g_ASUS_hwID == PF500KL_ER1 ||
+		g_ASUS_hwID == PF500KL_ER2 ||	
+		g_ASUS_hwID == PF500KL_ER2_2 ||
+		g_ASUS_hwID == PF500KL_PR ||
+		g_ASUS_hwID == PF500KL_MP ||
+		g_ASUS_hwID == PF500KL_MP2)
+	{
+		return true;
+	} else {
+		return false;
+	}
+}
+
 #define USHRT_MAX	((u16)(~0U))
 #define SHRT_MAX	((s16)(USHRT_MAX>>1))
 #define SHRT_MIN	((s16)(-SHRT_MAX - 1))
