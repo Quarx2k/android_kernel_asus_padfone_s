@@ -37,9 +37,6 @@
 #include <linux/compat.h>
 #include <linux/pm_runtime.h>
 
-#define CREATE_TRACE_POINTS
-#include <trace/events/mmc.h>
-
 #include <linux/mmc/ioctl.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
@@ -1286,6 +1283,13 @@ static int mmc_blk_issue_discard_rq(struct mmc_queue *mq, struct request *req)
 	if (card->ext_csd.bkops_en)
 		card->bkops_info.sectors_changed += blk_rq_sectors(req);
 
+//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPEND_TEST
+	if (card->host->suspendtest)
+		card->sectors_changed += blk_rq_sectors(req);
+#endif
+//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
+
 	if (mmc_can_discard(card))
 		arg = MMC_DISCARD_ARG;
 	else if (mmc_can_trim(card))
@@ -1369,12 +1373,6 @@ retry:
 			goto out;
 	}
 
-	if (mmc_can_sanitize(card)) {
-		trace_mmc_blk_erase_start(EXT_CSD_SANITIZE_START, 0, 0);
-		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-				 EXT_CSD_SANITIZE_START, 1, 0);
-		trace_mmc_blk_erase_end(EXT_CSD_SANITIZE_START, 0, 0);
-	}
 out_retry:
 	if (err && !mmc_blk_reset(md, card->host, type))
 		goto retry;
@@ -2222,6 +2220,12 @@ static u8 mmc_blk_prep_packed_list(struct mmc_queue *mq, struct request *req)
 			if (card->ext_csd.bkops_en)
 				card->bkops_info.sectors_changed +=
 					blk_rq_sectors(next);
+//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPENDTEST
+			if (card->host->suspendtest)
+				card->sectors_changed += blk_rq_sectors(next);
+#endif
+//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
 		}
 		list_add_tail(&next->queuelist, &mq->mqrq_cur->packed_list);
 		cur = next;
@@ -2464,6 +2468,12 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 	if (rqc) {
 		if ((card->ext_csd.bkops_en) && (rq_data_dir(rqc) == WRITE))
 			card->bkops_info.sectors_changed += blk_rq_sectors(rqc);
+//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPENDTEST
+		if ((card->host->suspendtest) && (rq_data_dir(rqc) == WRITE))
+			card->sectors_changed += blk_rq_sectors(rqc);
+#endif
+//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
 		reqs = mmc_blk_prep_packed_list(mq, rqc);
 	}
 
@@ -3068,11 +3078,6 @@ force_ro_fail:
 
 	return ret;
 }
-
-#define CID_MANFID_SANDISK	0x2
-#define CID_MANFID_TOSHIBA	0x11
-#define CID_MANFID_MICRON	0x13
-#define CID_MANFID_SAMSUNG	0x15
 
 static const struct mmc_fixup blk_fixups[] =
 {

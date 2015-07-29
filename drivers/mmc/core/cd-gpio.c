@@ -16,11 +16,12 @@
 #include <linux/mmc/host.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/delay.h> //ASUS_BSP Gavin_Chang +++ avoid card detect fail when fast insert/remove
 
 struct mmc_cd_gpio {
 	unsigned int gpio;
-	char label[0];
 	bool status;
+	char label[0];
 };
 
 static int mmc_cd_get_status(struct mmc_host *host)
@@ -42,20 +43,34 @@ static irqreturn_t mmc_cd_gpio_irqt(int irq, void *dev_id)
 	struct mmc_host *host = dev_id;
 	struct mmc_cd_gpio *cd = host->hotplug.handler_priv;
 	int status;
+	int retry_time = 10; //ASUS_BSP Gavin_Chang +++ avoid card detect fail when fast insert/remove
 
 	status = mmc_cd_get_status(host);
 	if (unlikely(status < 0))
 		goto out;
 
 	if (status ^ cd->status) {
-		pr_info("%s: slot status change detected (%d -> %d), GPIO_ACTIVE_%s\n",
+		pr_info("%s: slot status change detected (%d -> %d), GPIO_ACTIVE_%s, cd_delay %dms\n",
 				mmc_hostname(host), cd->status, status,
 				(host->caps2 & MMC_CAP2_CD_ACTIVE_HIGH) ?
-				"HIGH" : "LOW");
+				"HIGH" : "LOW",
+				host->cd_delay);
 		cd->status = status;
+		host->sd_status = status; //ASUS_BSP +++ Gavin_Chang "sd status for ATD"
+
+//ASUS_BSP Gavin_Chang +++ avoid card detect fail when fast insert/remove
+		while(retry_time>0 && cd->status == 1){
+			if(mmc_cd_get_status(host) != cd->status)
+				return IRQ_NONE;
+			msleep(50);
+			//pr_info("%s: cd->status = %d , retry time = %d\n",
+			//mmc_hostname(host), cd->status, retry_time);
+			retry_time--;
+		}
+//ASUS_BSP Gavin_Chang --- avoid card detect fail when fast insert/remove
 
 		/* Schedule a card detection after a debounce timeout */
-		mmc_detect_change(host, msecs_to_jiffies(100));
+		mmc_detect_change(host, msecs_to_jiffies(host->cd_delay));  //ASUS_BSP +++ Gavin_Chang "card detect config"
 	}
 out:
 	return IRQ_HANDLED;
