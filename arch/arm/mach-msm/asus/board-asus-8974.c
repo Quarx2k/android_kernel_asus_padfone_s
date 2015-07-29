@@ -66,14 +66,26 @@ static struct of_dev_auxdata msm_hsic_host_adata[] = {
 	OF_DEV_AUXDATA("qcom,hsic-host", 0xF9A00000, "msm_hsic_host", NULL),
 	{}
 };
-
+	
 static struct of_dev_auxdata msm8974_auxdata_lookup[] __initdata = {
-	OF_DEV_AUXDATA("qcom,hsusb-otg", 0xF9A55000, "msm_otg", NULL),
-	OF_DEV_AUXDATA("qcom,ehci-host", 0xF9A55000, "msm_ehci_host", NULL),
-	OF_DEV_AUXDATA("qcom,dwc-usb3-msm", 0xF9200000, "msm_dwc3", NULL),
-	OF_DEV_AUXDATA("qcom,usb-bam-msm", 0xF9304000, "usb_bam", NULL),
+	OF_DEV_AUXDATA("qcom,hsusb-otg", 0xF9A55000, \
+			"msm_otg", NULL),
+	OF_DEV_AUXDATA("qcom,ehci-host", 0xF9A55000, \
+			"msm_ehci_host", NULL),
+	OF_DEV_AUXDATA("qcom,dwc-usb3-msm", 0xF9200000, \
+			"msm_dwc3", NULL),
+	OF_DEV_AUXDATA("qcom,usb-bam-msm", 0xF9304000, \
+			"usb_bam", NULL),
 	OF_DEV_AUXDATA("qcom,spi-qup-v2", 0xF9924000, \
 			"spi_qsd.1", NULL),
+	OF_DEV_AUXDATA("qcom,msm-sdcc", 0xF9824000, \
+			"msm_sdcc.1", NULL),
+	OF_DEV_AUXDATA("qcom,msm-sdcc", 0xF98A4000, \
+			"msm_sdcc.2", NULL),
+	OF_DEV_AUXDATA("qcom,msm-sdcc", 0xF9864000, \
+			"msm_sdcc.3", NULL),
+	OF_DEV_AUXDATA("qcom,msm-sdcc", 0xF98E4000, \
+			"msm_sdcc.4", NULL),
 	OF_DEV_AUXDATA("qcom,sdhci-msm", 0xF9824900, \
 			"msm_sdcc.1", NULL),
 	OF_DEV_AUXDATA("qcom,sdhci-msm", 0xF98A4900, \
@@ -91,8 +103,6 @@ static struct of_dev_auxdata msm8974_auxdata_lookup[] __initdata = {
 			"msm-tsens", NULL),
 	OF_DEV_AUXDATA("qcom,qcedev", 0xFD440000, \
 			"qcedev.0", NULL),
-	OF_DEV_AUXDATA("qcom,qcrypto", 0xFD440000, \
-			"qcrypto.0", NULL),
 	OF_DEV_AUXDATA("qcom,hsic-host", 0xF9A00000, \
 			"msm_hsic_host", NULL),
 	OF_DEV_AUXDATA("qcom,hsic-smsc-hub", 0, "msm_smsc_hub",
@@ -144,7 +154,7 @@ void __init msm8974_init(void)
 	if (socinfo_init() < 0)
 		pr_err("%s: socinfo_init() failed\n", __func__);
 
-	msm_8974_init_gpiomux();
+	device_gpiomux_init();
 	regulator_has_full_constraints();
 	msm8974_add_drivers();
 }
