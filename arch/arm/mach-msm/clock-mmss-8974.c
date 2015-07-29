@@ -2308,6 +2308,14 @@ static struct clk_lookup msm_camera_clocks_8974pro_only[] = {
 	CLK_LOOKUP_OF("cam_clk", camss_mclk0_clk, "0.qcom,camera"),
 	CLK_LOOKUP_OF("cam_clk", camss_mclk1_clk, "1.qcom,camera"),
 	CLK_LOOKUP_OF("cam_clk", camss_mclk2_clk, "2.qcom,camera"),
+	CLK_LOOKUP_OF("cam_src_clk", mclk0_clk_src, "3c.qcom,camera"), //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("cam_src_clk", mclk0_clk_src, "4-003c"), //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("cam_src_clk", mclk0_clk_src, "6a.qcom,camera"), //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("cam_src_clk", mclk0_clk_src, "4-006a"), //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("cam_clk", camss_mclk0_clk, "3c.qcom,camera"), //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("cam_clk", camss_mclk0_clk, "4-003c"), //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("cam_clk", camss_mclk0_clk, "6a.qcom,camera"), //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("cam_clk", camss_mclk0_clk, "4-006a"), //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
 };
 
 static struct clk_lookup msm_camera_clocks_8974_only[] = {

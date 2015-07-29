@@ -17,7 +17,9 @@
 / {
 	qcom,msm-id = <218 0x10000>;
 };
-
+&peripheral_mem {
+	status = "ok";
+};
 &soc {
 	i2c@f9966000 { /*BLSP#10 */
 		cell-index = <10>;
