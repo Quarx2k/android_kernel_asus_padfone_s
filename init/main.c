@@ -336,6 +336,44 @@ static int set_bootup_mode(char *str)
 }
 __setup("BOOT_UP=", set_bootup_mode);
 
+//ASUS_BSP Deeo : add for kernel charger mode. +++
+bool g_Charger_mode = false;
+
+static int set_charger_mode(char *str)
+{
+    if ( strcmp("charger", str) == 0 )
+        g_Charger_mode = true;
+    else
+        g_Charger_mode = false;
+
+    printk("g_Charger_mode = %d\n", g_Charger_mode);
+    return 0;
+}
+__setup("androidboot.mode=", set_charger_mode);
+EXPORT_SYMBOL(g_Charger_mode);
+//ASUS_BSP Deeo : add for kernel charger mode. ---
+
+//+++ ASUS_BSP : miniporting : Add for audio dbg mode
+int g_user_dbg_mode = 1;
+EXPORT_SYMBOL(g_user_dbg_mode);
+
+static int set_user_dbg_mode(char *str)
+{
+    if ( strcmp("y", str) == 0 )
+    {
+        g_user_dbg_mode = 1;
+    }
+    else
+    {
+        g_user_dbg_mode = 0;
+    }
+    g_user_dbg_mode = 1;
+    printk("Kernel dbg mode = %d\n", g_user_dbg_mode);
+    return 0;
+}
+__setup("dbg=", set_user_dbg_mode);
+//--- ASUS_BSP : miniporting : Add for audio dbg mode
+
 static const char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 static const char *panic_later, *panic_param;

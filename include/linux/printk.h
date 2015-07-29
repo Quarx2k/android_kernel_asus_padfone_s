@@ -156,6 +156,9 @@ static inline void setup_log_buf(int early)
 }
 #endif
 
+int pmem_log_init(void);
+int pmem_log_start(void);
+
 extern void dump_stack(void) __cold;
 
 #ifndef pr_fmt

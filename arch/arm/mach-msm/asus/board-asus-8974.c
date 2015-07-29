@@ -59,7 +59,7 @@ static struct persistent_ram_descriptor msm_prd[] __initdata = {
 static struct persistent_ram msm_pr __initdata = {
 	.descs = msm_prd,
 	.num_descs = ARRAY_SIZE(msm_prd),
-	.start = PLAT_PHYS_OFFSET + SZ_1G + SZ_256M,
+	.start = 0x7FF00000,
 	.size = SZ_1M,
 };
 

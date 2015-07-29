@@ -43,6 +43,9 @@
 #include <linux/rculist.h>
 
 #include <asm/uaccess.h>
+//thomas_chu +++
+#include <linux/asus_global.h>
+//thomas_chu ---
 
 #include <mach/msm_rtb.h>
 #define CREATE_TRACE_POINTS
@@ -56,6 +59,12 @@ void asmlinkage __attribute__((weak)) early_printk(const char *fmt, ...)
 }
 
 #define __LOG_BUF_LEN	(1 << CONFIG_LOG_BUF_SHIFT)
+
+// +++ ASUS_BSP : Enable debug LL
+#ifdef        CONFIG_DEBUG_LL
+extern void printascii(char *);
+#endif
+// --- ASUS_BSP : Enable debug LL
 
 /* printk's without a loglevel use this.. */
 #define DEFAULT_MESSAGE_LOGLEVEL CONFIG_DEFAULT_MESSAGE_LOGLEVEL
@@ -154,6 +163,11 @@ static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
 static int saved_console_loglevel = -1;
 
+static char *g_printk_log_buf;
+
+//jack 
+int suspend_in_progress = 0;
+
 #ifdef CONFIG_KEXEC
 /*
  * This appends the listed symbols to /proc/vmcoreinfo
@@ -176,6 +190,19 @@ void log_buf_kexec_setup(void)
 static unsigned long __initdata new_log_buf_len;
 
 /* save requested log_buf_len since it's too early to process it */
+
+//thomas_chu +++
+struct _asus_global asus_global =
+{
+		.asus_global_magic = ASUS_GLOBAL_MAGIC,
+		.ramdump_enable_magic = ASUS_GLOBAL_RUMDUMP_MAGIC,
+		.kernel_log_addr = __log_buf,
+		.kernel_log_size = __LOG_BUF_LEN,
+//		.kernel_version = ASUS_SW_VER,
+};
+
+//thomas_chu ---
+
 static int __init log_buf_len_setup(char *str)
 {
 	unsigned size = memparse(str, &str);
@@ -555,16 +582,20 @@ void kdb_syslog_data(char *syslog_data[4])
 }
 #endif	/* CONFIG_KGDB_KDB */
 
+static bool __read_mostly ignore_loglevel = 0;
 /*
  * Call the console drivers on a range of log_buf
  */
-static void __call_console_drivers(unsigned start, unsigned end)
+static void __call_console_drivers(unsigned start, unsigned end, int msg_log_level)
 {
 	struct console *con;
-
 	for_each_console(con) {
-		if (exclusive_console && con != exclusive_console)
-			continue;
+		if(strncmp(con->name,"logk",4) != 0){
+			if((msg_log_level >= console_loglevel && !ignore_loglevel))
+				continue;
+			if (exclusive_console && con != exclusive_console  )
+				continue;
+		}
 		if ((con->flags & CON_ENABLED) && con->write &&
 				(cpu_online(smp_processor_id()) ||
 				(con->flags & CON_ANYTIME)))
@@ -572,7 +603,6 @@ static void __call_console_drivers(unsigned start, unsigned end)
 	}
 }
 
-static bool __read_mostly ignore_loglevel;
 
 static int __init ignore_loglevel_setup(char *str)
 {
@@ -595,15 +625,14 @@ static void _call_console_drivers(unsigned start,
 {
 	trace_console(&LOG_BUF(0), start, end, log_buf_len);
 
-	if ((msg_log_level < console_loglevel || ignore_loglevel) &&
-			console_drivers && start != end) {
+	if (console_drivers && start != end) {
 		if ((start & LOG_BUF_MASK) > (end & LOG_BUF_MASK)) {
 			/* wrapped write */
 			__call_console_drivers(start & LOG_BUF_MASK,
-						log_buf_len);
-			__call_console_drivers(0, end & LOG_BUF_MASK);
+						log_buf_len,msg_log_level);
+			__call_console_drivers(0, end & LOG_BUF_MASK,msg_log_level);
 		} else {
-			__call_console_drivers(start, end);
+			__call_console_drivers(start, end,msg_log_level);
 		}
 	}
 }
@@ -686,19 +715,8 @@ static void call_console_drivers(unsigned start, unsigned end)
 	start_print = start;
 	while (cur_index != end) {
 		if (msg_level < 0 && ((end - cur_index) > 2)) {
-			/*
-			 * prepare buf_prefix, as a contiguous array,
-			 * to be processed by log_prefix function
-			 */
-			char buf_prefix[SYSLOG_PRI_MAX_LENGTH+1];
-			unsigned i;
-			for (i = 0; i < ((end - cur_index)) && (i < SYSLOG_PRI_MAX_LENGTH); i++) {
-				buf_prefix[i] = LOG_BUF(cur_index + i);
-			}
-			buf_prefix[i] = '\0'; /* force '\0' as last string character */
-
 			/* strip log prefix */
-			cur_index += log_prefix((const char *)&buf_prefix, &msg_level, NULL);
+			cur_index += log_prefix(&LOG_BUF(cur_index), &msg_level, NULL);
 			start_print = cur_index;
 		}
 		while (cur_index != end) {
@@ -803,12 +821,33 @@ static int have_callable_console(void)
  * See the vsnprintf() documentation for format string extensions over C99.
  */
 
+unsigned char debug_mask_setting[ASUS_MSK_GROUP] = DEFAULT_MASK;
+EXPORT_SYMBOL(debug_mask_setting);
+extern int entering_suspend;
+extern int g_user_dbg_mode;
+extern unsigned int asusdebug_enable;
 asmlinkage int printk(const char *fmt, ...)
 {
 	va_list args;
 	int r;
+	unsigned char *p;
 #ifdef CONFIG_MSM_RTB
-	void *caller = __builtin_return_address(0);
+	void *caller=NULL;
+#endif
+
+	if (asusdebug_enable==0x11223344)
+		return 0;
+
+// +++ ASUS_BSP : add for user build
+#ifdef ASUS_SHIP_BUILD
+	if ( g_user_dbg_mode==0 )
+		return 0;
+#endif
+// --- ASUS_BSP : add for user build
+	
+
+#ifdef CONFIG_MSM_RTB
+	caller = __builtin_return_address(0);
 
 	uncached_logk_pc(LOGK_LOGBUF, caller, (void *)log_end);
 #endif
@@ -821,9 +860,40 @@ asmlinkage int printk(const char *fmt, ...)
 		return r;
 	}
 #endif
+#if 0
 	va_start(args, fmt);
 	r = vprintk(fmt, args);
 	va_end(args);
+#else
+//20100930 jack_wong to add asus_debug mechanism +++++	
+    p = (unsigned char*) fmt;
+
+    if(p[0] == ASUS_MSK_MAGIC)
+    {
+
+		if(debug_mask_setting[p[1]] & p[2])
+		{
+			p += 3;
+		}
+		else
+		{
+			if(p[2] > 3)
+			{
+				return 0;
+			}
+			else
+			{
+				// let vprintk() to handle it
+			}
+		}
+    }
+	fmt=p;
+	va_start(args, fmt);
+	r = vprintk((char*)p, args);
+	va_end(args);
+    
+//20100930 jack_wong to add asus_debug mechanism -----
+#endif
 
 	return r;
 }
@@ -899,7 +969,36 @@ static inline void printk_delay(void)
 		}
 	}
 }
+#if 1
+struct myworker {
+    /* on idle list while idle, on busy hash table while busy */
+    union {
+        struct list_head    entry;  /* L: while idle */
+        struct hlist_node   hentry; /* L: while busy */
+    };
 
+    struct work_struct  *current_work;  /* L: work being processed */
+    int *current_cwq; /* L: current_work's cwq */
+    struct list_head    scheduled;  /* L: scheduled works */
+    struct task_struct  *task;      /* I: worker task */    
+};
+#endif
+// added by jack for printk hh:mm:ss.ns++++++++
+#include <linux/rtc.h>
+extern struct timezone sys_tz;
+extern int asus_rtc_set;         
+//#ifndef ASUS_SHIP_BUILD
+static void myrtc_time_to_tm(unsigned long time, struct rtc_time *tm)
+{
+    tm->tm_hour = time / 3600;
+    time -= tm->tm_hour * 3600;
+    tm->tm_hour %= 24;
+    tm->tm_min = time / 60;
+    tm->tm_sec = time - tm->tm_min * 60;
+}
+//#endif
+// added by jack for printk hh:mm:ss.ns -----------
+int boot_after_60sec=0;
 asmlinkage int vprintk(const char *fmt, va_list args)
 {
 	int printed_len = 0;
@@ -948,8 +1047,23 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
 
+// +++ ASUS_BSP : Enable debug LL
+#ifdef	CONFIG_DEBUG_LL
+	printascii(printk_buf);
+#endif
+// --- ASUS_BSP : Enable debug LL
 
 	p = printk_buf;
+
+// ASUS_BSP +++ : keep ASUS debug G0/G1 messages
+	if(p[0] == ASUS_MSK_MAGIC)
+	{
+		// set the loglevel to 8 to prevent from console output
+		p[0]='<';
+		p[1]='8';
+		p[2]='>';
+	}
+// ASUS_BSP ---
 
 	/* Read log level and handle special printk prefix */
 	plen = log_prefix(p, &current_log_level, &special);
@@ -993,19 +1107,106 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 				printed_len += 3;
 			}
 
-			if (printk_time) {
-				/* Add the current time stamp */
-				char tbuf[50], *tp;
-				unsigned tlen;
-				unsigned long long t;
-				unsigned long nanosec_rem;
 
-				t = cpu_clock(printk_cpu);
-				nanosec_rem = do_div(t, 1000000000);
-				tlen = sprintf(tbuf, "[%5lu.%06lu] ",
-						(unsigned long) t,
-						nanosec_rem / 1000);
+            if (printk_time) 
+            {
+                int tlen;
+                char tbuf[128], *tp;
+//#ifndef ASUS_SHIP_BUILD
+//                struct myworker *pworker = (struct myworker *) current->pworker;                
+                if(!suspend_in_progress)
+                {
+                    /* Add the current time stamp */
+                    unsigned long long t;
+                    unsigned long nanosec_rem;
 
+                    struct timespec ts; 
+                    struct rtc_time tm;
+                    
+                    t = cpu_clock(printk_cpu);
+                    nanosec_rem = do_div(t, 1000000000);
+                    
+                    getnstimeofday(&ts);
+                    ts.tv_sec -= sys_tz.tz_minuteswest * 60;
+                    myrtc_time_to_tm(ts.tv_sec, &tm);
+                    //20100930 jack_wong to add asus_debug mechanism +++++
+                    if(0)//pworker && pworker->current_work != NULL )
+                    {
+                        char fname[KSYM_SYMBOL_LEN] = {0};
+//                        sprint_symbol(fname, (unsigned long)pworker->current_work->func);
+
+                        if(fname[0] != 0)
+                            tlen = sprintf(tbuf, "[%02d:%02d:%02d.%06lu](CPU:%d-pid:%d:%s-%s) ",
+                                tm.tm_hour, tm.tm_min, tm.tm_sec,ts.tv_nsec/1000,
+                                this_cpu,
+                                current->pid, 
+                                current->comm, fname);
+                        else
+                            tlen = sprintf(tbuf, "[%02d:%02d:%02d.%06lu](CPU:%d-pid:%d:%s-noWorkName) ",
+                                            tm.tm_hour, tm.tm_min, tm.tm_sec,ts.tv_nsec/1000,
+                                            this_cpu,
+                                            current->pid, 
+                                            current->comm);
+                    }
+                    else
+                    {
+                        tlen = sprintf(tbuf, "[%5lu.%06lu](CPU:%d-pid:%d:%s) [%02d:%02d:%02d.%06lu] ",
+								(unsigned long) t,      
+								nanosec_rem / 1000,                          
+                                this_cpu,
+                                current->pid, 
+                                current->comm,
+                                tm.tm_hour, tm.tm_min, tm.tm_sec,ts.tv_nsec/1000);     
+                         if (boot_after_60sec == 0 && t >= 60)
+							boot_after_60sec = 1;
+                    }
+                }
+                else
+//#endif
+                {
+                    unsigned long long t;
+                    unsigned long nanosec_rem;
+
+                    t = cpu_clock(printk_cpu);
+                    nanosec_rem = do_div(t, 1000000000);
+                //20100930 jack_wong to add asus_debug mechanism +++++
+//#ifndef ASUS_SHIP_BUILD                    
+                    if(0)//pworker && pworker->current_work != NULL )
+                    {
+
+                        char fname[KSYM_SYMBOL_LEN] = {0};
+//                        sprint_symbol(fname, (unsigned long)pworker->current_work->func);
+
+                        if(fname[0] != 0)
+                            tlen = sprintf(tbuf, "[%5lu.%06lu](CPU:%d-pid:%d:%s-%s) ",
+                                           (unsigned long) t,
+                                            nanosec_rem / 1000,
+                                            this_cpu,
+                                            current->pid, 
+                                            current->comm, fname);
+                        else
+                            tlen = sprintf(tbuf, "[%5lu.%06lu](CPU:%d-pid:%d:%s-noWorkName) ",
+                                           (unsigned long) t,
+                                            nanosec_rem / 1000,
+                                            this_cpu,
+                                            current->pid, 
+                                            current->comm);
+                    }
+                    else
+//#endif                        
+                    {
+                        tlen = sprintf(tbuf, "[%5lu.%06lu](CPU:%d-pid:%d:%s) ",
+                                       (unsigned long) t,
+                                        nanosec_rem / 1000,
+                                        this_cpu,
+                                        current->pid, 
+                                        current->comm);                    
+                        if (boot_after_60sec == 0 && t >= 60)
+							boot_after_60sec = 1;                
+                    }
+                }    
+
+				//20100930 jack_wong to add asus_debug mechanism -----
 				for (tp = tbuf; tp < tbuf + tlen; tp++)
 					emit_log_char(*tp);
 				printed_len += tlen;
@@ -1192,6 +1393,8 @@ MODULE_PARM_DESC(console_suspend, "suspend console during suspend"
  */
 void suspend_console(void)
 {
+	ASUSEvtlog("[UTS] System Suspend");
+	suspend_in_progress = 1;
 	if (!console_suspend_enabled)
 		return;
 	printk("Suspending console(s) (use no_console_suspend to debug)\n");
@@ -1202,6 +1405,28 @@ void suspend_console(void)
 
 void resume_console(void)
 {
+#if 0
+	int i;
+#endif
+	suspend_in_progress = 0;
+	ASUSEvtlog("[UTS] System Resume");
+#if 0
+	if (pm_pwrcs_ret) {
+		//ASUSEvtlog("[PM] Suspended for %d.%03d secs ", pwrcs_time/100,pwrcs_time % 100);
+
+		if (gpio_irq_cnt>0) {
+			for (i=0;i<gpio_irq_cnt;i++)
+  				ASUSEvtlog("[PM] GPIO triggered: %d", gpio_resume_irq[i]);
+			gpio_irq_cnt=0; //clear log count.
+		}
+		if (gic_irq_cnt>0) {
+			for (i=0;i<gic_irq_cnt;i++)
+				ASUSEvtlog("[PM] IRQs triggered: %d", gic_resume_irq[i]);
+			gic_irq_cnt=0;  //clear log count.
+		}
+		pm_pwrcs_ret=0;
+	}
+#endif
 	if (!console_suspend_enabled)
 		return;
 	down(&console_sem);
@@ -1887,3 +2112,86 @@ void kmsg_dump(enum kmsg_dump_reason reason)
 	rcu_read_unlock();
 }
 #endif
+
+//by jack for debug message buffer change
+void printk_buffer_rebase(void)
+{
+    unsigned start, dest_idx, offset;
+    char *new_log_buf;
+    unsigned long flags;
+
+    new_log_buf = g_printk_log_buf = (char *) PRINTK_BUFFER;//__va(PRINTK_BUFFER);  
+    printk("printk_buffer_rebase new_log_buf=%p\n", new_log_buf);
+    if (!new_log_buf) {
+        printk( "printk_buffer_rebase log_buf_len: allocation failed\n");
+        goto out;
+    }
+    
+    memset(g_printk_log_buf, 0, PRINTK_BUFFER_SLOT_SIZE);
+    
+    raw_spin_lock_irqsave(&logbuf_lock, flags);
+    log_buf_len = PRINTK_BUFFER_SLOT_SIZE;
+    log_buf = new_log_buf;
+	asus_global.kernel_log_addr = log_buf;
+	asus_global.kernel_log_size = log_buf_len;
+	
+	memset( asus_global.kernel_version,0,sizeof(asus_global.kernel_version));
+	strncpy(asus_global.kernel_version,ASUS_SW_VER,sizeof(asus_global.kernel_version));
+    offset = start = min(con_start, log_start);
+    dest_idx = 0;
+    while (start != log_end) {
+        log_buf[dest_idx] = __log_buf[start & (__LOG_BUF_LEN - 1)];
+        start++;
+        dest_idx++;
+    }
+    log_start -= offset;
+    con_start -= offset;
+    log_end -= offset;
+    raw_spin_unlock_irqrestore(&logbuf_lock, flags);
+
+    printk( "printk_buffer_rebase log_buf_len: %d\n", log_buf_len);
+    
+out:    
+    return;    
+}
+EXPORT_SYMBOL(printk_buffer_rebase);       
+
+#if defined(CONFIG_DEBUG_FS)
+#include <linux/debugfs.h>
+static int Asus_ramdump_debug_set(void *data, u64 val)
+{
+	if (val == 1)
+		asus_global.ramdump_enable_magic = ASUS_GLOBAL_RUMDUMP_MAGIC;
+	else
+		asus_global.ramdump_enable_magic = 0;
+		
+	return 0;
+}
+
+static int Asus_ramdump_debug_get(void *data, u64 *val)
+{
+	if (asus_global.ramdump_enable_magic == ASUS_GLOBAL_RUMDUMP_MAGIC)
+	*val = 1;
+	else
+	*val = 0;
+	
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(Asus_ramdump_debug_fops, Asus_ramdump_debug_get, Asus_ramdump_debug_set, "%llu\n");
+static int __init Asus_ramdump_debug_init(void)
+{
+	struct dentry *dent;
+
+	dent = debugfs_create_dir("Asus_ramdump", 0);
+	if (IS_ERR(dent))
+		return PTR_ERR(dent);
+
+	debugfs_create_file("Asus_ramdump_flag", 0644, dent, NULL, &Asus_ramdump_debug_fops);
+
+	return 0;
+}
+
+device_initcall(Asus_ramdump_debug_init);
+#endif
+
+
