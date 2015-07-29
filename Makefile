@@ -646,6 +646,7 @@ endif
 
 KBUILD_CPPFLAGS += -DASUS_PF500KL_PROJECT=1
 KBUILD_CPPFLAGS += -DASUS_SHIP_BUILD=1
+KBUILD_CPPFLAGS += -DASUS_SW_VER=\"PF500KL\"
 
 # Add user supplied CPPFLAGS, AFLAGS and CFLAGS as the last assignments
 # But warn user when we do so

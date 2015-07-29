@@ -52,18 +52,6 @@ struct msm_rtb_layout {
 	void *data;
 } __attribute__ ((__packed__));
 
-
-struct msm_rtb_state {
-	struct msm_rtb_layout *rtb;
-	phys_addr_t phys;
-	int nentries;
-	int size;
-	int enabled;
-	int initialized;
-	uint32_t filter;
-	int step_size;
-};
-
 #if defined(CONFIG_MSM_RTB_SEPARATE_CPUS)
 DEFINE_PER_CPU(atomic_t, msm_rtb_idx_cpu);
 #else

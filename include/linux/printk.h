@@ -156,6 +156,9 @@ static inline void setup_log_buf(int early)
 }
 #endif
 
+int pmem_log_init(void);
+int pmem_log_start(void);
+
 extern void dump_stack(void) __cold;
 
 #ifndef pr_fmt
@@ -315,14 +318,5 @@ static inline void print_hex_dump_bytes(const char *prefix_str, int prefix_type,
 }
 
 #endif
-
-int get_persist_ram_size(int full);
-int get_persist_ram_status(void);
-int reserve_persist_ram(phys_addr_t max_low, phys_addr_t max_high);
-phys_addr_t get_persist_ram_info(int idx, int * size);
-
-int pmem_log_get_size(void);
-int pmem_log_init(void);
-int pmem_log_start(int act_log_cnt);
 
 #endif
