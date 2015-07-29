@@ -263,6 +263,7 @@ static struct clk_lookup msm_clocks_rpm_8974[] = {
 	CLK_LOOKUP_OF("ref_clk", diff_clk, "msm_dwc3"),
 	CLK_LOOKUP_OF("pwm_clk", div_clk2, "0-0048"),
 	CLK_LOOKUP_OF("ref_clk", diff_clk, "msm_dwc3"),
+	CLK_LOOKUP_OF("ref_clk", diff_clk, "slimport"),//+++ ASUS BSP Bernard, mydp use
 	CLK_LOOKUP_OF("osr_clk", div_clk1, "msm-dai-q6-dev.16384"),
 	CLK_LOOKUP_OF("ref_clk", div_clk2, "msm_smsc_hub"),
 

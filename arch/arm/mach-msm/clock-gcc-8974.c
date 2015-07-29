@@ -2377,11 +2377,21 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 
 	CLK_LOOKUP_OF("dma_bam_pclk", gcc_bam_dma_ahb_clk, "msm_sps"),
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f991f000.serial"),
-	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9924000.i2c"),
+	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9923000.i2c"),			//ASUS_BSP : Wireless Charger IC
+	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9924000.i2c"),			//ASUS_BSP : Touch
+	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9925000.i2c"),			//ASUS_BSP : Mydp
+	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9926000.i2c"),			//ASUS_BSP : Camera
+	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9928000.i2c"),			//ASUS_BSP : Pad bus
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f991e000.serial"),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup1_i2c_apps_clk, "f9923000.i2c"),
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9923000.i2c"),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup2_i2c_apps_clk, "f9924000.i2c"),
+	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup1_i2c_apps_clk, "f9923000.i2c"),//ASUS_BSP : Wireless Charger IC
+	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup2_i2c_apps_clk, "f9924000.i2c"),//ASUS_BSP : Touch
+	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup3_i2c_apps_clk, "f9925000.i2c"),//ASUS_BSP : Mydp
+	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup4_i2c_apps_clk, "f9926000.i2c"),//ASUS_BSP : Camera
+	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup5_i2c_apps_clk, ""),
+	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup6_i2c_apps_clk, "f9928000.i2c"),//ASUS_BSP : Pad bus
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup2_spi_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup1_spi_apps_clk, "f9923000.spi"),
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9923000.spi"),
@@ -2404,17 +2414,24 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp2_ahb_clk, "f9966000.spi"),
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp2_ahb_clk, "f995e000.serial"),
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp2_ahb_clk, "f995d000.uart"),
+	CLK_LOOKUP_OF("iface_clk", gcc_blsp2_ahb_clk, "f9966000.i2c"),			//ASUS_BSP : NFC, ON_semi_vibrator
+	CLK_LOOKUP_OF("iface_clk", gcc_blsp2_ahb_clk, "f9968000.i2c"),			//ASUS_BSP : Sensors
+	CLK_LOOKUP_OF("iface_clk", gcc_blsp2_ahb_clk, "f9965000.spi"),			//ASUS_BSP : Camera
+
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup1_i2c_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup1_spi_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup2_i2c_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup2_spi_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup3_i2c_apps_clk, ""),
-	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup3_spi_apps_clk, ""),
-	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup4_i2c_apps_clk, ""),
+
+	CLK_LOOKUP("core_clk", gcc_blsp2_qup5_i2c_apps_clk.c, ""),
+
+	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup3_spi_apps_clk, "f9965000.spi"),//ASUS_BSP : Camera
+	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup4_i2c_apps_clk, "f9966000.i2c"),//ASUS_BSP : NFC, ON_semi_vibrator
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup5_i2c_apps_clk, "f9967000.i2c"),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup4_spi_apps_clk, "f9966000.spi"),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup5_spi_apps_clk, ""),
-	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup6_i2c_apps_clk, ""),
+	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup6_i2c_apps_clk, "f9968000.i2c"),//ASUS_BSP : Sensors
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup6_spi_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_uart1_apps_clk, "f995d000.uart"),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_uart2_apps_clk, "f995e000.serial"),
@@ -2466,9 +2483,13 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 	CLK_LOOKUP_OF("bus_clk",      gcc_ce1_axi_clk,     "scm"),
 	CLK_LOOKUP_OF("core_clk_src", ce1_clk_src,         "scm"),
 
-	CLK_LOOKUP_OF("core_clk", gcc_gp1_clk, ""),
-	CLK_LOOKUP_OF("core_clk", gcc_gp2_clk, ""),
-	CLK_LOOKUP_OF("core_clk", gcc_gp3_clk, ""),
+	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, ""),
+	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, "4-003c"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, "3c.qcom,camera"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, "4-006a"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, "6a.qcom,camera"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP("core_clk", gcc_gp2_clk.c, ""),
+	CLK_LOOKUP("core_clk", gcc_gp3_clk.c, ""),
 
 	CLK_LOOKUP_OF("core_clk", gcc_pdm2_clk, ""),
 	CLK_LOOKUP_OF("iface_clk", gcc_pdm_ahb_clk, ""),
@@ -2529,7 +2550,7 @@ static struct clk_lookup msm_clocks_gcc_8974_only[] = {
 	CLK_LOOKUP_OF("cam_src_clk", gp1_clk_src, "6c.qcom,camera"),
 	CLK_LOOKUP_OF("cam_clk", gcc_gp1_clk, "6c.qcom,camera"),
 	CLK_LOOKUP_OF("cam_src_clk", gp1_clk_src, "2.qcom,camera"),
-	CLK_LOOKUP_OF("cam_clk", gcc_gp1_clk, "2.qcom,camera"),
+	CLK_LOOKUP_OF("cam_clk", gcc_gp1_clk, "2.qcom,camera"),		
 };
 
 static struct clk *qup_i2c_clks[][2] = {
