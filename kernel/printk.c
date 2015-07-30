@@ -51,6 +51,12 @@
 #include <linux/io.h>
 #include <linux/vmalloc.h>
 
+// +++ ASUS_BSP : Enable debug LL
+#ifdef        CONFIG_DEBUG_LL
+extern void printascii(char *);
+#endif
+// --- ASUS_BSP : Enable debug LL
+
 /*
  * Architectures can override it:
  */
@@ -966,6 +972,11 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
 
+// +++ ASUS_BSP : Enable debug LL
+#ifdef	CONFIG_DEBUG_LL
+	printascii(printk_buf);
+#endif
+// --- ASUS_BSP : Enable debug LL
 
 	p = printk_buf;
 
