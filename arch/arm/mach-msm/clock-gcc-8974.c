@@ -1050,6 +1050,7 @@ static struct clk_freq_tbl ftbl_gcc_gp_clk[] = {
 	F( 6750000, gpll0,  1,  1,  89),
 	F( 8000000, gpll0, 15,  1,   5),
 	F( 9600000,   cxo,  2,  0,   0),
+	F(12000000,  gpll0,  10,   1,   5), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 	F(16000000, gpll0,  1,  2,  75),
 	F(19200000,   cxo,  1,  0,   0),
 	F(24000000, gpll0,  5,  1,   5),
@@ -2385,7 +2386,6 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f991e000.serial"),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup1_i2c_apps_clk, "f9923000.i2c"),
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9923000.i2c"),
-	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup2_i2c_apps_clk, "f9924000.i2c"),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup1_i2c_apps_clk, "f9923000.i2c"),//ASUS_BSP : Wireless Charger IC
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup2_i2c_apps_clk, "f9924000.i2c"),//ASUS_BSP : Touch
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup3_i2c_apps_clk, "f9925000.i2c"),//ASUS_BSP : Mydp
