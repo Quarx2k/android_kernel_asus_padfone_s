@@ -46,6 +46,7 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 #include "sdio_ops.h"
+#include "mmc_config.h"
 
 /* If the device is not responding */
 #define MMC_CORE_TIMEOUT_MS	(10 * 60 * 1000) /* 10 minute timeout */
@@ -2632,9 +2633,15 @@ EXPORT_SYMBOL(mmc_can_erase);
 
 int mmc_can_trim(struct mmc_card *card)
 {
-	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_GB_CL_EN)
-		return 1;
-	return 0;
+//ASUS_BSP Gavin_Chang +++ turn off trim
+	if(MMC_CONFIG_SETTING_TRIM){
+		if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_GB_CL_EN)
+			return 1;
+		return 0;
+		}
+	else
+		return 0;
+//ASUS_BSP Gavin_Chang --- turn off trim
 }
 EXPORT_SYMBOL(mmc_can_trim);
 
@@ -2644,27 +2651,45 @@ int mmc_can_discard(struct mmc_card *card)
 	 * As there's no way to detect the discard support bit at v4.5
 	 * use the s/w feature support filed.
 	 */
-	if (card->ext_csd.feature_support & MMC_DISCARD_FEATURE)
-		return 1;
-	return 0;
+//ASUS_BSP Gavin_Chang +++ turn off discard
+	if(MMC_CONFIG_SETTING_DISCARD){
+		if (card->ext_csd.feature_support & MMC_DISCARD_FEATURE)
+			return 1;
+		return 0;
+	}
+	else
+		return 0;
+//ASUS_BSP Gavin_Chang --- turn off discard
 }
 EXPORT_SYMBOL(mmc_can_discard);
 
 int mmc_can_sanitize(struct mmc_card *card)
 {
-	if (!mmc_can_trim(card) && !mmc_can_erase(card))
+//ASUS_BSP Gavin_Chang +++ turn off sanitize
+	if(MMC_CONFIG_SETTING_SANITIZE){
+		if (!mmc_can_trim(card) && !mmc_can_erase(card))
+			return 0;
+		if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_SANITIZE)
+			return 1;
 		return 0;
-	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_SANITIZE)
-		return 1;
-	return 0;
+	}
+	else
+		return 0;
+//ASUS_BSP Gavin_Chang --- turn off sanitize
 }
 EXPORT_SYMBOL(mmc_can_sanitize);
 
 int mmc_can_secure_erase_trim(struct mmc_card *card)
 {
-	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_ER_EN)
-		return 1;
-	return 0;
+//ASUS_BSP Gavin_Chang +++ turn off trim
+	if(MMC_CONFIG_SETTING_TRIM){
+		if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_ER_EN)
+			return 1;
+		return 0;
+	}
+	else
+		return 0;
+//ASUS_BSP Gavin_Chang --- turn off trim
 }
 EXPORT_SYMBOL(mmc_can_secure_erase_trim);
 
@@ -3567,10 +3592,13 @@ EXPORT_SYMBOL(mmc_card_sleep);
 int mmc_card_can_sleep(struct mmc_host *host)
 {
 	struct mmc_card *card = host->card;
-
-	if (card && mmc_card_mmc(card) && card->ext_csd.rev >= 3)
-		return 1;
-	return 0;
+	if(MMC_CONFIG_SETTING_SLEEP){
+		if (card && mmc_card_mmc(card) && card->ext_csd.rev >= 3)
+			return 1;
+		return 0;
+	}
+	else
+		return 0;
 }
 EXPORT_SYMBOL(mmc_card_can_sleep);
 

@@ -24,6 +24,7 @@
 #include "bus.h"
 #include "mmc_ops.h"
 #include "sd_ops.h"
+#include "mmc_config.h"
 
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
@@ -66,12 +67,19 @@ static const struct mmc_fixup mmc_fixups[] = {
 	MMC_FIXUP_EXT_CSD_REV(CID_NAME_ANY, CID_MANFID_HYNIX,
 			      0x014a, add_quirk, MMC_QUIRK_BROKEN_HPI, 5),
 
+	/* Disable HPI feature for Kingstone card */
+	MMC_FIXUP_EXT_CSD_REV("MMC16G", CID_MANFID_KINGSTON, CID_OEMID_ANY,
+			add_quirk, MMC_QUIRK_BROKEN_HPI, 5),
+
 	/*
 	 * Some Hynix cards exhibit data corruption over reboots if cache is
 	 * enabled. Disable cache for all versions until a class of cards that
 	 * show this behavior is identified.
 	 */
 	MMC_FIXUP("H8G2d", CID_MANFID_HYNIX, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_CACHE_DISABLE),
+
+	MMC_FIXUP("MMC16G", CID_MANFID_KINGSTON, CID_OEMID_ANY, add_quirk_mmc,
 		  MMC_QUIRK_CACHE_DISABLE),
 
 	END_FIXUP
@@ -280,9 +288,10 @@ static void mmc_select_card_type(struct mmc_card *card)
 	if ((caps2 & MMC_CAP2_HS200_1_8V_SDR &&
 			card_type & EXT_CSD_CARD_TYPE_SDR_1_8V) ||
 	    (caps2 & MMC_CAP2_HS200_1_2V_SDR &&
-			card_type & EXT_CSD_CARD_TYPE_SDR_1_2V))
-		hs_max_dtr = MMC_HS200_MAX_DTR;
-
+			card_type & EXT_CSD_CARD_TYPE_SDR_1_2V)){
+		if(MMC_CONFIG_SETTING_HS200)
+			hs_max_dtr = MMC_HS200_MAX_DTR;
+	}
 	if ((caps2 & MMC_CAP2_HS400_1_8V &&
 			card_type & EXT_CSD_CARD_TYPE_HS400_1_8V) ||
 	    (caps2 & MMC_CAP2_HS400_1_2V &&
@@ -493,6 +502,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	}
 
 	if (card->ext_csd.rev >= 5) {
+//ASUS_BSP Gavin_Chang +++ turn off HPI
+#if MMC_CONFIG_SETTING_HPI
 		/* check whether the eMMC card supports HPI */
 		if ((ext_csd[EXT_CSD_HPI_FEATURES] & 0x1) &&
 				!(card->quirks & MMC_QUIRK_BROKEN_HPI)) {
@@ -508,11 +519,14 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			card->ext_csd.out_of_int_time =
 				ext_csd[EXT_CSD_OUT_OF_INTERRUPT_TIME] * 10;
 		}
-
+#endif
+//ASUS_BSP Gavin_Chang --- turn off HPI
 		/*
 		 * check whether the eMMC card supports BKOPS.
 		 * If HPI is not supported then BKOPs shouldn't be enabled.
 		 */
+//ASUS_BSP Gavin_Chang +++ turn off BKOPS
+#if MMC_CONFIG_SETTING_BKOPS
 		if ((ext_csd[EXT_CSD_BKOPS_SUPPORT] & 0x1) &&
 		    card->ext_csd.hpi) {
 			card->ext_csd.bkops = 1;
@@ -530,7 +544,7 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 					card->ext_csd.bkops_en = 1;
 			}
 		}
-
+#endif
 		pr_info("%s: BKOPS_EN bit = %d\n",
 			mmc_hostname(card->host), card->ext_csd.bkops_en);
 
@@ -540,6 +554,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		/*
 		 * RPMB regions are defined in multiples of 128K.
 		 */
+//ASUS_BSP Gavin_Chang +++ turn off RPMB
+#if MMC_CONFIG_SETTING_RPMB
 		card->ext_csd.raw_rpmb_size_mult = ext_csd[EXT_CSD_RPMB_MULT];
 		if (ext_csd[EXT_CSD_RPMB_MULT] && mmc_host_cmd23(card->host)) {
 			mmc_part_add(card, ext_csd[EXT_CSD_RPMB_MULT] << 17,
@@ -547,6 +563,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 				"rpmb", 0, false,
 				MMC_BLK_DATA_AREA_RPMB);
 		}
+#endif
+//ASUS_BSP Gavin_Chang --- turn off RPMB
 	}
 
 	card->ext_csd.raw_erased_mem_count = ext_csd[EXT_CSD_ERASED_MEM_CONT];
@@ -557,19 +575,24 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 	/* eMMC v4.5 or later */
 	if (card->ext_csd.rev >= 6) {
+//ASUS_BSP Gavin_Chang +++ turn off DISCARD
+#if MMC_CONFIG_SETTING_DISCARD
 		card->ext_csd.feature_support |= MMC_DISCARD_FEATURE;
-
+#endif
+//ASUS_BSP Gavin_Chang --- turn off DISCARD
 		card->ext_csd.generic_cmd6_time = 10 *
 			ext_csd[EXT_CSD_GENERIC_CMD6_TIME];
 		card->ext_csd.power_off_longtime = 10 *
 			ext_csd[EXT_CSD_POWER_OFF_LONG_TIME];
-
+//ASUS_BSP Gavin_Chang +++ turn off CACHE
+#if MMC_CONFIG_SETTING_CACHE
 		card->ext_csd.cache_size =
 			ext_csd[EXT_CSD_CACHE_SIZE + 0] << 0 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 1] << 8 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 2] << 16 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 3] << 24;
-
+#endif
+//ASUS_BSP Gavin_Chang --- turn off CACHE
 		if (ext_csd[EXT_CSD_DATA_SECTOR_SIZE] == 1)
 			card->ext_csd.data_sector_size = 4096;
 		else
@@ -583,11 +606,14 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		} else {
 			card->ext_csd.data_tag_unit_size = 0;
 		}
-
+//ASUS_BSP Gavin_Chang +++ turn off PACKED CMD
+#if MMC_CONFIG_SETTING_PACKED
 		card->ext_csd.max_packed_writes =
 			ext_csd[EXT_CSD_MAX_PACKED_WRITES];
 		card->ext_csd.max_packed_reads =
 			ext_csd[EXT_CSD_MAX_PACKED_READS];
+#endif
+//ASUS_BSP Gavin_Chang --- turn off PACKED CMD
 	} else {
 		card->ext_csd.data_sector_size = 512;
 	}
@@ -1316,7 +1342,18 @@ static int mmc_select_bus_speed(struct mmc_card *card, u8 *ext_csd)
 out:
 	return err;
 }
-
+static int mmc_can_poweroff_notify(const struct mmc_card *card)
+{
+//ASUS_BAP Gavin_Chang +++ turn off PON
+	if(MMC_CONFIG_SETTING_PON){
+		return card &&
+			mmc_card_mmc(card) &&
+			(card->ext_csd.power_off_notification == EXT_CSD_POWER_ON);
+	}
+	else
+		return 0;
+//ASUS_BAP Gavin_Chang --- turn off PON
+}
 /*
  * Handle the detection and initialisation of a card.
  *
@@ -1463,6 +1500,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	 * If enhanced_area_en is TRUE, host needs to enable ERASE_GRP_DEF
 	 * bit.  This bit will be lost every time after a reset or power off.
 	 */
+//ASUS_BSP Gavin_Chang +++ turn off enhanced area 
+#if MMC_CONFIG_SETTING_ENHANCED_AREA
 	if (card->ext_csd.enhanced_area_en ||
 	    (card->ext_csd.rev >= 3 && (host->caps2 & MMC_CAP2_HC_ERASE_SZ))) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
@@ -1491,7 +1530,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			mmc_set_erase_size(card);
 		}
 	}
-
+#endif
+//ASUS_BSP Gavin_Chang --- turn off enhanced area 
 	/*
 	 * Ensure eMMC user default partition is enabled
 	 */
@@ -1510,6 +1550,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	 * If the host supports the power_off_notify capability then
 	 * set the notification byte in the ext_csd register of device
 	 */
+//ASUS_BSP Gavin_Chang +++ turn off PON
+#if MMC_CONFIG_SETTING_PON
 	if ((host->caps2 & MMC_CAP2_POWEROFF_NOTIFY) &&
 	    (card->ext_csd.rev >= 6)) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
@@ -1526,6 +1568,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		if (!err)
 			card->ext_csd.power_off_notification = EXT_CSD_POWER_ON;
 	}
+#endif
+//ASUS_BSP Gavin_Chang --- turn off PON
 
 	/*
 	 * Activate highest bus speed mode supported by both host and card.
@@ -1537,6 +1581,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	/*
 	 * Enable HPI feature (if supported)
 	 */
+//ASUS_BSP Gavin_Chang +++ turn off HPI
+#if MMC_CONFIG_SETTING_HPI
 	if (card->ext_csd.hpi) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				EXT_CSD_HPI_MGMT, 1,
@@ -1550,12 +1596,15 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		} else
 			card->ext_csd.hpi_en = 1;
 	}
-
+#endif
+//ASUS_BSP Gavin_Chang --- turn off HPI
 	/*
 	 * If cache size is higher than 0, this indicates
 	 * the existence of cache and it can be turned on.
 	 * If HPI is not supported then cache shouldn't be enabled.
 	 */
+//ASUS_BSP Gavin_Chang +++ turn off CACHE
+#if MMC_CONFIG_SETTING_CACHE
 	if ((host->caps2 & MMC_CAP2_CACHE_CTRL) &&
 	    (card->ext_csd.cache_size > 0) && card->ext_csd.hpi_en &&
 	    ((card->quirks & MMC_QUIRK_CACHE_DISABLE) == 0)) {
@@ -1578,7 +1627,10 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			card->ext_csd.cache_ctrl = 1;
 		}
 	}
-
+#endif
+//ASUS_BSP Gavin_Chang --- turn off CACHE
+//ASUS_BSP Gavin_Chang +++ turn off PACKED CMD
+#if MMC_CONFIG_SETTING_PACKED
 	/*
 	 * The mandatory minimum values are defined for packed command.
 	 * read: 5, write: 3
@@ -1602,7 +1654,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		}
 
 	}
-
+#endif
+//ASUS_BSP Gavin_Chang --- turn off PACKED CMD
 	if (!oldcard) {
 		if ((host->caps2 & MMC_CAP2_PACKED_CMD) &&
 		    (card->ext_csd.max_packed_writes > 0)) {
@@ -1648,13 +1701,6 @@ free_card:
 		mmc_remove_card(card);
 err:
 	return err;
-}
-
-static int mmc_can_poweroff_notify(const struct mmc_card *card)
-{
-	return card &&
-		mmc_card_mmc(card) &&
-		(card->ext_csd.power_off_notification == EXT_CSD_POWER_ON);
 }
 
 static int mmc_poweroff_notify(struct mmc_card *card, unsigned int notify_type)
