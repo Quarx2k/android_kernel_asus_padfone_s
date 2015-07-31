@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,15 +34,101 @@
 #define MT9M114_COMMAND_REGISTER_OK             (1 << 15)
 
 DEFINE_MSM_MUTEX(mt9m114_mut);
-static struct msm_sensor_ctrl_t mt9m114_s_ctrl;
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#include "iCatch7002a.h"
+#include <linux/proc_fs.h>
+#include <media/asus_cam_intf_type.h>
 
+//#define MINI_PORTING 1 //LiJen: for mini porting
+
+/*********************** boot from host ************************/
+#include "app_i2c_lib_icatch.h"
+#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/delay.h>
+#include <linux/spi/spi.h>
+#include <linux/slab.h>
+#include <linux/gpio.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+#include <linux/regulator/consumer.h>
+#include <linux/string.h>
+#include <linux/of_gpio.h>
+#include <linux/proc_fs.h>
+
+#ifndef CAM_BOOT
+#define CAM_BOOT "/data/asusfw/camera/BOOT_A91.BIN"
+#endif
+//ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
+#define ACALI_PATH "/data/asusdata/camera_calibration/ACC0/3ACALI.BIN"
+#define LSC_PATH "/data/asusdata/camera_calibration/ACC0/LSC.BIN"
+#define LSCDQ_PATH "/data/asusdata/camera_calibration/ACC0/LSC_DQ.BIN"
+#define CALIOPT_PATH "/data/asusdata/camera_calibration/ACC0/calibration_option.BIN"
+static bool rear_calibrated = false;
+static u8 *pacali = NULL;
+static u8 *plsc = NULL;
+static u8 *plscdq = NULL;
+static u8 *pcaliopt = NULL;
+//ASUS_BSP--- jim3_lin "Add for ATD CameraTest"
+bool probe_power_isp = false;
+struct spi_device *g_spi;
+
+extern u32 is_calibration;
+extern u8 *g_pbootBuf;
+extern bool g_is_fw_loaded;
+extern bool g_is_fw_back_cal_loaded;
+#define BUFFER_SIZE 4<<10
+struct spi_message spi_msg;
+struct spi_transfer spi_xfer;
+struct spi_transfer spi_rx;
+u8 *tx_buf; //This needs to be DMA friendly buffer
+
+/*************************************************************/
+
+//ASUS_BSP Stimber +++
+extern int g_pre_res;
+extern int g_cur_res;
+extern bool iCatch_first_open;
+//ASUS_BSP Stimber ---
+extern int g_is_eis_on;  //ASUS_BSP bill_chen "Implement image stabilization"
+//ASUS_BSP+++ YM only turn off stream, when the sensor is turned on
+static bool g_bSensorState_StreamOn = false;
+//ASUS_BSP--- YM only turn off stream, when the sensor is turned on
+static bool g_bConfigPreviewStreamDone = false;
+
+extern unsigned char g_camera_status;  	//ASUS_BSP Stimber "Add ATD proc interface"
+extern bool g_ISPbootup; //ASUS_BSP LiJen "ISP flash power state"
+extern cam_area_t g_AF_ROI;
+extern cam_focus_mode_type g_AF_MODE;
+extern struct exif_cfg g_JpegExif;
+extern bool g_isAFDone;
+extern bool g_isAFCancel;
+extern int g_pre_torch_irq_val;
+
+struct msm_sensor_ctrl_t mt9m114_s_ctrl;
+static unsigned char g_mt9m114_power = false; 
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
+
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
 static struct msm_sensor_power_setting mt9m114_power_setting[] = {
 	{
-		.seq_type = SENSOR_VREG,
-		.seq_val = CAM_VIO,
-		.config_val = 0,
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_RESET,
+		.config_val = GPIO_OUT_LOW,
 		.delay = 0,
 	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_1P2,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 0,
+	},	
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_1P8,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 1,
+	},	
 	{
 		.seq_type = SENSOR_VREG,
 		.seq_val = CAM_VDIG,
@@ -56,31 +142,189 @@ static struct msm_sensor_power_setting mt9m114_power_setting[] = {
 		.delay = 0,
 	},
 	{
-		.seq_type = SENSOR_GPIO,
-		.seq_val = SENSOR_GPIO_RESET,
-		.config_val = GPIO_OUT_LOW,
-		.delay = 1,
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VIO,
+		.config_val = 0,
+		.delay = 0,
 	},
 	{
-		.seq_type = SENSOR_GPIO,
-		.seq_val = SENSOR_GPIO_RESET,
-		.config_val = GPIO_OUT_HIGH,
-		.delay = 30,
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VAF,
+		.config_val = 0,
+		.delay = 0,
 	},
 	{
 		.seq_type = SENSOR_CLK,
 		.seq_val = SENSOR_CAM_MCLK,
 		.config_val = 0,
-		.delay = 100,
+		.delay = 1,
+	},	
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_SUSPEND,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 1,
+	},	
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_RESET,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 6,
 	},
 	{
-		.seq_type = SENSOR_I2C_MUX,
-		.seq_val = 0,
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_SUSPEND,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 1,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VGA_MCLK,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 1,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VGA_MCLK,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 1,
+	},	
+};
+
+static struct msm_sensor_power_setting mt9m114_power_setting_isp[] = {
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_RESET,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_1P2,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 0,
+	},	
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_1P8,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 1,
+	},	
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VDIG,
 		.config_val = 0,
 		.delay = 0,
 	},
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VANA,
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VIO,
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VAF,
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_CLK,
+		.seq_val = SENSOR_CAM_MCLK,
+		.config_val = 0,
+		.delay = 1,
+	},		
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_RESET,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 6,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VGA_MCLK,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 1,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VGA_MCLK,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 1,
+	},	
 };
 
+static struct msm_sensor_power_setting mt9m114_power_setting_A91[] = {
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_SUSPEND,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_RESET,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_1P2,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 0,
+	},	
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_1P8,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 1,
+	},	
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VDIG,
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VANA,
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VAF,
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_CLK,
+		.seq_val = SENSOR_CAM_MCLK,
+		.config_val = 0,
+		.delay = 1,
+	},	
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_ISP_RESET,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 6,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VGA_MCLK,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 1,
+	},	
+};
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
+
+#if 0  //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
 static struct msm_camera_i2c_reg_conf mt9m114_720p_settings[] = {
 	{0xdc00, 0x50, MSM_CAMERA_I2C_BYTE_DATA, MSM_CAMERA_I2C_CMD_WRITE},
 	{MT9M114_COMMAND_REGISTER, MT9M114_COMMAND_REGISTER_SET_STATE,
@@ -127,7 +371,9 @@ static struct msm_camera_i2c_reg_conf mt9m114_720p_settings[] = {
 	{0xC920, 0x00FF,},/*stat_ae_window_xend = 255*/
 	{0xC922, 0x008F,},/*stat_ae_window_yend = 143*/
 };
+#endif	//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 
+#if 0	//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
 static struct msm_camera_i2c_reg_conf mt9m114_recommend_settings[] = {
 	{0x301A, 0x0200, MSM_CAMERA_I2C_SET_WORD_MASK},
 	{0x098E, 0, MSM_CAMERA_I2C_BYTE_DATA},
@@ -1080,6 +1326,7 @@ static struct msm_camera_i2c_reg_conf mt9m114_recommend_settings[] = {
 	{0xC878, 0x08, MSM_CAMERA_I2C_SET_BYTE_MASK},
 	{0xBC02, 0x08, MSM_CAMERA_I2C_UNSET_BYTE_MASK},
 };
+#endif	//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 
 static struct v4l2_subdev_info mt9m114_subdev_info[] = {
 	{
@@ -1090,6 +1337,7 @@ static struct v4l2_subdev_info mt9m114_subdev_info[] = {
 	},
 };
 
+#if 0	//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
 static struct msm_camera_i2c_reg_conf mt9m114_config_change_settings[] = {
 	{0xdc00, 0x28, MSM_CAMERA_I2C_BYTE_DATA, MSM_CAMERA_I2C_CMD_WRITE},
 	{MT9M114_COMMAND_REGISTER, MT9M114_COMMAND_REGISTER_SET_STATE,
@@ -1101,6 +1349,7 @@ static struct msm_camera_i2c_reg_conf mt9m114_config_change_settings[] = {
 		MSM_CAMERA_I2C_UNSET_WORD_MASK, MSM_CAMERA_I2C_CMD_POLL},
 	{0xDC01, 0x31, MSM_CAMERA_I2C_BYTE_DATA},
 };
+#endif	//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 
 static const struct i2c_device_id mt9m114_i2c_id[] = {
 	{MT9M114_SENSOR_NAME, (kernel_ulong_t)&mt9m114_s_ctrl},
@@ -1140,30 +1389,146 @@ static struct platform_driver mt9m114_platform_driver = {
 	},
 };
 
+/************************* boot from host ******************************/
+int spi_test_transfer(struct spi_device *spi,u8 *tx_buf,unsigned int len)
+{
+        spi_message_init(&spi_msg);
+        spi_xfer.tx_buf = tx_buf;
+        spi_xfer.len = len;
+        spi_xfer.bits_per_word = 8;
+        spi_xfer.speed_hz = spi->max_speed_hz;
+        spi_message_add_tail(&spi_xfer, &spi_msg);
+        return spi_sync(spi, &spi_msg);
+}
+
+int spi_rx_transfer(struct spi_device *spi,u8 *rx_buf,unsigned int len) //ASUS_BSP jim3_lin "Add for ATD CameraTest"
+{
+        spi_message_init(&spi_msg);
+        spi_rx.rx_buf = rx_buf;
+        spi_rx.len = len;
+        spi_rx.bits_per_word = 8;
+        spi_rx.speed_hz = spi->max_speed_hz;
+        spi_message_add_tail(&spi_rx, &spi_msg);
+        return spi_sync(spi, &spi_msg);
+}
+
+static int spi_test_probe(struct spi_device *spi)
+{
+	//int irq_gpio = -1;
+	int irq;
+	int cs;
+	int cpha,cpol,cs_high;
+	u32 max_speed;
+	g_spi = spi;
+	printk("%s\n",__FUNCTION__);
+       pr_info("%s E\n",__func__);
+	
+	//allocate memory for transfer
+	tx_buf = kmalloc(BUFFER_SIZE, GFP_ATOMIC);
+	if(tx_buf == NULL){
+		printk("%s: mem alloc failed\n", __func__);
+		return -ENOMEM;
+	}
+	printk("spi is %p\n",spi);
+	//Parse data using dt.
+	if(spi->dev.of_node){
+		printk("spi->dev.of_node\n");
+		//irq_gpio = of_get_named_gpio_flags(spi->dev.of_node, "qcom_spi_test,irq-gpio", 0, NULL);
+	}
+	irq = spi->irq;
+	printk("[%s]: spi irq is %d\n",__FUNCTION__,spi->irq);
+	cs = spi->chip_select;
+	printk("[%s]: spi chio select is %d\n",__FUNCTION__,spi->chip_select);
+	cpha = ( spi->mode & SPI_CPHA ) ? 1:0;
+	cpol = ( spi->mode & SPI_CPOL ) ? 1:0;
+	cs_high = ( spi->mode & SPI_CS_HIGH ) ? 1:0;
+	max_speed = spi->max_speed_hz;
+	printk("max_speed is %d\n", spi->max_speed_hz);
+	//printk("gpio [%d] irq [%d] gpio_irq [%d] cs [%x] CPHA [%x] CPOL[%x] CS_HIGH [%x]\n",
+	//irq_gpio, irq, gpio_to_irq(irq_gpio), cs, cpha, cpol, cs_high);
+	printk("Max_speed [%d]\n", max_speed );
+	spi->bits_per_word = 8;
+	spi->mode = SPI_MODE_0;
+	
+	//printk("SPI sync returned [%d]\n", spi_test_transfer(spi,tx_buf,1024));
+	pr_info("%s X\n",__func__);
+	return 0;
+}
+
+//SPI Driver Info
+static const struct of_device_id qcom_spi_test_table[] = {
+	{ .compatible = "qcom,spi-test" }, //Compatible node must match dts
+	{ }
+};
+static struct spi_driver spi_test_driver = {
+	.driver = {
+		.name = "qcom,spi-test",
+		.owner = THIS_MODULE,
+		.of_match_table = qcom_spi_test_table,
+	},
+	.probe = spi_test_probe,
+};
+/********************************************************************/
+
+
 static int32_t mt9m114_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc;
 	const struct of_device_id *match;
+       probe_power_isp = true; //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+       
 	match = of_match_device(mt9m114_dt_match, &pdev->dev);
-	if (match)
-		rc = msm_sensor_platform_probe(pdev, match->data);
-	else {
-		pr_err("%s:%d match is null\n", __func__, __LINE__);
-		rc = -EINVAL;
-	}
+	rc = msm_sensor_platform_probe(pdev, match->data);
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	if ( rc != 0 )
+		pr_err("msm_sensor_platform_probe fail, Error : %d\n",rc); 
+    
+       rc = i2c_add_driver(&mt9m114_i2c_driver);
+	if ( rc != 0 )
+		pr_err("i2c_add_driver fail, Error : %d\n",rc); 
+	probe_power_isp = false;
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
+
 	return rc;
 }
 
+extern void create_mt9m114_proc_file(void); //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 static int __init mt9m114_init_module(void)
 {
 	int32_t rc;
 	pr_info("%s:%d\n", __func__, __LINE__);
+
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+       create_mt9m114_proc_file();	//ASUS_BSP Stimber "Add ATD proc interface"
+       iCatch_init(); //ASUS_BSP  LiJen "init iCatch ISP"
+       create_iCatch_proc_file();
+       create_iCatch_switch_file();
+       iCatch_create_workqueue();
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
+
 	rc = platform_driver_probe(&mt9m114_platform_driver,
 		mt9m114_platform_probe);
-	if (!rc)
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	if(rc < 0)
+	{
+		printk("mt9m114_platform_probe fail, rc(%d)\n",rc);
 		return rc;
+	}
+
+       if(g_ASUS_hwID < A91_SR1){
+              //do nothing
+       }else{
+        	rc = spi_register_driver(&spi_test_driver);
+        	if(rc < 0)
+        	{
+        		printk("spi_register_driver fail, rc(%d)\n",rc);
+        		return rc;
+        	}
+       }   
+
 	pr_err("%s:%d rc %d\n", __func__, __LINE__, rc);
-	return i2c_add_driver(&mt9m114_i2c_driver);
+	return 0;//i2c_add_driver(&mt9m114_i2c_driver);
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 }
 
 static void __exit mt9m114_exit_module(void)
@@ -1172,20 +1537,139 @@ static void __exit mt9m114_exit_module(void)
 	if (mt9m114_s_ctrl.pdev) {
 		msm_sensor_free_sensor_data(&mt9m114_s_ctrl);
 		platform_driver_unregister(&mt9m114_platform_driver);
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+		i2c_del_driver(&mt9m114_i2c_driver); 
+              iCatch_deinit();
+		remove_iCatch_proc_file();
+		remove_iCatch_switch_file();
+              iCatch_destroy_workqueue();
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"       
 	} else
 		i2c_del_driver(&mt9m114_i2c_driver);
+
+       if(g_ASUS_hwID < A91_SR1){
+              //do nothing
+       }else{
+        	spi_unregister_driver(&spi_test_driver); //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+       }   
+
 	return;
 }
+
+//ASUS_BSP +++ LiJen "[Camera][NA][Others]Camera mini porting" 
+extern struct completion g_iCatch_comp;
+void sensor_set_resolution_main_camera(int res)
+{
+        g_cur_res = res;
+        pr_info("%s CFG_SET_RESOLUTION to %d\n",__func__,  g_cur_res);
+
+        //LiJen: move set_resolution to set_streamon to avoid CSID can't receiver frame when first open
+        if(false == iCatch_first_open){ 
+#ifdef MINI_PORTING
+            sensor_set_mode_main_camera(MSM_SENSOR_RES_FULL, g_bConfigPreviewStreamDone); 
+#else
+            sensor_set_mode_main_camera(g_cur_res, g_bConfigPreviewStreamDone);  //ASUS_BSP YM Performance, to speedup preview, config MODE1 in stream off		
+#endif
+        }
+        g_pre_res = g_cur_res;
+}
+
+void sensor_set_streamon_main_camera(void)
+{
+        memset(&g_JpegExif,  0,  sizeof(struct exif_cfg));
+
+        //LiJen: move set_resolution to set_streamon to avoid CSID can't receiver frame when first open
+        if(true == iCatch_first_open){
+            sensor_set_mode_main_camera(g_cur_res, g_bConfigPreviewStreamDone);
+        }
+        sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7121, 0x01);
+
+       if(true == iCatch_first_open){  
+            //don't neet to wait net frame
+            iCatch_first_open = false;
+       }else{
+            wait_for_next_frame();
+       }
+
+	//ASUS_BSP+++ YM only turn off stream, when the sensor is turned on
+	       g_bSensorState_StreamOn = true;  //Stream is turned on
+	//ASUS_BSP--- YM only turn off stream, when the sensor is turned on
+}
+
+void sensor_set_streamoff_main_camera(void)
+{
+//ASUS_BSP+++ YM only turn off stream, when the sensor is turned on
+          if (g_bSensorState_StreamOn) {  //Stream is turned ON, need to stop stream
+                  pr_info("%s CFG_SET_STOP_STREAM g_pre_res(%d)\n",__func__, g_pre_res);          
+
+           sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7121, 0x00); 
+
+           //ASUS_BSP+++ jim3_lin "Avoid 1st preview frame after zsl capture is effected by flash"
+           // Move from iCatch7002a.c sensor_set_mode_main_camera()
+           //burst capture abort
+           if((MSM_SENSOR_RES_FULL_BURST_CAPTURE == g_pre_res
+               || MSM_SENSOR_RES_10M_BURST_CAPTURE == g_pre_res
+               || MSM_SENSOR_RES_3M_BURST_CAPTURE == g_pre_res
+               || (MSM_SENSOR_RES_FULL_SINGLE_CAPTURE == g_pre_res /*&& g_is_nr_on*/ ))
+             ){ //&& g_pre_res != g_cur_res
+               pr_info("%s: Burst capture abort\n",__func__);
+               sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7122, 0x01);
+           }
+           //ASUS_BSP--- jim3_lin "Avoid 1st preview frame after zsl capture is effected by flash"
+
+//ASUS_BSP+++ YM Performance, to speedup preview, config MODE1 in stream off
+                  if (g_pre_res==MSM_SENSOR_RES_FULL_SINGLE_CAPTURE /*|| g_pre_res==MSM_SENSOR_RES_3M_BURST_CAPTURE*/) { //if previous is take picture: MODE7, /*MODE11*/
+                       //I guess,it will be preview(MODE1) later
+                       pr_info("[YM]Early config preview mode in CFG_SET_STOP_STREAM \n");
+                       sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x72f8, 0x04);
+                       INIT_COMPLETION(g_iCatch_comp);
+                       pr_info("%s INIT_COMPLETION\n",__func__);
+	                
+	                setFixFPS(0);
+	                setMiniISO(0);
+	                setCaptureVideoMode(0); //default : capture preview mode
+	                
+	                sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7106, 0x06);//preview resolution
+	                sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7120, 0x00);//swtich preview mode  
+                  	  g_bConfigPreviewStreamDone=true;	
+                  } else {
+                       g_bConfigPreviewStreamDone=false;
+                  }
+//ASUS_BSP--- YM Performance, to speedup preview, config MODE1 in stream off
+                  g_bSensorState_StreamOn = false;  //YM: Stream is turned off
+                  led_pmic_flash_enable(false, false); // disable pmic led flash
+           } else {
+                  pr_info("%s: CFG_SET_STOP_STREAM SKIP (0x7121=0)...\n",__func__);
+	    }
+//ASUS_BSP--- YM only turn off stream, when the sensor is turned on	
+}
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting" 
 
 int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 	void __user *argp)
 {
 	struct sensorb_cfg_data *cdata = (struct sensorb_cfg_data *)argp;
-	int32_t rc = 0;
+	long rc = 0;
 	int32_t i = 0;
 	mutex_lock(s_ctrl->msm_sensor_mutex);
 	CDBG("%s:%d %s cfgtype = %d\n", __func__, __LINE__,
 		s_ctrl->sensordata->sensor_name, cdata->cfgtype);
+
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"  
+       if(cdata->cfgtype == CFG_SET_SLAVE_INFO ||
+            cdata->cfgtype == CFG_GET_SENSOR_INFO ||
+            cdata->cfgtype == CFG_GET_SENSOR_INIT_PARAMS){
+            //don't need to power up before do task
+       }else{
+            //need to power up before do task
+            if(false == g_mt9m114_power && CFG_POWER_UP != cdata->cfgtype){
+                pr_err("%s power is down now, cfgtype(%d)\n",__func__,cdata->cfgtype);
+                rc = -EFAULT;
+                goto end;
+           }
+       }
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"  
+
 	switch (cdata->cfgtype) {
 	case CFG_GET_SENSOR_INFO:
 		memcpy(cdata->cfg.sensor_info.sensor_name,
@@ -1203,14 +1687,12 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		for (i = 0; i < SUB_MODULE_MAX; i++)
 			CDBG("%s:%d subdev_id[%d] %d\n", __func__, __LINE__, i,
 				cdata->cfg.sensor_info.subdev_id[i]);
-		CDBG("%s:%d mount angle valid %d value %d\n", __func__,
-			__LINE__, cdata->cfg.sensor_info.is_mount_angle_valid,
-			cdata->cfg.sensor_info.sensor_mount_angle);
 
 		break;
 	case CFG_SET_INIT_SETTING:
 		/* 1. Write Recommend settings */
 		/* 2. Write change settings */
+#if 0	//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"  
 		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->
 			i2c_write_conf_tbl(
 			s_ctrl->sensor_i2c_client, mt9m114_recommend_settings,
@@ -1222,31 +1704,44 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 			mt9m114_config_change_settings,
 			ARRAY_SIZE(mt9m114_config_change_settings),
 			MSM_CAMERA_I2C_WORD_DATA);
+#endif 	//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"   
 		break;
 	case CFG_SET_RESOLUTION:
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#if 0	
 		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->
 			i2c_write_conf_tbl(
 			s_ctrl->sensor_i2c_client, mt9m114_720p_settings,
 			ARRAY_SIZE(mt9m114_720p_settings),
 			MSM_CAMERA_I2C_WORD_DATA);
+#endif	
+    	       sensor_set_resolution_main_camera((int)cdata->cfg.setting);
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"  
+
 		break;
 	case CFG_SET_STOP_STREAM:
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"          
+              sensor_set_streamoff_main_camera();
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"                
 		break;
 	case CFG_SET_START_STREAM:
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#if 0	
 		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->
 			i2c_write_conf_tbl(
 			s_ctrl->sensor_i2c_client,
 			mt9m114_config_change_settings,
 			ARRAY_SIZE(mt9m114_config_change_settings),
 			MSM_CAMERA_I2C_WORD_DATA);
+#endif	
+            sensor_set_streamon_main_camera();
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
+
+            
 		break;
 	case CFG_GET_SENSOR_INIT_PARAMS:
-		cdata->cfg.sensor_init_params.modes_supported =
-			s_ctrl->sensordata->sensor_info->modes_supported;
-		cdata->cfg.sensor_init_params.position =
-			s_ctrl->sensordata->sensor_info->position;
-		cdata->cfg.sensor_init_params.sensor_mount_angle =
-			s_ctrl->sensordata->sensor_info->sensor_mount_angle;
+		cdata->cfg.sensor_init_params =
+			*s_ctrl->sensordata->sensor_init_params;
 		CDBG("%s:%d init params mode %d pos %d mount %d\n", __func__,
 			__LINE__,
 			cdata->cfg.sensor_init_params.modes_supported,
@@ -1255,12 +1750,11 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		break;
 	case CFG_SET_SLAVE_INFO: {
 		struct msm_camera_sensor_slave_info sensor_slave_info;
-		struct msm_camera_power_ctrl_t *p_ctrl;
-		uint16_t size;
+		struct msm_sensor_power_setting_array *power_setting_array;
 		int slave_index = 0;
 		if (copy_from_user(&sensor_slave_info,
-			(void *)cdata->cfg.setting,
-			sizeof(struct msm_camera_sensor_slave_info))) {
+		    (void *)cdata->cfg.setting,
+		    sizeof(struct msm_camera_sensor_slave_info))) {
 			pr_err("%s:%d failed\n", __func__, __LINE__);
 			rc = -EFAULT;
 			break;
@@ -1276,31 +1770,28 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 			sensor_slave_info.addr_type;
 
 		/* Update power up / down sequence */
-		p_ctrl = &s_ctrl->sensordata->power_info;
-		size = sensor_slave_info.power_setting_array.size;
-		if (p_ctrl->power_setting_size < size) {
-			struct msm_sensor_power_setting *tmp;
-			tmp = kmalloc(sizeof(struct msm_sensor_power_setting)
-				      * size, GFP_KERNEL);
-			if (!tmp) {
-				pr_err("%s: failed to alloc mem\n", __func__);
-				rc = -ENOMEM;
-				break;
-			}
-			kfree(p_ctrl->power_setting);
-			p_ctrl->power_setting = tmp;
+		s_ctrl->power_setting_array =
+			sensor_slave_info.power_setting_array;
+		power_setting_array = &s_ctrl->power_setting_array;
+		power_setting_array->power_setting = kzalloc(
+			power_setting_array->size *
+			sizeof(struct msm_sensor_power_setting), GFP_KERNEL);
+		if (!power_setting_array->power_setting) {
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			rc = -ENOMEM;
+			break;
 		}
-		p_ctrl->power_setting_size = size;
-
-		rc = copy_from_user(p_ctrl->power_setting, (void *)
-			sensor_slave_info.power_setting_array.power_setting,
-			size * sizeof(struct msm_sensor_power_setting));
-		if (rc) {
+		if (copy_from_user(power_setting_array->power_setting,
+		    (void *)sensor_slave_info.power_setting_array.power_setting,
+		    power_setting_array->size *
+		    sizeof(struct msm_sensor_power_setting))) {
+			kfree(power_setting_array->power_setting);
 			pr_err("%s:%d failed\n", __func__, __LINE__);
 			rc = -EFAULT;
 			break;
 		}
-		CDBG("%s sensor id 0x%x\n", __func__,
+		s_ctrl->free_power_setting = true;
+		CDBG("%s sensor id %x\n", __func__,
 			sensor_slave_info.slave_addr);
 		CDBG("%s sensor addr type %d\n", __func__,
 			sensor_slave_info.addr_type);
@@ -1309,14 +1800,19 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		CDBG("%s sensor id %x\n", __func__,
 			sensor_slave_info.sensor_id_info.sensor_id);
 		for (slave_index = 0; slave_index <
-			p_ctrl->power_setting_size; slave_index++) {
+			power_setting_array->size; slave_index++) {
 			CDBG("%s i %d power setting %d %d %ld %d\n", __func__,
 				slave_index,
-				p_ctrl->power_setting[slave_index].seq_type,
-				p_ctrl->power_setting[slave_index].seq_val,
-				p_ctrl->power_setting[slave_index].config_val,
-				p_ctrl->power_setting[slave_index].delay);
+				power_setting_array->power_setting[slave_index].
+				seq_type,
+				power_setting_array->power_setting[slave_index].
+				seq_val,
+				power_setting_array->power_setting[slave_index].
+				config_val,
+				power_setting_array->power_setting[slave_index].
+				delay);
 		}
+		kfree(power_setting_array->power_setting);
 		break;
 	}
 	case CFG_WRITE_I2C_ARRAY: {
@@ -1399,7 +1895,8 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 
 	case CFG_POWER_DOWN:
 		if (s_ctrl->func_tbl->sensor_power_down)
-			rc = s_ctrl->func_tbl->sensor_power_down(s_ctrl);
+			rc = s_ctrl->func_tbl->sensor_power_down(
+				s_ctrl);
 		else
 			rc = -EFAULT;
 		break;
@@ -1470,32 +1967,310 @@ int32_t mt9m114_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		}
 		case CFG_SET_AUTOFOCUS: {
 		/* TO-DO: set the Auto Focus */
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+		iCatch_start_AF(1, g_AF_MODE, g_AF_ROI.rect.left, g_AF_ROI.rect.top, g_AF_ROI.rect.height, g_AF_ROI.rect.width);
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 		pr_debug("%s: Setting Auto Focus", __func__);
 		break;
 		}
 		case CFG_CANCEL_AUTOFOCUS: {
 		/* TO-DO: Cancel the Auto Focus */
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+		iCatch_start_AF(0, g_AF_MODE, -1, -1, -1, -1);
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 		pr_debug("%s: Cancelling Auto Focus", __func__);
 		break;
 		}
+//ASUS_BSP +++ Stimber "Add for hal-kernel ISP settings"
+    case CFG_SET_ASUS_ISP_SETTING:{
+        struct kernel_mct_event_control_parm_t hal_parm;
+        if (copy_from_user(&hal_parm,
+		    (void *)cdata->cfg.setting,
+		    sizeof(struct kernel_mct_event_control_parm_t))) {
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			rc = -EFAULT;
+			break;
+		}
+		iCatch_set_hal_general_cmd(&hal_parm);
+
+        break;
+    }
+//ASUS_BSP --- Stimber "Add for hal-kernel ISP settings"
 		default:
 		rc = -EFAULT;
 		break;
 	}
 
+end: //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 	mutex_unlock(s_ctrl->msm_sensor_mutex);
 
 	return rc;
 }
 
+//ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
+u8* read_bin_to_buf(struct file *fp, bool isbootBufNotNull )
+{
+     mm_segment_t old_fs;
+     struct inode *inode;
+     u32 size;
+     u8 *pbuf;
+     pr_info("filp_open success fp:%p\n", fp);
+     inode = fp->f_dentry->d_inode;
+     size = inode->i_size;
+     printk("<1>file size:%ld \n",(long int)size);
+     pbuf=(char *) kmalloc(size+1,GFP_ATOMIC);
+     if(pbuf == NULL){
+        filp_close(fp, NULL);
+        return NULL;
+     }
+     old_fs = get_fs();
+     set_fs(KERNEL_DS);
+     if(fp->f_op != NULL && fp->f_op->read != NULL){
+        int byte_count= 0;
+            if(isbootBufNotNull){
+                byte_count = fp->f_op->read(fp, pbuf, size, &fp->f_pos);
+            }
+            if (byte_count <= 0) {
+                printk("iCatch: EOF or error. last byte_count= %d;\n", byte_count);
+            }
+      }
+        set_fs(old_fs);
+        filp_close(fp, NULL);
+    return pbuf;
+}
+//ASUS_BSP--- jim3_lin "Add for ATD CameraTest"
+
+int32_t mt9m114_boot_from_host(struct msm_sensor_ctrl_t *s_ctrl)
+{
+     int32_t rc = SUCCESS;
+     struct file *fp = NULL;
+//ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
+     struct file *acali_fp = NULL;
+     struct file *lsc_fp = NULL;
+     struct file *lscdq_fp =NULL;
+     struct file *caliopt_fp = NULL;
+     char acali_path[80] = ACALI_PATH;
+     char lsc_path[80] = LSC_PATH;
+     char lscdq_path[80] = LSCDQ_PATH;
+     char caliopt_path[80] = CALIOPT_PATH;
+//ASUS_BSP--- jim3_lin "Add for ATD CameraTest"
+     mm_segment_t old_fs;
+     struct inode *inode;
+     const int bootbin_size = ISP_FW_SIZE;
+     char binfile_path[80] = CAM_BOOT;
+
+    if(g_ASUS_hwID < A91_SR1){
+        //do nothing
+    }else{
+/*************************  boot from host *************************/
+        if(false == probe_power_isp){
+            // boot from host - load firmware data
+            if(false == g_is_fw_loaded){
+                fp = filp_open(binfile_path, O_RDONLY, 0);
+                if ( !IS_ERR_OR_NULL(fp) ){
+                    pr_info("filp_open success fp:%p\n", fp);
+                    inode = fp->f_dentry->d_inode;
+                    //pr_info("%s: fp->f_dentry->d_inode->i_size=%d\n", __FUNCTION__, bootbin_size);
+                    old_fs = get_fs();
+                    set_fs(KERNEL_DS);
+                    if(fp->f_op != NULL && fp->f_op->read != NULL){
+                        int byte_count= 0;
+                        pr_info("Start to read %s\n", binfile_path);
+                        byte_count = fp->f_op->read(fp, g_pbootBuf, bootbin_size, &fp->f_pos);
+                        if (byte_count <= 0) {
+                            pr_err("iCatch: EOF or error. last byte_count= %d;\n", byte_count);
+                        } else
+                            pr_info("iCatch: BIN file size= %d bytes\n", bootbin_size);
+                    }
+                    set_fs(old_fs);
+                    filp_close(fp, NULL);
+                    g_is_fw_loaded = true;
+                }else{
+                    pr_err("filp_open fail fp:%p\n", fp);
+                    return -1;
+                }
+            }else{
+                //do nothing
+                pr_info("firmware data has been loaded\n");
+            }            
+
+
+            // boot from host - load back calibration data
+            if(false == g_is_fw_back_cal_loaded){
+                //ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
+                acali_fp = filp_open(acali_path,O_RDONLY, 0);
+                if(!IS_ERR_OR_NULL(acali_fp)){
+                    lsc_fp = filp_open(lsc_path,O_RDONLY, 0);
+                    if(!IS_ERR_OR_NULL(lsc_fp)){
+                        lscdq_fp = filp_open(lscdq_path,O_RDONLY, 0);
+                        if(!IS_ERR_OR_NULL(lscdq_fp)){
+                            caliopt_fp = filp_open(caliopt_path,O_RDONLY, 0);
+                            if(!IS_ERR_OR_NULL(caliopt_fp)){
+                            rear_calibrated = true;
+                            }
+                        }
+                    }
+                }
+
+                if(rear_calibrated){
+                   pr_info("calibration has successed!\n");
+                   pacali = read_bin_to_buf(acali_fp, g_pbootBuf != NULL);
+                   plsc = read_bin_to_buf(lsc_fp, g_pbootBuf != NULL);
+                   plscdq = read_bin_to_buf(lscdq_fp, g_pbootBuf != NULL);
+                   pcaliopt = read_bin_to_buf(caliopt_fp, g_pbootBuf != NULL);
+                }
+                g_is_fw_back_cal_loaded = true;
+                //ASUS_BSP--- jim3_lin "Add for ATD CameraTest"                
+            }else{
+                pr_info("back calibration data has been loaded\n");
+            }
+
+           //load code
+            if(is_calibration == 0){
+                //ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
+                if(rear_calibrated)
+                    rc = EXISP_LoadCodeStart(g_spi,0x01, 0 ,0 , g_pbootBuf, pcaliopt,pacali,plsc,plscdq);
+                else
+                //ASUS_BSP--- jim3_lin "Add for ATD CameraTest"
+                    rc = EXISP_LoadCodeStart(g_spi,0x01, 0 ,0 , g_pbootBuf, NULL,NULL,NULL,NULL);
+            }else if(is_calibration == 1){
+                    rc = EXISP_LoadCodeStart(g_spi,0x01, 2 ,1, g_pbootBuf, NULL,NULL,NULL,NULL);
+            }           
+        }else{
+            //do nothing
+            pr_info("probe don't need to load code\n");
+        }
+/****************************************************************/
+    }
+
+    return (rc==SUCCESS)?0:-1;
+}
+
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+int32_t mt9m114_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
+{
+     int32_t rc;
+     pr_info("%s E\n", __func__);
+
+//ASUS_BSP+++ YM only turn off stream, when the sensor is turned on
+     g_bConfigPreviewStreamDone=false;
+     g_bSensorState_StreamOn = true;  //ISP Stream default is turned ON
+     g_pre_res = MSM_SENSOR_INVALID_RES;
+     g_cur_res = MSM_SENSOR_INVALID_RES;	   
+//ASUS_BSP--- YM only turn off stream, when the sensor is turned on
+
+    g_pre_torch_irq_val = -1;
+
+    if(g_mt9m114_power == true){
+        pr_info("%s X power has enabled\n", __func__);
+        return 0;	            
+    }    
+
+    if(g_ASUS_hwID < A91_SR1){
+        if(true != g_ISPbootup){
+            s_ctrl->power_setting_array.power_setting = mt9m114_power_setting;
+            s_ctrl->power_setting_array.size = ARRAY_SIZE(mt9m114_power_setting);        
+        }else{
+            s_ctrl->power_setting_array.power_setting = mt9m114_power_setting_isp;
+            s_ctrl->power_setting_array.size = ARRAY_SIZE(mt9m114_power_setting_isp);
+        }
+    }else{
+        s_ctrl->power_setting_array.power_setting = mt9m114_power_setting_A91;
+        s_ctrl->power_setting_array.size = ARRAY_SIZE(mt9m114_power_setting_A91);            
+    }    
+
+    rc = msm_sensor_power_up(s_ctrl);
+    if(rc < 0){
+        pr_err("%s msm_sensor_power_up fail\n",__func__);
+        goto power_up_fail;
+    }
+    
+    rc = mt9m114_boot_from_host(s_ctrl);
+    if(rc < 0){
+        pr_err("%s mt9m114_boot_from_host fail\n",__func__);
+        goto power_up_fail;
+    }  
+    
+    enable_isp_torch_interrupt();
+    iCatch_first_open = true;
+    g_mt9m114_power = true;
+    g_is_eis_on = false;  //ASUS_BSP bill_chen "Implement image stabilization"
+
+    pr_info("%s X\n", __func__);
+    return 0;
+
+power_up_fail:
+    pr_info("%s X, rc(%d)\n", __func__,rc);
+    return rc;
+    
+}
+
+int32_t mt9m114_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
+{
+    int retry =0;
+    pr_info("%s E\n", __func__);
+
+    if(false == g_mt9m114_power){
+        pr_err("%s power is down now\n",__func__);
+        return 0;
+    }
+//ASUS_BSP+++ YM only turn off stream, when the sensor is turned on
+       g_bSensorState_StreamOn = false;  //Stream is turned OFF now
+       g_bConfigPreviewStreamDone=false;       
+//ASUS_BSP--- YM only turn off stream, when the sensor is turned on
+    //Disable isp interrupt
+    //disable_irq(MSM_GPIO_TO_INT(mt9m114_s_ctrl.sensordata->sensor_platform_info->isp_int));
+    //free_irq(MSM_GPIO_TO_INT(mt9m114_s_ctrl.sensordata->sensor_platform_info->isp_int), 0);
+    disable_isp_interrupt();
+    disable_isp_torch_interrupt();
+    if(!probe_power_isp){
+        led_pmic_flash_enable(false, false); // disable pmic led flash
+        led_pmic_torch_enable(false, false); // disable pmic led flash
+    }       
+    iCatch_release_sensor(); //wait lens to move
+    while(g_isAFDone==false && retry<100){
+        //cancel AF polling
+        g_isAFCancel = true;
+
+        //wait for AF done
+        mutex_unlock(s_ctrl->msm_sensor_mutex);
+        msleep(1);
+        pr_info("%s wait AF Done\n",__func__);
+        mutex_lock(s_ctrl->msm_sensor_mutex);
+        retry ++;
+    }   
+
+    if(g_ASUS_hwID < A91_SR1){
+        if(true != g_ISPbootup){
+            s_ctrl->power_setting_array.power_setting = mt9m114_power_setting;
+            s_ctrl->power_setting_array.size = ARRAY_SIZE(mt9m114_power_setting);        
+        }else{
+            s_ctrl->power_setting_array.power_setting = mt9m114_power_setting_isp;
+            s_ctrl->power_setting_array.size = ARRAY_SIZE(mt9m114_power_setting_isp);
+        }
+    }else{
+        s_ctrl->power_setting_array.power_setting = mt9m114_power_setting_A91;
+        s_ctrl->power_setting_array.size = ARRAY_SIZE(mt9m114_power_setting_A91);            
+    }   
+ 
+    msm_sensor_power_down(s_ctrl);
+    msleep(100); // LiJen: wait for regulator output stop
+    g_pre_res = MSM_SENSOR_INVALID_RES;
+    g_mt9m114_power = false;
+
+    pr_info("%s X\n", __func__);
+    return 0;
+}
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
+
 static struct msm_sensor_fn_t mt9m114_sensor_func_tbl = {
 	.sensor_config = mt9m114_sensor_config,
-	.sensor_power_up = msm_sensor_power_up,
-	.sensor_power_down = msm_sensor_power_down,
+	.sensor_power_up = mt9m114_sensor_power_up, //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	.sensor_power_down = mt9m114_sensor_power_down, //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 	.sensor_match_id = msm_sensor_match_id,
 };
 
-static struct msm_sensor_ctrl_t mt9m114_s_ctrl = {
+struct msm_sensor_ctrl_t mt9m114_s_ctrl = { //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 	.sensor_i2c_client = &mt9m114_sensor_i2c_client,
 	.power_setting_array.power_setting = mt9m114_power_setting,
 	.power_setting_array.size = ARRAY_SIZE(mt9m114_power_setting),
@@ -1504,6 +2279,174 @@ static struct msm_sensor_ctrl_t mt9m114_s_ctrl = {
 	.sensor_v4l2_subdev_info_size = ARRAY_SIZE(mt9m114_subdev_info),
 	.func_tbl = &mt9m114_sensor_func_tbl,
 };
+
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#ifdef	CONFIG_PROC_FS
+#define	S5K3L1YX_PROC_FILE_STATUS	"driver/camera_status"
+#define	S5K3L1YX_PROC_FILE_FLASH	"driver/camera_flash"
+#define	S5K3L1YX_PROC_FILE_POWER	"driver/mt9m114_power"
+
+static int mt9m114_proc_read_camera_status(struct file *file, char __user *page, size_t count, loff_t *eof)
+{
+	int len=0;
+	if(*eof == 0){
+		len+=sprintf(page+len, "%x\n", g_camera_status);
+		*eof = 1;
+		pr_info("%s:X string=%s", __func__, (char *)page);
+	}
+	  return len;
+}
+
+static int mt9m114_proc_read_camera_fled(struct file *file, char __user *buff, size_t count, loff_t *offp)
+{
+	return 0;
+}
+
+static int mt9m114_proc_write_camera_fled(struct file *file, const char __user *buff, size_t len, loff_t *offp)
+{
+	static char messages = '\0';
+
+	if (len > 1)
+		len = 1;
+
+	if (copy_from_user(&messages, buff, len))
+		return -EFAULT;
+        
+	pr_info("mt9m114_proc_write_camera_fled %c\n", messages);
+
+	if (messages == '\0') {
+	     pr_info("command not support\n");
+	} else {
+		switch(messages){
+			case '0':
+				pr_info("[Camera] TORCH off...\n");
+                            led_pmic_torch_enable(false, false);
+				
+				break;
+			case '1':
+				pr_info("[Camera] TORCH on...\n");
+                            led_pmic_torch_enable(true, false);
+                            
+				break;    
+			case '2':
+				mt9m114_s_ctrl.func_tbl->sensor_power_up(&mt9m114_s_ctrl);
+				pr_info("[Camera] FLASH on shot...\n");
+                            msleep(100); //wait for ISP load code to keep flash pin pull high
+                            led_pmic_flash_enable(true, true);
+				sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0xff); //flash mode one shot
+				msleep(300);
+				mt9m114_s_ctrl.func_tbl->sensor_power_down(&mt9m114_s_ctrl);
+				
+				break;             
+			default:
+				//pr_err("[Camera] FLED command not support!!\n");
+				break;	
+		}
+	}
+
+	return len;
+
+}
+
+static int mt9m114_proc_read_camera_power(struct file *file, char __user *page, size_t count, loff_t *offp)
+{
+	int len=0;
+       unsigned char camera_power_enable = false;
+       
+	if(*offp == 0){
+              //if(g_mi1040_power == true || g_mt9m114_power == true){ // LiJen: tmp
+#if 0              
+              if(true){
+                    camera_power_enable = true;
+              }else{
+                    camera_power_enable = false;
+              }
+#endif              
+		len+=sprintf(page+len, "%x\n", camera_power_enable);
+		*offp = 1;
+		pr_info("%s:CameraPowe=%s", __func__, (char *)page);
+	}
+	  return len;
+}
+
+
+static int mt9m114_proc_write_camera_power(struct file *file, const char __user *buff, size_t len, loff_t *offp)
+{
+	static char messages = '\0';
+
+	if (len > 1)
+		len = 1;
+
+	if (copy_from_user(&messages, buff, len))
+		return -EFAULT;
+        
+	pr_info("%s %c\n", __func__,messages);
+
+	if (messages == '\0') {
+	     pr_info("command not support\n");
+	} else {
+		switch(messages){
+			case '0':
+				mt9m114_s_ctrl.func_tbl->sensor_power_down(&mt9m114_s_ctrl);
+				break;
+			case '1':
+				mt9m114_s_ctrl.func_tbl->sensor_power_up(&mt9m114_s_ctrl);
+				break;
+			default:
+				//pr_err("[Camera] POWER command not support!!\n");
+				break;	
+		}
+	}
+
+	return len;
+
+}
+
+struct file_operations mt9m114_flash_fops = {
+	.write = mt9m114_proc_write_camera_fled,
+	.read = mt9m114_proc_read_camera_fled,
+};
+
+struct file_operations mt9m114_power_fops = {
+	.write = mt9m114_proc_write_camera_power,
+	.read = mt9m114_proc_read_camera_power,
+};
+struct file_operations mt9m114_status_fops = {
+	.read = mt9m114_proc_read_camera_status,
+};
+
+
+void create_mt9m114_proc_file(void)
+{
+	static struct proc_dir_entry *mt9m114_proc_file, *mt9m114_proc_file_power;
+
+	mt9m114_proc_file = proc_create(S5K3L1YX_PROC_FILE_STATUS, 0666, NULL, &mt9m114_status_fops);
+	if (!mt9m114_proc_file) {
+		pr_err("[Camera]proc file create failed!\n");
+	}
+
+	mt9m114_proc_file = proc_create(S5K3L1YX_PROC_FILE_FLASH, 0666, NULL, &mt9m114_flash_fops);
+	if (!mt9m114_proc_file) {
+		pr_err("[Camera]proc file create failed!\n");
+	}
+
+	mt9m114_proc_file_power = proc_create(S5K3L1YX_PROC_FILE_POWER, 0666, NULL, &mt9m114_power_fops);
+	if (!mt9m114_proc_file_power) {
+		pr_err("[Camera]mt9m114_proc_file_power create failed!\n");
+	}
+    
+}
+
+void remove_mt9m114_proc_file(void)
+{
+    extern struct proc_dir_entry proc_root;
+    pr_info("mt9m114_proc_file\n");	
+    remove_proc_entry(S5K3L1YX_PROC_FILE_STATUS, &proc_root);
+    remove_proc_entry(S5K3L1YX_PROC_FILE_FLASH, &proc_root);
+    remove_proc_entry(S5K3L1YX_PROC_FILE_POWER, &proc_root);
+}
+#endif // end of CONFIG_PROC_FS
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 
 module_init(mt9m114_init_module);
 module_exit(mt9m114_exit_module);

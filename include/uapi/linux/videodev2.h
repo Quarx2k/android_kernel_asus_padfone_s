@@ -64,6 +64,7 @@
 #include <linux/types.h>
 #include <linux/v4l2-common.h>
 #include <linux/v4l2-controls.h>
+#include <media/asus_cam_intf_type.h> //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 
 /*
  * Common stuff for both V4L1 and V4L2
@@ -679,6 +680,7 @@ struct v4l2_buffer {
 	__u32			length;
 	__u32			reserved2;
 	__u32			reserved;
+	struct exif_cfg JpegExif;   //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
 };
 
 /*  Flags for 'flags' field */
