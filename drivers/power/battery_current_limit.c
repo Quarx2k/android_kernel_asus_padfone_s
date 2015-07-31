@@ -25,6 +25,7 @@
 #include <linux/cpufreq.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/cpu.h>
+#include <linux/err.h>
 
 #define BCL_DEV_NAME "battery_current_limit"
 #define BCL_NAME_LENGTH 20
