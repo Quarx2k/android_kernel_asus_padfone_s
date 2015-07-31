@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,13 +27,26 @@
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
 
+#include <linux/gpio.h> // ASUS_BSP Deeo : add for get gpio value
+
+///ASUS_BSP Deeo : add for MicroP notify +++
+
+#ifdef CONFIG_EEPROM_NUVOTON
+#include <linux/microp_api.h>
+#include <linux/microp_notify.h>
+#include <linux/microp_notifier_controller.h>
+extern int AX_MicroP_ControlLED(uint8_t,uint8_t);
+#endif
+//extern bool g_p06Exist;
+//ASUS_BSP Deeo : add for MicroP notify ---
+
 #define WLED_MOD_EN_REG(base, n)	(base + 0x60 + n*0x10)
 #define WLED_IDAC_DLY_REG(base, n)	(WLED_MOD_EN_REG(base, n) + 0x01)
 #define WLED_FULL_SCALE_REG(base, n)	(WLED_IDAC_DLY_REG(base, n) + 0x01)
 #define WLED_MOD_SRC_SEL_REG(base, n)	(WLED_FULL_SCALE_REG(base, n) + 0x01)
+#define WLED_MOD_CABC_EN_REG(base, n)	(WLED_MOD_SRC_SEL_REG(base, n) + 0x03)
 
 /* wled control registers */
-#define WLED_OVP_INT_STATUS(base)		(base + 0x10)
 #define WLED_BRIGHTNESS_CNTL_LSB(base, n)	(base + 0x40 + 2*n)
 #define WLED_BRIGHTNESS_CNTL_MSB(base, n)	(base + 0x41 + 2*n)
 #define WLED_MOD_CTRL_REG(base)			(base + 0x46)
@@ -47,10 +60,8 @@
 #define WLED_CURR_SINK_MASK		0xE0
 #define WLED_CURR_SINK_SHFT		0x05
 #define WLED_DISABLE_ALL_SINKS		0x00
-#define WLED_DISABLE_1_2_SINKS		0x80
 #define WLED_SWITCH_FREQ_MASK		0x0F
 #define WLED_OVP_VAL_MASK		0x03
-#define WLED_OVP_INT_MASK		0x02
 #define WLED_OVP_VAL_BIT_SHFT		0x00
 #define WLED_BOOST_LIMIT_MASK		0x07
 #define WLED_BOOST_LIMIT_BIT_SHFT	0x00
@@ -66,15 +77,11 @@
 #define WLED_MAX_CURR			25
 #define WLED_NO_CURRENT			0x00
 #define WLED_OVP_DELAY			1000
-#define WLED_OVP_DELAY_INT		200
-#define WLED_OVP_DELAY_LOOP		100
 #define WLED_MSB_MASK			0x0F
 #define WLED_MAX_CURR_MASK		0x1F
 #define WLED_OP_FDBCK_MASK		0x07
 #define WLED_OP_FDBCK_BIT_SHFT		0x00
 #define WLED_OP_FDBCK_DEFAULT		0x00
-
-#define WLED_SET_ILIM_CODE		0x01
 
 #define WLED_MAX_LEVEL			4095
 #define WLED_8_BIT_MASK			0xFF
@@ -86,12 +93,9 @@
 #define WLED_SYNC_RESET_VAL		0x00
 
 #define PMIC_VER_8026			0x04
-#define PMIC_VER_8941			0x01
 #define PMIC_VERSION_REG		0x0105
 
 #define WLED_DEFAULT_STRINGS		0x01
-#define WLED_THREE_STRINGS		0x03
-#define WLED_MAX_TRIES			5
 #define WLED_DEFAULT_OVP_VAL		0x02
 #define WLED_BOOST_LIM_DEFAULT		0x03
 #define WLED_CP_SEL_DEFAULT		0x00
@@ -110,11 +114,17 @@
 #define FLASH_VREG_OK_FORCE(base)	(base + 0x4F)
 #define FLASH_ENABLE_CONTROL(base)	(base + 0x46)
 #define FLASH_LED_STROBE_CTRL(base)	(base + 0x47)
-#define FLASH_WATCHDOG_TMR(base)	(base + 0x49)
+#define FLASH_LED_UNLOCK_SECURE(base)	(base + 0xD0)
+#define FLASH_LED_TORCH(base)		(base + 0xE4)
 #define FLASH_FAULT_DETECT(base)	(base + 0x51)
 #define FLASH_PERIPHERAL_SUBTYPE(base)	(base + 0x05)
 #define FLASH_CURRENT_RAMP(base)	(base + 0x54)
 
+//ASUS_BSP +++ LiJen: diasble PMIC internal thermal to avoid torch mode flicker issue
+#define FLASH_EN_THERMAL_DERATE_TIMER(base)	(base + 0x52)
+#define FLASH_EN_THERMAL_DERATE_TIMER_MASK 0x80
+#define FLASH_DISABLE_THERMAL 0x00
+//ASUS_BSP --- LiJen: diasble PMIC internal thermal to avoid torch mode flicker issue
 #define FLASH_MAX_LEVEL			0x4F
 #define TORCH_MAX_LEVEL			0x0F
 #define	FLASH_NO_MASK			0x00
@@ -143,10 +153,16 @@
 #define FLASH_ENABLE_LED_1		0xA0
 #define FLASH_INIT_MASK			0xE0
 #define	FLASH_SELFCHECK_ENABLE		0x80
-#define FLASH_WATCHDOG_MASK		0x1F
 #define FLASH_RAMP_STEP_27US		0xBF
 
-#define FLASH_HW_SW_STROBE_SEL_MASK	0x04
+//ASUS_BSP +++ LiJen
+#define FLASH_HW_SW_STROBE_SEL_MASK 0x04
+#define FLASH_STROBE_SW			0x00
+#define FLASH_STROBE_HW			0x04
+#define FLASH_STROBE_ACTIVE_LOW	0x00
+#define FLASH_STROBE_ACTIVE_HIGH 0x01
+//ASUS_BSP --- LiJen
+
 #define FLASH_STROBE_MASK		0xC7
 #define FLASH_LED_0_OUTPUT		0x80
 #define FLASH_LED_1_OUTPUT		0x40
@@ -158,8 +174,13 @@
 #define FLASH_CURRENT_TORCH		0x07
 
 #define FLASH_DURATION_200ms		0x13
-#define TORCH_DURATION_12s		0x0A
 #define FLASH_CLAMP_200mA		0x0F
+
+#define FLASH_TORCH_MASK		0x03
+#define FLASH_LED_TORCH_ENABLE		0x00
+#define FLASH_LED_TORCH_DISABLE		0x03
+#define FLASH_UNLOCK_SECURE		0xA5
+#define FLASH_SECURE_MASK		0xFF
 
 #define FLASH_SUBTYPE_DUAL		0x01
 #define FLASH_SUBTYPE_SINGLE		0x02
@@ -173,7 +194,7 @@
 #define RGB_LED_EN_CTL(base)		(base + 0x46)
 #define RGB_LED_ATC_CTL(base)		(base + 0x47)
 
-#define RGB_MAX_LEVEL			LED_FULL
+#define RGB_MAX_LEVEL				LED_QUARTER //LED_FULL  //ASUS_BSP Deeo : for saving power
 #define RGB_LED_ENABLE_RED		0x80
 #define RGB_LED_ENABLE_GREEN		0x40
 #define RGB_LED_ENABLE_BLUE		0x20
@@ -214,26 +235,6 @@
 
 #define MPP_SOURCE_DTEST1		0x08
 
-#define GPIO_MAX_LEVEL			LED_FULL
-#define LED_GPIO_MODE_CTRL(base)	(base + 0x40)
-#define LED_GPIO_VIN_CTRL(base)		(base + 0x41)
-#define LED_GPIO_EN_CTRL(base)		(base + 0x46)
-
-#define LED_GPIO_VIN_CTRL_DEFAULT	0
-#define LED_GPIO_SOURCE_SEL_DEFAULT	LED_GPIO_MODE_ENABLE
-
-#define LED_GPIO_MODE_MASK		0x3F
-#define LED_GPIO_VIN_MASK		0x0F
-#define LED_GPIO_EN_MASK		0x80
-#define LED_GPIO_SRC_MASK		0x0F
-#define LED_GPIO_MODE_CTRL_MASK		0x30
-
-#define LED_GPIO_MODE_ENABLE	0x01
-#define LED_GPIO_MODE_DISABLE	0x00
-#define LED_GPIO_MODE_OUTPUT		0x10
-#define LED_GPIO_EN_ENABLE		0x80
-#define LED_GPIO_EN_DISABLE		0x00
-
 #define KPDBL_MAX_LEVEL			LED_FULL
 #define KPDBL_ROW_SRC_SEL(base)		(base + 0x40)
 #define KPDBL_ENABLE(base)		(base + 0x46)
@@ -246,6 +247,19 @@
 #define KPDBL_MODULE_EN			0x80
 #define KPDBL_MODULE_DIS		0x00
 #define KPDBL_MODULE_EN_MASK		0x80
+#define NUM_KPDBL_LEDS			4
+#define KPDBL_MASTER_BIT_INDEX		0
+//ASUS_BSP Deeo : setting priority +++
+#ifdef ASUS_FACTORY_BUILD
+#define LED_RW_ATTR (S_IRUGO|S_IWUGO)
+#define LED_WO_ATTR (S_IWUGO)
+#define LED_RO_ATTR (S_IRUGO)
+#else
+#define LED_RW_ATTR (S_IRUGO|S_IWUSR|S_IWGRP)
+#define LED_WO_ATTR (S_IWUSR|S_IWGRP)
+#define LED_RO_ATTR (S_IRUGO)
+#endif
+//ASUS_BSP Deeo : setting priority ---
 
 /**
  * enum qpnp_leds - QPNP supported led ids
@@ -260,8 +274,8 @@ enum qpnp_leds {
 	QPNP_ID_RGB_BLUE,
 	QPNP_ID_LED_MPP,
 	QPNP_ID_KPDBL,
-	QPNP_ID_LED_GPIO,
 	QPNP_ID_MAX,
+	QPNP_ID_RGB_MIX,		//ASUS_BSP Deeo : add for mix color
 };
 
 /* current boost limit */
@@ -305,10 +319,8 @@ enum led_mode {
 };
 
 static u8 wled_debug_regs[] = {
-	/* brightness registers */
-	0x40, 0x41, 0x42, 0x43, 0x44, 0x45,
 	/* common registers */
-	0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f,
+	0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4d, 0x4e, 0x4f,
 	0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59,
 	/* LED1 */
 	0x60, 0x61, 0x62, 0x63, 0x66,
@@ -335,10 +347,6 @@ static u8 kpdbl_debug_regs[] = {
 	0x40, 0x46, 0xb1, 0xb3, 0xb4, 0xe5,
 };
 
-static u8 gpio_debug_regs[] = {
-	0x40, 0x41, 0x42, 0x45, 0x46,
-};
-
 /**
  *  pwm_config_data - pwm configuration data
  *  @lut_params - lut parameters to be used by pwm driver
@@ -360,15 +368,13 @@ struct pwm_config_data {
 	int	*old_duty_pcts;
 	u8	mode;
 	u8	default_mode;
-	bool	pwm_enabled;
 	bool use_blink;
 	bool blinking;
 };
 
 /**
  *  wled_config_data - wled configuration data
- *  @num_strings - number of wled strings to be configured
- *  @num_physical_strings - physical number of strings supported
+ *  @num_strings - number of wled strings supported
  *  @ovp_val - over voltage protection threshold
  *  @boost_curr_lim - boot current limit
  *  @cp_select - high pole capacitance
@@ -379,7 +385,6 @@ struct pwm_config_data {
  */
 struct wled_config_data {
 	u8	num_strings;
-	u8	num_physical_strings;
 	u8	ovp_val;
 	u8	boost_curr_lim;
 	u8	cp_select;
@@ -389,6 +394,7 @@ struct wled_config_data {
 	u8	pmic_version;
 	bool	dig_mod_gen_en;
 	bool	cs_out_en;
+	bool	cabc_out_en;
 };
 
 /**
@@ -400,10 +406,6 @@ struct wled_config_data {
  *  @vin_ctrl - input control
  *  @min_brightness - minimum brightness supported
  *  @pwm_mode - pwm mode in use
- *  @max_uV - maximum regulator voltage
- *  @min_uV - minimum regulator voltage
- *  @mpp_reg - regulator to power mpp based LED
- *  @enable - flag indicating LED on or off
  */
 struct mpp_config_data {
 	struct pwm_config_data	*pwm_cfg;
@@ -413,10 +415,6 @@ struct mpp_config_data {
 	u8	vin_ctrl;
 	u8	min_brightness;
 	u8 pwm_mode;
-	u32	max_uV;
-	u32	min_uV;
-	struct regulator *mpp_reg;
-	bool	enable;
 };
 
 /**
@@ -435,10 +433,12 @@ struct mpp_config_data {
  *  @safety_timer - enable safety timer or watchdog timer
  *  @torch_enable - enable flash LED torch mode
  *  @flash_reg_get - flash regulator attached or not
+ *  @flash_wa_reg_get - workaround regulator attached or not
  *  @flash_on - flash status, on or off
  *  @torch_on - torch status, on or off
  *  @flash_boost_reg - boost regulator for flash
  *  @torch_boost_reg - boost regulator for torch
+ *  @flash_wa_reg - flash regulator for wa
  */
 struct flash_config_data {
 	u8	current_prgm;
@@ -449,16 +449,19 @@ struct flash_config_data {
 	u8	trigger_flash;
 	u8	startup_dly;
 	u8	strobe_type;
+	u8	strobe_hw_polarity; //ASUS_BSP LiJen
 	u8	peripheral_subtype;
 	u16	current_addr;
 	u16	second_addr;
 	bool	safety_timer;
 	bool	torch_enable;
 	bool	flash_reg_get;
+	bool    flash_wa_reg_get;
 	bool	flash_on;
 	bool	torch_on;
 	struct regulator *flash_boost_reg;
 	struct regulator *torch_boost_reg;
+	struct regulator *flash_wa_reg;
 };
 
 /**
@@ -471,6 +474,7 @@ struct flash_config_data {
  *  @always_on - always on row
  *  @lut_params - lut parameters to be used by pwm driver
  *  @duty_cycles - duty cycles for lut
+ *  @pwm_mode - pwm mode in use
  */
 struct kpdbl_config_data {
 	struct pwm_config_data	*pwm_cfg;
@@ -480,6 +484,7 @@ struct kpdbl_config_data {
 	bool	always_on;
 	struct pwm_duty_cycles  *duty_cycles;
 	struct lut_params	lut_params;
+	u8	pwm_mode;
 };
 
 /**
@@ -493,23 +498,10 @@ struct rgb_config_data {
 };
 
 /**
- *  gpio_config_data - gpio configuration data
- *  @source_sel - source selection
- *  @mode_ctrl - mode control
- *  @vin_ctrl - input control
- *  @enable - flag indicating LED on or off
- */
-struct gpio_config_data {
-	u8	source_sel;
-	u8	mode_ctrl;
-	u8	vin_ctrl;
-	bool	enable;
-};
-
-/**
  * struct qpnp_led_data - internal led data structure
  * @led_classdev - led class device
  * @delayed_work - delayed work for turning off the LED
+ * @workqueue - dedicated workqueue to handle concurrency
  * @work - workqueue for led
  * @id - led index
  * @base_reg - base register given in device tree
@@ -524,6 +516,7 @@ struct qpnp_led_data {
 	struct led_classdev	cdev;
 	struct spmi_device	*spmi_dev;
 	struct delayed_work	dwork;
+	struct workqueue_struct *workqueue;
 	struct work_struct	work;
 	int			id;
 	u16			base;
@@ -535,13 +528,69 @@ struct qpnp_led_data {
 	struct kpdbl_config_data	*kpdbl_cfg;
 	struct rgb_config_data	*rgb_cfg;
 	struct mpp_config_data	*mpp_cfg;
-	struct gpio_config_data	*gpio_cfg;
 	int			max_current;
 	bool			default_on;
+	bool                    in_order_command_processing;
 	int			turn_off_delay_ms;
 };
 
-static int num_kpbl_leds_on;
+static DEFINE_MUTEX(flash_lock);
+static struct pwm_device *kpdbl_master;
+static u32 kpdbl_master_period_us;
+DECLARE_BITMAP(kpdbl_leds_in_use, NUM_KPDBL_LEDS);
+static bool is_kpdbl_master_turn_on;
+//ASUS_BSP Deeo : add LED globe variable +++
+static struct qpnp_led_data *red_led;
+static struct qpnp_led_data *green_led;
+static struct qpnp_led_data *blue_led;
+
+// ASUS_BSP Deeo : Get TPID for separate panel color +++
+static int panel_id = 0x0;
+static int led_enhance=1;
+// ASUS_BSP Deeo : Get TPID for separate panel color ---
+//ASUS_BSP Deeo : add LED globe variable ---
+
+extern bool g_Charger_mode;	//ASUS_BSP Deeo : add charger mode trigger
+
+//ASUS_BSP Deeo : add for MicroP notify +++
+static bool pad_in=false;
+
+void led_clean(void)
+{
+	printk("[LED] led_clean\n");
+	red_led->cdev.brightness = 0;
+	blue_led->cdev.brightness = 0;
+	green_led->cdev.brightness = 0;
+	schedule_work(&red_led->work);
+	schedule_work(&blue_led->work);
+	schedule_work(&green_led->work);
+}
+
+#ifdef CONFIG_EEPROM_NUVOTON
+static int microp_notify=0;
+static int led_mp_event(struct notifier_block *this, unsigned long event, void *ptr)
+{
+	//printk("[LED] Mircop event %d\n",(unsigned int)event);
+	switch (event)
+	{
+		case P01_ADD:
+			led_clean();
+			pad_in = true;
+			return NOTIFY_DONE;
+
+		case P01_REMOVE:
+			pad_in = false;
+		default:
+			return NOTIFY_DONE;
+	}
+}
+
+static struct notifier_block led_mp_notifier = {
+        .notifier_call = led_mp_event,
+        .priority = TOUCH_MP_NOTIFY,
+};
+#endif
+//ASUS_BSP Deeo : add for MicroP notify ---
 
 static int
 qpnp_led_masked_write(struct qpnp_led_data *led, u16 addr, u8 mask, u8 val)
@@ -612,8 +661,8 @@ static int qpnp_wled_sync(struct qpnp_led_data *led)
 
 static int qpnp_wled_set(struct qpnp_led_data *led)
 {
-	int rc, duty, level, tries = 0;
-	u8 val, i, num_wled_strings, sink_val, ilim_val, ovp_val;
+	int rc, duty, level;
+	u8 val, i, num_wled_strings, sink_val;
 
 	num_wled_strings = led->wled_cfg->num_strings;
 
@@ -662,73 +711,6 @@ static int qpnp_wled_set(struct qpnp_led_data *led)
 			}
 
 			usleep(WLED_OVP_DELAY);
-		} else if (led->wled_cfg->pmic_version == PMIC_VER_8941) {
-			if (led->wled_cfg->num_physical_strings <=
-					WLED_THREE_STRINGS) {
-				val = WLED_DISABLE_1_2_SINKS;
-				rc = spmi_ext_register_writel(
-					led->spmi_dev->ctrl,
-					led->spmi_dev->sid,
-					WLED_CURR_SINK_REG(led->base), &val, 1);
-				if (rc) {
-					dev_err(&led->spmi_dev->dev,
-						"WLED write sink reg failed");
-					return rc;
-				}
-
-				rc = spmi_ext_register_readl(
-					led->spmi_dev->ctrl,
-					led->spmi_dev->sid,
-					WLED_BOOST_LIMIT_REG(led->base),
-					&ilim_val, 1);
-				if (rc) {
-					dev_err(&led->spmi_dev->dev,
-						"Unable to read boost reg");
-				}
-				val = WLED_SET_ILIM_CODE;
-				rc = spmi_ext_register_writel(
-					led->spmi_dev->ctrl,
-					led->spmi_dev->sid,
-					WLED_BOOST_LIMIT_REG(led->base),
-					&val, 1);
-				if (rc) {
-					dev_err(&led->spmi_dev->dev,
-						"WLED write sink reg failed");
-					return rc;
-				}
-				usleep(WLED_OVP_DELAY);
-			} else {
-				val = WLED_DISABLE_ALL_SINKS;
-				rc = spmi_ext_register_writel(
-					led->spmi_dev->ctrl,
-					led->spmi_dev->sid,
-					WLED_CURR_SINK_REG(led->base), &val, 1);
-				if (rc) {
-					dev_err(&led->spmi_dev->dev,
-						"WLED write sink reg failed");
-					return rc;
-				}
-
-				msleep(WLED_OVP_DELAY_INT);
-				while (tries < WLED_MAX_TRIES) {
-					rc = spmi_ext_register_readl(
-						led->spmi_dev->ctrl,
-						led->spmi_dev->sid,
-						WLED_OVP_INT_STATUS(led->base),
-						&ovp_val, 1);
-					if (rc) {
-						dev_err(&led->spmi_dev->dev,
-						"Unable to read boost reg");
-					}
-
-					if (ovp_val & WLED_OVP_INT_MASK)
-						break;
-
-					msleep(WLED_OVP_DELAY_LOOP);
-					tries++;
-				}
-				usleep(WLED_OVP_DELAY);
-			}
 		}
 
 		val = WLED_BOOST_OFF;
@@ -744,7 +726,7 @@ static int qpnp_wled_set(struct qpnp_led_data *led)
 		for (i = 0; i < num_wled_strings; i++) {
 			rc = qpnp_led_masked_write(led,
 				WLED_FULL_SCALE_REG(led->base, i),
-				WLED_MAX_CURR_MASK, led->max_current);
+				WLED_MAX_CURR_MASK, (u8)led->max_current);
 			if (rc) {
 				dev_err(&led->spmi_dev->dev,
 					"Write max current failure (%d)\n",
@@ -760,35 +742,6 @@ static int qpnp_wled_set(struct qpnp_led_data *led)
 			return rc;
 		}
 
-		if (led->wled_cfg->pmic_version == PMIC_VER_8941) {
-			if (led->wled_cfg->num_physical_strings <=
-					WLED_THREE_STRINGS) {
-				rc = spmi_ext_register_writel(
-					led->spmi_dev->ctrl,
-					led->spmi_dev->sid,
-					WLED_BOOST_LIMIT_REG(led->base),
-					&ilim_val, 1);
-				if (rc) {
-					dev_err(&led->spmi_dev->dev,
-						"WLED write sink reg failed");
-					return rc;
-				}
-			} else {
-				/* restore OVP to original value */
-				rc = spmi_ext_register_writel(
-					led->spmi_dev->ctrl,
-					led->spmi_dev->sid,
-					WLED_OVP_CFG_REG(led->base),
-					&led->wled_cfg->ovp_val, 1);
-				if (rc) {
-					dev_err(&led->spmi_dev->dev,
-						"WLED write sink reg failed");
-					return rc;
-				}
-			}
-		}
-
-		/* re-enable all sinks */
 		rc = spmi_ext_register_writel(led->spmi_dev->ctrl,
 			led->spmi_dev->sid, WLED_CURR_SINK_REG(led->base),
 			&sink_val, 1);
@@ -843,31 +796,11 @@ static int qpnp_wled_set(struct qpnp_led_data *led)
 
 static int qpnp_mpp_set(struct qpnp_led_data *led)
 {
-	int rc, val;
-	int duty_us;
+	int rc;
+	u8 val;
+	int duty_us, duty_ns, period_us;
 
 	if (led->cdev.brightness) {
-		if (led->mpp_cfg->mpp_reg && !led->mpp_cfg->enable) {
-			rc = regulator_set_voltage(led->mpp_cfg->mpp_reg,
-					led->mpp_cfg->min_uV,
-					led->mpp_cfg->max_uV);
-			if (rc) {
-				dev_err(&led->spmi_dev->dev,
-					"Regulator voltage set failed rc=%d\n",
-									rc);
-				return rc;
-			}
-
-			rc = regulator_enable(led->mpp_cfg->mpp_reg);
-			if (rc) {
-				dev_err(&led->spmi_dev->dev,
-					"Regulator enable failed(%d)\n", rc);
-				goto err_reg_enable;
-			}
-		}
-
-		led->mpp_cfg->enable = true;
-
 		if (led->cdev.brightness < led->mpp_cfg->min_brightness) {
 			dev_warn(&led->spmi_dev->dev,
 				"brightness is less than supported..." \
@@ -884,17 +817,27 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 			}
 		}
 		if (led->mpp_cfg->pwm_mode == PWM_MODE) {
-			pwm_disable(led->mpp_cfg->pwm_cfg->pwm_dev);
-			duty_us = (led->mpp_cfg->pwm_cfg->pwm_period_us *
-					led->cdev.brightness) / LED_FULL;
 			/*config pwm for brightness scaling*/
-			rc = pwm_config_us(led->mpp_cfg->pwm_cfg->pwm_dev,
+			period_us = led->mpp_cfg->pwm_cfg->pwm_period_us;
+			if (period_us > INT_MAX / NSEC_PER_USEC) {
+				duty_us = (period_us * led->cdev.brightness) /
+					LED_FULL;
+				rc = pwm_config_us(
+					led->mpp_cfg->pwm_cfg->pwm_dev,
 					duty_us,
-					led->mpp_cfg->pwm_cfg->pwm_period_us);
+					period_us);
+			} else {
+				duty_ns = ((period_us * NSEC_PER_USEC) /
+					LED_FULL) * led->cdev.brightness;
+				rc = pwm_config(
+					led->mpp_cfg->pwm_cfg->pwm_dev,
+					duty_ns,
+					period_us * NSEC_PER_USEC);
+			}
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev, "Failed to " \
 					"configure pwm for new values\n");
-				goto err_mpp_reg_write;
+				return rc;
 			}
 		}
 
@@ -912,7 +855,7 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 			if (rc) {
 				dev_err(&led->spmi_dev->dev,
 					"Failed to write sink control reg\n");
-				goto err_mpp_reg_write;
+				return rc;
 			}
 		}
 
@@ -925,7 +868,7 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 		if (rc) {
 			dev_err(&led->spmi_dev->dev,
 					"Failed to write led mode reg\n");
-			goto err_mpp_reg_write;
+			return rc;
 		}
 
 		rc = qpnp_led_masked_write(led,
@@ -935,7 +878,7 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 			dev_err(&led->spmi_dev->dev,
 					"Failed to write led enable " \
 					"reg\n");
-			goto err_mpp_reg_write;
+			return rc;
 		}
 	} else {
 		if (led->mpp_cfg->pwm_mode != MANUAL_MODE) {
@@ -952,7 +895,7 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 		if (rc) {
 			dev_err(&led->spmi_dev->dev,
 					"Failed to write led mode reg\n");
-			goto err_mpp_reg_write;
+			return rc;
 		}
 
 		rc = qpnp_led_masked_write(led,
@@ -962,29 +905,8 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 		if (rc) {
 			dev_err(&led->spmi_dev->dev,
 					"Failed to write led enable reg\n");
-			goto err_mpp_reg_write;
+			return rc;
 		}
-
-		if (led->mpp_cfg->mpp_reg && led->mpp_cfg->enable) {
-			rc = regulator_disable(led->mpp_cfg->mpp_reg);
-			if (rc) {
-				dev_err(&led->spmi_dev->dev,
-					"MPP regulator disable failed(%d)\n",
-					rc);
-				return rc;
-			}
-
-			rc = regulator_set_voltage(led->mpp_cfg->mpp_reg,
-						0, led->mpp_cfg->max_uV);
-			if (rc) {
-				dev_err(&led->spmi_dev->dev,
-					"MPP regulator voltage set failed(%d)\n",
-					rc);
-				return rc;
-			}
-		}
-
-		led->mpp_cfg->enable = false;
 	}
 
 	if (led->mpp_cfg->pwm_mode != MANUAL_MODE)
@@ -992,80 +914,6 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 	qpnp_dump_regs(led, mpp_debug_regs, ARRAY_SIZE(mpp_debug_regs));
 
 	return 0;
-
-err_mpp_reg_write:
-	if (led->mpp_cfg->mpp_reg)
-		regulator_disable(led->mpp_cfg->mpp_reg);
-err_reg_enable:
-	if (led->mpp_cfg->mpp_reg)
-		regulator_set_voltage(led->mpp_cfg->mpp_reg, 0,
-							led->mpp_cfg->max_uV);
-	led->mpp_cfg->enable = false;
-
-	return rc;
-}
-
-static int qpnp_gpio_set(struct qpnp_led_data *led)
-{
-	int rc, val;
-
-	if (led->cdev.brightness) {
-		val = (led->gpio_cfg->source_sel & LED_GPIO_SRC_MASK) |
-			(led->gpio_cfg->mode_ctrl & LED_GPIO_MODE_CTRL_MASK);
-
-		rc = qpnp_led_masked_write(led,
-			 LED_GPIO_MODE_CTRL(led->base),
-			 LED_GPIO_MODE_MASK,
-			 val);
-		if (rc) {
-			dev_err(&led->spmi_dev->dev,
-					"Failed to write led mode reg\n");
-			goto err_gpio_reg_write;
-		}
-
-		rc = qpnp_led_masked_write(led,
-			 LED_GPIO_EN_CTRL(led->base),
-			 LED_GPIO_EN_MASK,
-			 LED_GPIO_EN_ENABLE);
-		if (rc) {
-			dev_err(&led->spmi_dev->dev,
-					"Failed to write led enable reg\n");
-			goto err_gpio_reg_write;
-		}
-
-		led->gpio_cfg->enable = true;
-	} else {
-		rc = qpnp_led_masked_write(led,
-				LED_GPIO_MODE_CTRL(led->base),
-				LED_GPIO_MODE_MASK,
-				LED_GPIO_MODE_DISABLE);
-		if (rc) {
-			dev_err(&led->spmi_dev->dev,
-					"Failed to write led mode reg\n");
-			goto err_gpio_reg_write;
-		}
-
-		rc = qpnp_led_masked_write(led,
-				LED_GPIO_EN_CTRL(led->base),
-				LED_GPIO_EN_MASK,
-				LED_GPIO_EN_DISABLE);
-		if (rc) {
-			dev_err(&led->spmi_dev->dev,
-					"Failed to write led enable reg\n");
-			goto err_gpio_reg_write;
-		}
-
-		led->gpio_cfg->enable = false;
-	}
-
-	qpnp_dump_regs(led, gpio_debug_regs, ARRAY_SIZE(gpio_debug_regs));
-
-	return 0;
-
-err_gpio_reg_write:
-	led->gpio_cfg->enable = false;
-
-	return rc;
 }
 
 static int qpnp_flash_regulator_operate(struct qpnp_led_data *led, bool on)
@@ -1090,13 +938,35 @@ static int qpnp_flash_regulator_operate(struct qpnp_led_data *led, bool on)
 	if (!regulator_on && !led->flash_cfg->flash_on) {
 		for (i = 0; i < led->num_leds; i++) {
 			if (led_array[i].flash_cfg->flash_reg_get) {
+				if (led_array[i].flash_cfg->flash_wa_reg_get) {
+					rc = regulator_enable(
+						led_array[i].flash_cfg->
+							flash_wa_reg);
+					if (rc) {
+						dev_err(&led->spmi_dev->dev,
+							"Flash wa regulator"
+							"enable failed(%d)\n",
+							rc);
+						return rc;
+					}
+				}
+
 				rc = regulator_enable(
 					led_array[i].flash_cfg->\
 					flash_boost_reg);
 				if (rc) {
+					if (led_array[i].flash_cfg->
+							flash_wa_reg_get)
+						/* Disable flash wa regulator
+						 * when flash boost regulator
+						 * enable fails
+						 */
+						regulator_disable(
+							led_array[i].flash_cfg->
+								flash_wa_reg);
 					dev_err(&led->spmi_dev->dev,
-						"Regulator enable failed(%d)\n",
-									rc);
+						"Flash boost regulator enable"
+						"failed(%d)\n", rc);
 					return rc;
 				}
 				led->flash_cfg->flash_on = true;
@@ -1125,9 +995,21 @@ regulator_turn_off:
 							flash_boost_reg);
 				if (rc) {
 					dev_err(&led->spmi_dev->dev,
-						"Regulator disable failed(%d)\n",
-									rc);
+						"Flash boost regulator disable"
+						"failed(%d)\n", rc);
 					return rc;
+				}
+				if (led_array[i].flash_cfg->flash_wa_reg_get) {
+					rc = regulator_disable(
+						led_array[i].flash_cfg->
+							flash_wa_reg);
+					if (rc) {
+						dev_err(&led->spmi_dev->dev,
+							"Flash_wa regulator"
+							"disable failed(%d)\n",
+							rc);
+						return rc;
+					}
 				}
 				led->flash_cfg->flash_on = false;
 			}
@@ -1211,24 +1093,21 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 				}
 			}
 
-			qpnp_led_masked_write(led, FLASH_MAX_CURR(led->base),
-				FLASH_CURRENT_MASK,
-				TORCH_MAX_LEVEL);
+			rc = qpnp_led_masked_write(led,
+				FLASH_LED_UNLOCK_SECURE(led->base),
+				FLASH_SECURE_MASK, FLASH_UNLOCK_SECURE);
 			if (rc) {
 				dev_err(&led->spmi_dev->dev,
-					"Max current reg write failed(%d)\n",
-					rc);
+					"Secure reg write failed(%d)\n", rc);
 				goto error_reg_write;
 			}
 
-			qpnp_led_masked_write(led,
-				FLASH_LED_TMR_CTRL(led->base),
-				FLASH_TMR_MASK,
-				FLASH_TMR_WATCHDOG);
+			rc = qpnp_led_masked_write(led,
+				FLASH_LED_TORCH(led->base),
+				FLASH_TORCH_MASK, FLASH_LED_TORCH_ENABLE);
 			if (rc) {
 				dev_err(&led->spmi_dev->dev,
-					"Timer control reg write failed(%d)\n",
-					rc);
+					"Torch reg write failed(%d)\n", rc);
 				goto error_reg_write;
 			}
 
@@ -1253,10 +1132,9 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 				goto error_reg_write;
 			}
 
-			qpnp_led_masked_write(led,
-				FLASH_WATCHDOG_TMR(led->base),
-				FLASH_WATCHDOG_MASK,
-				led->flash_cfg->duration);
+			qpnp_led_masked_write(led, FLASH_MAX_CURR(led->base),
+				FLASH_CURRENT_MASK,
+				TORCH_MAX_LEVEL);
 			if (rc) {
 				dev_err(&led->spmi_dev->dev,
 					"Max current reg write failed(%d)\n",
@@ -1275,12 +1153,19 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 				goto error_reg_write;
 			}
 
+//ASUS_BSP +++ LiJen,Evan
+			led->flash_cfg->trigger_flash &= ~FLASH_HW_SW_STROBE_SEL_MASK;
+
 			if (!led->flash_cfg->strobe_type)
-				led->flash_cfg->trigger_flash &=
-						~FLASH_HW_SW_STROBE_SEL_MASK;
+				led->flash_cfg->trigger_flash |= FLASH_STROBE_SW;
 			else
-				led->flash_cfg->trigger_flash |=
-						FLASH_HW_SW_STROBE_SEL_MASK;
+				led->flash_cfg->trigger_flash |= FLASH_STROBE_HW;
+
+			if (!led->flash_cfg->strobe_hw_polarity)
+				led->flash_cfg->trigger_flash |= FLASH_STROBE_ACTIVE_LOW;
+			else
+				led->flash_cfg->trigger_flash |= FLASH_STROBE_ACTIVE_HIGH;
+//ASUS_BSP --- LiJen,Evan
 
 			rc = qpnp_led_masked_write(led,
 				FLASH_LED_STROBE_CTRL(led->base),
@@ -1299,17 +1184,6 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 					"Flash regulator operate failed(%d)\n",
 					rc);
 				goto error_flash_set;
-			}
-
-			qpnp_led_masked_write(led,
-				FLASH_LED_TMR_CTRL(led->base),
-				FLASH_TMR_MASK,
-				FLASH_TMR_SAFETY);
-			if (rc) {
-				dev_err(&led->spmi_dev->dev,
-					"Timer control reg write failed(%d)\n",
-					rc);
-				goto error_reg_write;
 			}
 
 			/* Set flash safety timer */
@@ -1371,13 +1245,45 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 			 * Add 1ms delay for bharger enter stable state
 			 */
 			usleep(FLASH_RAMP_UP_DELAY_US);
+//ASUS_BSP +++ LiJen,Evan
+#if 0
+			if (!led->flash_cfg->strobe_type) {
+				rc = qpnp_led_masked_write(led,
+					FLASH_LED_STROBE_CTRL(led->base),
+					led->flash_cfg->trigger_flash,
+					led->flash_cfg->trigger_flash);
+				if (rc) {
+					dev_err(&led->spmi_dev->dev,
+					"LED %d strobe reg write failed(%d)\n",
+					led->id, rc);
+					goto error_flash_set;
+				}
+			} else {
+				rc = qpnp_led_masked_write(led,
+					FLASH_LED_STROBE_CTRL(led->base),
+					(led->flash_cfg->trigger_flash |
+					FLASH_STROBE_HW),
+					(led->flash_cfg->trigger_flash |
+					FLASH_STROBE_HW));
+				if (rc) {
+					dev_err(&led->spmi_dev->dev,
+					"LED %d strobe reg write failed(%d)\n",
+					led->id, rc);
+					goto error_flash_set;
+				}
+			}
+#else
+			led->flash_cfg->trigger_flash &= ~FLASH_HW_SW_STROBE_SEL_MASK;
 
 			if (!led->flash_cfg->strobe_type)
-				led->flash_cfg->trigger_flash &=
-						~FLASH_HW_SW_STROBE_SEL_MASK;
+				led->flash_cfg->trigger_flash |= FLASH_STROBE_SW;
 			else
-				led->flash_cfg->trigger_flash |=
-						FLASH_HW_SW_STROBE_SEL_MASK;
+				led->flash_cfg->trigger_flash |= FLASH_STROBE_HW;
+
+			if (!led->flash_cfg->strobe_hw_polarity)
+				led->flash_cfg->trigger_flash |= FLASH_STROBE_ACTIVE_LOW;
+			else
+				led->flash_cfg->trigger_flash |= FLASH_STROBE_ACTIVE_HIGH;
 
 			rc = qpnp_led_masked_write(led,
 				FLASH_LED_STROBE_CTRL(led->base),
@@ -1389,6 +1295,8 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 				led->id, rc);
 				goto error_flash_set;
 			}
+#endif
+//ASUS_BSP --- LiJen,Evan
 		}
 	} else {
 		rc = qpnp_led_masked_write(led,
@@ -1405,6 +1313,25 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 		}
 
 		if (led->flash_cfg->torch_enable) {
+			rc = qpnp_led_masked_write(led,
+				FLASH_LED_UNLOCK_SECURE(led->base),
+				FLASH_SECURE_MASK, FLASH_UNLOCK_SECURE);
+			if (rc) {
+				dev_err(&led->spmi_dev->dev,
+					"Secure reg write failed(%d)\n", rc);
+				goto error_torch_set;
+			}
+
+			rc = qpnp_led_masked_write(led,
+					FLASH_LED_TORCH(led->base),
+					FLASH_TORCH_MASK,
+					FLASH_LED_TORCH_DISABLE);
+			if (rc) {
+				dev_err(&led->spmi_dev->dev,
+					"Torch reg write failed(%d)\n", rc);
+				goto error_torch_set;
+			}
+
 			if (led->flash_cfg->peripheral_subtype ==
 							FLASH_SUBTYPE_DUAL) {
 				rc = qpnp_torch_regulator_operate(led, false);
@@ -1484,14 +1411,15 @@ error_flash_set:
 
 static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 {
-	int duty_us;
 	int rc;
+	int duty_us, duty_ns, period_us;
 
 	if (led->cdev.brightness) {
 		if (!led->kpdbl_cfg->pwm_cfg->blinking)
 			led->kpdbl_cfg->pwm_cfg->mode =
 				led->kpdbl_cfg->pwm_cfg->default_mode;
-		if (!num_kpbl_leds_on) {
+
+		if (bitmap_empty(kpdbl_leds_in_use, NUM_KPDBL_LEDS)) {
 			rc = qpnp_led_masked_write(led, KPDBL_ENABLE(led->base),
 					KPDBL_MODULE_EN_MASK, KPDBL_MODULE_EN);
 			if (rc) {
@@ -1501,12 +1429,50 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 			}
 		}
 
+		/* On some platforms, GPLED1 channel should always be enabled
+		 * for the other GPLEDs 2/3/4 to glow. Before enabling GPLED
+		 * 2/3/4, first check if GPLED1 is already enabled. If GPLED1
+		 * channel is not enabled, then enable the GPLED1 channel but
+		 * with a 0 brightness
+		 */
+		if (!led->kpdbl_cfg->always_on &&
+			!test_bit(KPDBL_MASTER_BIT_INDEX, kpdbl_leds_in_use) &&
+						kpdbl_master) {
+			rc = pwm_config_us(kpdbl_master, 0,
+					kpdbl_master_period_us);
+			if (rc < 0) {
+				dev_err(&led->spmi_dev->dev,
+					"pwm config failed\n");
+				return rc;
+			}
+
+			rc = pwm_enable(kpdbl_master);
+			if (rc < 0) {
+				dev_err(&led->spmi_dev->dev,
+					"pwm enable failed\n");
+				return rc;
+			}
+			set_bit(KPDBL_MASTER_BIT_INDEX,
+						kpdbl_leds_in_use);
+		}
+
 		if (led->kpdbl_cfg->pwm_cfg->mode == PWM_MODE) {
-			duty_us = (led->kpdbl_cfg->pwm_cfg->pwm_period_us *
-				led->cdev.brightness) / KPDBL_MAX_LEVEL;
-			rc = pwm_config_us(led->kpdbl_cfg->pwm_cfg->pwm_dev,
+			period_us = led->kpdbl_cfg->pwm_cfg->pwm_period_us;
+			if (period_us > INT_MAX / NSEC_PER_USEC) {
+				duty_us = (period_us * led->cdev.brightness) /
+					KPDBL_MAX_LEVEL;
+				rc = pwm_config_us(
+					led->kpdbl_cfg->pwm_cfg->pwm_dev,
 					duty_us,
-					led->kpdbl_cfg->pwm_cfg->pwm_period_us);
+					period_us);
+			} else {
+				duty_ns = ((period_us * NSEC_PER_USEC) /
+					KPDBL_MAX_LEVEL) * led->cdev.brightness;
+				rc = pwm_config(
+					led->kpdbl_cfg->pwm_cfg->pwm_dev,
+					duty_ns,
+					period_us * NSEC_PER_USEC);
+			}
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev, "pwm config failed\n");
 				return rc;
@@ -1519,39 +1485,77 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 			return rc;
 		}
 
-		num_kpbl_leds_on++;
+		set_bit(led->kpdbl_cfg->row_id, kpdbl_leds_in_use);
+
+		/* is_kpdbl_master_turn_on will be set to true when GPLED1
+		 * channel is enabled and has a valid brightness value
+		 */
+		if (led->kpdbl_cfg->always_on)
+			is_kpdbl_master_turn_on = true;
 
 	} else {
 		led->kpdbl_cfg->pwm_cfg->mode =
 			led->kpdbl_cfg->pwm_cfg->default_mode;
 
+		/* Before disabling GPLED1, check if any other GPLED 2/3/4 is
+		 * on. If any of the other GPLED 2/3/4 is on, then have the
+		 * GPLED1 channel enabled with 0 brightness.
+		 */
 		if (led->kpdbl_cfg->always_on) {
-			rc = pwm_config_us(led->kpdbl_cfg->pwm_cfg->pwm_dev, 0,
+			if (bitmap_weight(kpdbl_leds_in_use,
+						NUM_KPDBL_LEDS) > 1) {
+				rc = pwm_config_us(
+					led->kpdbl_cfg->pwm_cfg->pwm_dev, 0,
 					led->kpdbl_cfg->pwm_cfg->pwm_period_us);
-			if (rc < 0) {
-				dev_err(&led->spmi_dev->dev,
+				if (rc < 0) {
+					dev_err(&led->spmi_dev->dev,
 						"pwm config failed\n");
-				return rc;
-			}
+					return rc;
+				}
 
-			rc = pwm_enable(led->kpdbl_cfg->pwm_cfg->pwm_dev);
-			if (rc < 0) {
-				dev_err(&led->spmi_dev->dev, "pwm enable failed\n");
-				return rc;
+				rc = pwm_enable(led->kpdbl_cfg->pwm_cfg->
+							pwm_dev);
+				if (rc < 0) {
+					dev_err(&led->spmi_dev->dev,
+						"pwm enable failed\n");
+					return rc;
+				}
+			} else {
+				if (kpdbl_master) {
+					pwm_disable(kpdbl_master);
+					clear_bit(KPDBL_MASTER_BIT_INDEX,
+						kpdbl_leds_in_use);
+					rc = qpnp_led_masked_write(
+						led, KPDBL_ENABLE(led->base),
+						KPDBL_MODULE_EN_MASK,
+						KPDBL_MODULE_DIS);
+					if (rc) {
+						dev_err(&led->spmi_dev->dev,
+						"Failed to write led"
+						" enable reg\n");
+						return rc;
+					}
+				}
 			}
-		} else
+			is_kpdbl_master_turn_on = false;
+		} else {
 			pwm_disable(led->kpdbl_cfg->pwm_cfg->pwm_dev);
-
-		if (num_kpbl_leds_on > 0)
-			num_kpbl_leds_on--;
-
-		if (!num_kpbl_leds_on) {
-			rc = qpnp_led_masked_write(led, KPDBL_ENABLE(led->base),
+			clear_bit(led->kpdbl_cfg->row_id, kpdbl_leds_in_use);
+			if (bitmap_weight(kpdbl_leds_in_use,
+				NUM_KPDBL_LEDS) == 1 && kpdbl_master &&
+						!is_kpdbl_master_turn_on) {
+				pwm_disable(kpdbl_master);
+				clear_bit(KPDBL_MASTER_BIT_INDEX,
+					kpdbl_leds_in_use);
+				rc = qpnp_led_masked_write(
+					led, KPDBL_ENABLE(led->base),
 					KPDBL_MODULE_EN_MASK, KPDBL_MODULE_DIS);
-			if (rc) {
-				dev_err(&led->spmi_dev->dev,
+				if (rc) {
+					dev_err(&led->spmi_dev->dev,
 					"Failed to write led enable reg\n");
-				return rc;
+					return rc;
+				}
+				is_kpdbl_master_turn_on = false;
 			}
 		}
 	}
@@ -1565,19 +1569,30 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 
 static int qpnp_rgb_set(struct qpnp_led_data *led)
 {
-	int duty_us;
 	int rc;
+	int duty_us, duty_ns, period_us;
 
 	if (led->cdev.brightness) {
 		if (!led->rgb_cfg->pwm_cfg->blinking)
 			led->rgb_cfg->pwm_cfg->mode =
 				led->rgb_cfg->pwm_cfg->default_mode;
 		if (led->rgb_cfg->pwm_cfg->mode == PWM_MODE) {
-			duty_us = (led->rgb_cfg->pwm_cfg->pwm_period_us *
-				led->cdev.brightness) / LED_FULL;
-			rc = pwm_config_us(led->rgb_cfg->pwm_cfg->pwm_dev,
+			period_us = led->rgb_cfg->pwm_cfg->pwm_period_us;
+			if (period_us > INT_MAX / NSEC_PER_USEC) {
+				duty_us = (period_us * led->cdev.brightness) /
+					LED_FULL;
+				rc = pwm_config_us(
+					led->rgb_cfg->pwm_cfg->pwm_dev,
 					duty_us,
-					led->rgb_cfg->pwm_cfg->pwm_period_us);
+					period_us);
+			} else {
+				duty_ns = ((period_us * NSEC_PER_USEC) /
+					LED_FULL) * led->cdev.brightness;
+				rc = pwm_config(
+					led->rgb_cfg->pwm_cfg->pwm_dev,
+					duty_ns,
+					period_us * NSEC_PER_USEC);
+			}
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev,
 					"pwm config failed\n");
@@ -1593,19 +1608,15 @@ static int qpnp_rgb_set(struct qpnp_led_data *led)
 			return rc;
 		}
 
-		if (led->rgb_cfg->pwm_cfg->pwm_enabled) {
-			pwm_disable(led->rgb_cfg->pwm_cfg->pwm_dev);
-			led->rgb_cfg->pwm_cfg->pwm_enabled = 0;
-		}
-
 		rc = pwm_enable(led->rgb_cfg->pwm_cfg->pwm_dev);
-		if (!rc)
-			led->rgb_cfg->pwm_cfg->pwm_enabled = 1;
+		if (rc < 0) {
+			dev_err(&led->spmi_dev->dev, "pwm enable failed\n");
+			return rc;
+		}
 	} else {
 		led->rgb_cfg->pwm_cfg->mode =
 			led->rgb_cfg->pwm_cfg->default_mode;
 		pwm_disable(led->rgb_cfg->pwm_cfg->pwm_dev);
-		led->rgb_cfg->pwm_cfg->pwm_enabled = 0;
 		rc = qpnp_led_masked_write(led,
 			RGB_LED_EN_CTL(led->base),
 			led->rgb_cfg->enable, RGB_LED_DISABLE);
@@ -1622,6 +1633,29 @@ static int qpnp_rgb_set(struct qpnp_led_data *led)
 	return 0;
 }
 
+//ASUS_BSP Deeo : PAD LED brightness +++
+void led_pad_brigthness(struct led_classdev *led_cdev,enum led_brightness value)
+{
+	u8 brightness = 0;
+
+	brightness = (value) ? 1 : 0;
+
+	printk("[LED] PAD LED brightness\n");
+
+#ifdef CONFIG_EEPROM_NUVOTON
+	if (strncmp(led_cdev->name, "red", sizeof("red")) == 0)
+		AX_MicroP_ControlLED(brightness,0x0);
+	if (strncmp(led_cdev->name, "green", sizeof("green")) == 0)
+		AX_MicroP_ControlLED(0x0,brightness);
+	if (strncmp(led_cdev->name, "blue", sizeof("blue")) == 0)
+		printk("[LED] PAD no Blue LED\n");
+	if (strncmp(led_cdev->name, "mix", sizeof("mix")) == 0)
+		AX_MicroP_ControlLED(brightness,brightness);
+#endif
+
+}
+//ASUS_BSP Deeo : PAD LED brightness ---
+
 static void qpnp_led_set(struct led_classdev *led_cdev,
 				enum led_brightness value)
 {
@@ -1633,10 +1667,58 @@ static void qpnp_led_set(struct led_classdev *led_cdev,
 		return;
 	}
 
+//ASUS_BSP Deeo : add for PAD LED +++
+	if (strncmp(led_cdev->name, "red", sizeof("red")) == 0 || strncmp(led_cdev->name, "green", sizeof("green")) == 0 || strncmp(led_cdev->name, "blue", sizeof("blue")) == 0)
+	{
+		if (pad_in ){
+			led_pad_brigthness(led_cdev,value);
+			return;
+		}
+	}
+//ASUS_BSP Deeo : add for PAD LED ---
+
+//ASUS BSP Deeo : add for mix brightness +++
+	if (strncmp(led_cdev->name, "mix", sizeof("mix")) == 0){
+
+		if (value == 255){
+			if ( led_enhance == 4)
+				value = 60;	//white panel
+			else
+				value = 40;	//black panel
+		}
+		else if (value > red_led->cdev.max_brightness)
+			value = red_led->cdev.max_brightness;
+
+		printk("[LED] mix brightness, red %d, green %d\n",value,value*3);
+
+		if (pad_in ){
+			led_pad_brigthness(led_cdev,value);
+			return;
+		}
+
+		red_led->cdev.brightness = value;
+		green_led->cdev.brightness = value*3;
+
+		schedule_work(&red_led->work);
+		schedule_work(&green_led->work);
+		return;
+	}
+//ASUS BSP Deeo : add for mix brightness ---
+
 	if (value > led->cdev.max_brightness)
 		value = led->cdev.max_brightness;
 
-	led->cdev.brightness = value;
+//ASUS BSP Deeo : ER3-2 LED rub change +++
+	if (strncmp(led_cdev->name, "green", sizeof("green")) == 0){
+		if ( value*led_enhance <= LED_FULL )
+			led->cdev.brightness = value*led_enhance;
+		else
+			led->cdev.brightness = LED_FULL;
+	}
+	else
+		led->cdev.brightness = value;
+//ASUS BSP Deeo : ER3-2 LED rub change --
+
 	schedule_work(&led->work);
 }
 
@@ -1645,7 +1727,10 @@ static void __qpnp_led_work(struct qpnp_led_data *led,
 {
 	int rc;
 
-	mutex_lock(&led->lock);
+	if (led->id == QPNP_ID_FLASH1_LED0 || led->id == QPNP_ID_FLASH1_LED1)
+		mutex_lock(&flash_lock);
+	else
+		mutex_lock(&led->lock);
 
 	switch (led->id) {
 	case QPNP_ID_WLED:
@@ -1675,13 +1760,6 @@ static void __qpnp_led_work(struct qpnp_led_data *led,
 			dev_err(&led->spmi_dev->dev,
 					"MPP set brightness failed (%d)\n", rc);
 		break;
-	case QPNP_ID_LED_GPIO:
-		rc = qpnp_gpio_set(led);
-		if (rc < 0)
-			dev_err(&led->spmi_dev->dev,
-					"GPIO set brightness failed (%d)\n",
-					rc);
-		break;
 	case QPNP_ID_KPDBL:
 		rc = qpnp_kpdbl_set(led);
 		if (rc < 0)
@@ -1692,7 +1770,10 @@ static void __qpnp_led_work(struct qpnp_led_data *led,
 		dev_err(&led->spmi_dev->dev, "Invalid LED(%d)\n", led->id);
 		break;
 	}
-	mutex_unlock(&led->lock);
+	if (led->id == QPNP_ID_FLASH1_LED0 || led->id == QPNP_ID_FLASH1_LED1)
+		mutex_unlock(&flash_lock);
+	else
+		mutex_unlock(&led->lock);
 
 }
 
@@ -1706,7 +1787,7 @@ static void qpnp_led_work(struct work_struct *work)
 	return;
 }
 
-static int qpnp_led_set_max_brightness(struct qpnp_led_data *led)
+static int  qpnp_led_set_max_brightness(struct qpnp_led_data *led)
 {
 	switch (led->id) {
 	case QPNP_ID_WLED:
@@ -1727,12 +1808,14 @@ static int qpnp_led_set_max_brightness(struct qpnp_led_data *led)
 		else
 			led->cdev.max_brightness = MPP_MAX_LEVEL;
 		break;
-	case QPNP_ID_LED_GPIO:
-			led->cdev.max_brightness = led->max_current;
-		break;
 	case QPNP_ID_KPDBL:
 		led->cdev.max_brightness = KPDBL_MAX_LEVEL;
 		break;
+//ASUS_BSP Deeo : add for mix color +++
+	case QPNP_ID_RGB_MIX:
+		led->cdev.max_brightness = RGB_MAX_LEVEL;
+		break;
+//ASUS_BSP Deeo : add for mix color ---
 	default:
 		dev_err(&led->spmi_dev->dev, "Invalid LED(%d)\n", led->id);
 		return -EINVAL;
@@ -1746,6 +1829,14 @@ static enum led_brightness qpnp_led_get(struct led_classdev *led_cdev)
 	struct qpnp_led_data *led;
 
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+//ASUS BSP Deeo : add for mix brightness +++
+	if (strncmp(led_cdev->name, "mix", sizeof("mix")) == 0){
+		printk("[LED] mix brightness, red %d, green %d\n",red_led->cdev.brightness,green_led->cdev.brightness);
+
+		return red_led->cdev.brightness;
+	}
+//ASUS BSP Deeo : add for mix brightness ---
 
 	return led->cdev.brightness;
 }
@@ -1767,10 +1858,10 @@ static void qpnp_led_turn_off(struct qpnp_led_data *led)
 		msecs_to_jiffies(led->turn_off_delay_ms));
 }
 
-static int qpnp_wled_init(struct qpnp_led_data *led)
+static int  qpnp_wled_init(struct qpnp_led_data *led)
 {
 	int rc, i;
-	u8 num_wled_strings, val = 0;
+	u8 num_wled_strings;
 
 	num_wled_strings = led->wled_cfg->num_strings;
 
@@ -1842,10 +1933,10 @@ static int qpnp_wled_init(struct qpnp_led_data *led)
 
 	/* program current sink */
 	if (led->wled_cfg->cs_out_en) {
-		for (i = 0; i < led->wled_cfg->num_strings; i++)
-			val |= 1 << i;
 		rc = qpnp_led_masked_write(led, WLED_CURR_SINK_REG(led->base),
-			WLED_CURR_SINK_MASK, (val << WLED_CURR_SINK_SHFT));
+			WLED_CURR_SINK_MASK,
+			(((1 << led->wled_cfg->num_strings) - 1)
+			<< WLED_CURR_SINK_SHFT));
 		if (rc) {
 			dev_err(&led->spmi_dev->dev,
 				"WLED curr sink reg write failed(%d)\n", rc);
@@ -1884,11 +1975,21 @@ static int qpnp_wled_init(struct qpnp_led_data *led)
 
 		rc = qpnp_led_masked_write(led,
 			WLED_FULL_SCALE_REG(led->base, i), WLED_MAX_CURR_MASK,
-			led->max_current);
+			(u8)led->max_current);
 		if (rc) {
 			dev_err(&led->spmi_dev->dev,
 				"WLED max current reg write failed(%d)\n", rc);
 			return rc;
+		}
+
+		if (led->wled_cfg->cabc_out_en) {
+			rc = qpnp_led_masked_write(led,
+				WLED_MOD_CABC_EN_REG(led->base, i),
+				WLED_NO_MASK, WLED_EN_MASK);
+			if (rc) {
+				dev_err(&led->spmi_dev->dev,
+				"WLED cabc en reg write failed(%d)\n", rc);
+			}
 		}
 
 	}
@@ -1907,6 +2008,43 @@ static int qpnp_wled_init(struct qpnp_led_data *led)
 
 	return 0;
 }
+
+//ASUS_BSP: Louis +++
+static DEFINE_MUTEX(wled_lock);
+static struct spmi_device *g_spmi;
+static bool g_wledOn = true;
+void qpnp_wled_ctrl(bool enable)
+{
+    struct led_classdev *led_cdev = dev_get_drvdata(&g_spmi->dev);
+    struct qpnp_led_data *led;
+    bool wled_set = false;
+
+    led = container_of(led_cdev, struct qpnp_led_data, cdev);
+    led->id = QPNP_ID_WLED;
+
+    mutex_lock(&wled_lock);
+
+    if (enable && !g_wledOn) {
+        printk("[BL] Enable wled\n");
+        led->cdev.brightness = led->cdev.max_brightness;
+        g_wledOn = true;
+        wled_set = true;
+    }
+    else if (!enable && g_wledOn){
+        printk("[BL] Disable wled\n");
+        led->cdev.brightness = LED_OFF;
+        g_wledOn = false;
+        wled_set = true;
+    }
+
+    if (wled_set) {
+        __qpnp_led_work(led, led->cdev.brightness);
+    }
+
+    mutex_unlock(&wled_lock);
+}
+EXPORT_SYMBOL(qpnp_wled_ctrl);
+//ASUS_BSP: Louis ---
 
 static ssize_t led_mode_store(struct device *dev,
 			struct device_attribute *attr,
@@ -1956,11 +2094,37 @@ static ssize_t led_strobe_type_store(struct device *dev,
 	return count;
 }
 
+//ASUS_BSP +++ LiJen
+static ssize_t led_strobe_hw_polarity_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct qpnp_led_data *led;
+	unsigned long state;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	ssize_t ret = -EINVAL;
+
+	ret = kstrtoul(buf, 10, &state);
+	if (ret)
+		return ret;
+
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+	/* '0' for hw active low; '1' for hw active high */
+	if (state == 1)
+		led->flash_cfg->strobe_hw_polarity= 1;
+	else
+		led->flash_cfg->strobe_hw_polarity = 0;
+
+	return count;
+}
+//ASUS_BSP --- LiJen
+
 static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg,
 					struct spmi_device *spmi_dev,
 					const char *name)
 {
-	int rc, start_idx, idx_len;
+	int rc, start_idx, idx_len, lut_max_size;
 
 	if (pwm_cfg->pwm_channel != -1) {
 		pwm_cfg->pwm_dev =
@@ -1982,20 +2146,24 @@ static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg,
 			idx_len =
 			pwm_cfg->duty_cycles->num_duty_pcts;
 
-			if (idx_len >= PWM_LUT_MAX_SIZE &&
-					start_idx) {
+			if (strnstr(name, "kpdbl", sizeof("kpdbl")))
+				lut_max_size = PWM_GPLED_LUT_MAX_SIZE;
+			else
+				lut_max_size = PWM_LUT_MAX_SIZE;
+
+			if (idx_len >= lut_max_size && start_idx) {
 				dev_err(&spmi_dev->dev,
 					"Wrong LUT size or index\n");
 				return -EINVAL;
 			}
-			if ((start_idx + idx_len) >
-					PWM_LUT_MAX_SIZE) {
+
+			if ((start_idx + idx_len) > lut_max_size) {
 				dev_err(&spmi_dev->dev,
 					"Exceed LUT limit\n");
 				return -EINVAL;
 			}
 			rc = pwm_lut_config(pwm_cfg->pwm_dev,
-				PM_PWM_PERIOD_MIN,
+				pwm_cfg->pwm_period_us,
 				pwm_cfg->duty_cycles->duty_pcts,
 				pwm_cfg->lut_params);
 			if (rc < 0) {
@@ -2012,7 +2180,23 @@ static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg,
 
 	return 0;
 }
+//ASUS_BSP Deeo +++
+static ssize_t pwm_us_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	struct qpnp_led_data *led;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pwm_config_data *pwm_cfg;
+	int tmp=0;
 
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+	pwm_cfg = led->rgb_cfg->pwm_cfg;
+
+	tmp = pwm_cfg->pwm_period_us;
+	printk("[LED] pwm_us = %d\n",tmp);
+
+	return snprintf(buf, PAGE_SIZE,"pwm_us:%d\n",tmp);
+}
+//ASUS_BSP Deeo ---
 static ssize_t pwm_us_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2039,6 +2223,9 @@ static ssize_t pwm_us_store(struct device *dev,
 	case QPNP_ID_RGB_BLUE:
 		pwm_cfg = led->rgb_cfg->pwm_cfg;
 		break;
+	case QPNP_ID_KPDBL:
+		pwm_cfg = led->kpdbl_cfg->pwm_cfg;
+		break;
 	default:
 		dev_err(&led->spmi_dev->dev,
 			"Invalid LED id type for pwm_us\n");
@@ -2049,6 +2236,9 @@ static ssize_t pwm_us_store(struct device *dev,
 		pwm_cfg->blinking = true;
 
 	previous_pwm_us = pwm_cfg->pwm_period_us;
+
+	//printk("[LED] previous_pwm_us = %d\n",previous_pause_lo);
+	printk("[LED] new_pwm_us = %d\n",pwm_us);
 
 	pwm_cfg->pwm_period_us = pwm_us;
 	pwm_free(pwm_cfg->pwm_dev);
@@ -2065,7 +2255,23 @@ static ssize_t pwm_us_store(struct device *dev,
 	qpnp_led_set(&led->cdev, led->cdev.brightness);
 	return count;
 }
+//ASUS_BSP Deeo +++
+static ssize_t pause_lo_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	struct qpnp_led_data *led;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pwm_config_data *pwm_cfg;
+	int tmp=0;
 
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+	pwm_cfg = led->rgb_cfg->pwm_cfg;
+
+	tmp = pwm_cfg->lut_params.lut_pause_lo;
+	printk("[LED] pause_lo = %d\n",tmp);
+
+	return snprintf(buf, PAGE_SIZE,"pause_lo:%d\n",tmp);
+}
+//ASUS_BSP Deeo ---
 static ssize_t pause_lo_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2091,6 +2297,9 @@ static ssize_t pause_lo_store(struct device *dev,
 	case QPNP_ID_RGB_BLUE:
 		pwm_cfg = led->rgb_cfg->pwm_cfg;
 		break;
+	case QPNP_ID_KPDBL:
+		pwm_cfg = led->kpdbl_cfg->pwm_cfg;
+		break;
 	default:
 		dev_err(&led->spmi_dev->dev,
 			"Invalid LED id type for pause lo\n");
@@ -2101,6 +2310,9 @@ static ssize_t pause_lo_store(struct device *dev,
 		pwm_cfg->blinking = true;
 
 	previous_pause_lo = pwm_cfg->lut_params.lut_pause_lo;
+
+	//printk("[LED] previous_pause_lo = %d\n",previous_pause_lo);
+	printk("[LED] new_pause_lo = %d\n",pause_lo);
 
 	pwm_free(pwm_cfg->pwm_dev);
 	pwm_cfg->lut_params.lut_pause_lo = pause_lo;
@@ -2117,7 +2329,23 @@ static ssize_t pause_lo_store(struct device *dev,
 	qpnp_led_set(&led->cdev, led->cdev.brightness);
 	return count;
 }
+//ASUS_BSP Deeo +++
+static ssize_t pause_hi_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	struct qpnp_led_data *led;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pwm_config_data *pwm_cfg;
+	int tmp=0;
 
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+	pwm_cfg = led->rgb_cfg->pwm_cfg;
+
+	tmp = pwm_cfg->lut_params.lut_pause_hi;
+	printk("[LED] pause_hi = %d\n",tmp);
+
+	return snprintf(buf, PAGE_SIZE,"pause_hi:%d\n",tmp);
+}
+//ASUS_BSP Deeo ---
 static ssize_t pause_hi_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2143,6 +2371,9 @@ static ssize_t pause_hi_store(struct device *dev,
 	case QPNP_ID_RGB_BLUE:
 		pwm_cfg = led->rgb_cfg->pwm_cfg;
 		break;
+	case QPNP_ID_KPDBL:
+		pwm_cfg = led->kpdbl_cfg->pwm_cfg;
+		break;
 	default:
 		dev_err(&led->spmi_dev->dev,
 			"Invalid LED id type for pause hi\n");
@@ -2153,6 +2384,9 @@ static ssize_t pause_hi_store(struct device *dev,
 		pwm_cfg->blinking = true;
 
 	previous_pause_hi = pwm_cfg->lut_params.lut_pause_hi;
+
+	//printk("[LED] previous_pause_hi = %d\n",previous_pause_hi);
+	printk("[LED] new_pause_hi = %d\n",pause_hi);
 
 	pwm_free(pwm_cfg->pwm_dev);
 	pwm_cfg->lut_params.lut_pause_hi = pause_hi;
@@ -2169,7 +2403,27 @@ static ssize_t pause_hi_store(struct device *dev,
 	qpnp_led_set(&led->cdev, led->cdev.brightness);
 	return count;
 }
+//ASUS_BSP Deeo +++
+static ssize_t start_idx_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	struct qpnp_led_data *led;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pwm_config_data *pwm_cfg;
+	int tmp=0;
 
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+	if( led->id == QPNP_ID_RGB_MIX )
+		return snprintf(buf, PAGE_SIZE,"Not support!!\n");
+
+	pwm_cfg = led->rgb_cfg->pwm_cfg;
+
+	tmp = pwm_cfg->duty_cycles->start_idx;
+	printk("[LED] start_idx = %d\n",tmp);
+
+	return snprintf(buf, PAGE_SIZE,"start_idx:%d\n",tmp);
+}
+//ASUS_BSP Deeo ---
 static ssize_t start_idx_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2195,6 +2449,9 @@ static ssize_t start_idx_store(struct device *dev,
 	case QPNP_ID_RGB_BLUE:
 		pwm_cfg = led->rgb_cfg->pwm_cfg;
 		break;
+	case QPNP_ID_KPDBL:
+		pwm_cfg = led->kpdbl_cfg->pwm_cfg;
+		break;
 	default:
 		dev_err(&led->spmi_dev->dev,
 			"Invalid LED id type for start idx\n");
@@ -2205,6 +2462,10 @@ static ssize_t start_idx_store(struct device *dev,
 		pwm_cfg->blinking = true;
 
 	previous_start_idx = pwm_cfg->duty_cycles->start_idx;
+
+	//printk("[LED] previous_start_idx = %d\n",previous_start_idx);
+	printk("[LED] new_start_idx = %d\n",start_idx);
+
 	pwm_cfg->duty_cycles->start_idx = start_idx;
 	pwm_cfg->lut_params.start_idx = pwm_cfg->duty_cycles->start_idx;
 	pwm_free(pwm_cfg->pwm_dev);
@@ -2222,7 +2483,23 @@ static ssize_t start_idx_store(struct device *dev,
 	qpnp_led_set(&led->cdev, led->cdev.brightness);
 	return count;
 }
+//ASUS_BSP Deeo +++
+static ssize_t ramp_step_ms_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	struct qpnp_led_data *led;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pwm_config_data *pwm_cfg;
+	int tmp=0;
 
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+	pwm_cfg = led->rgb_cfg->pwm_cfg;
+
+	tmp = pwm_cfg->lut_params.ramp_step_ms;
+	printk("[LED] ramp_step_ms = %d\n",tmp);
+
+	return snprintf(buf, PAGE_SIZE,"ramp_step_ms:%d\n",tmp);
+}
+//ASUS_BSP Deeo ---
 static ssize_t ramp_step_ms_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2248,6 +2525,9 @@ static ssize_t ramp_step_ms_store(struct device *dev,
 	case QPNP_ID_RGB_BLUE:
 		pwm_cfg = led->rgb_cfg->pwm_cfg;
 		break;
+	case QPNP_ID_KPDBL:
+		pwm_cfg = led->kpdbl_cfg->pwm_cfg;
+		break;
 	default:
 		dev_err(&led->spmi_dev->dev,
 			"Invalid LED id type for ramp step\n");
@@ -2258,6 +2538,9 @@ static ssize_t ramp_step_ms_store(struct device *dev,
 		pwm_cfg->blinking = true;
 
 	previous_ramp_step_ms = pwm_cfg->lut_params.ramp_step_ms;
+
+	//printk("[LED] previous_ramp_step_ms = %d\n",previous_ramp_step_ms);
+	printk("[LED] new_ramp_step_ms = %d\n",ramp_step_ms);
 
 	pwm_free(pwm_cfg->pwm_dev);
 	pwm_cfg->lut_params.ramp_step_ms = ramp_step_ms;
@@ -2300,6 +2583,9 @@ static ssize_t lut_flags_store(struct device *dev,
 	case QPNP_ID_RGB_BLUE:
 		pwm_cfg = led->rgb_cfg->pwm_cfg;
 		break;
+	case QPNP_ID_KPDBL:
+		pwm_cfg = led->kpdbl_cfg->pwm_cfg;
+		break;
 	default:
 		dev_err(&led->spmi_dev->dev,
 			"Invalid LED id type for lut flags\n");
@@ -2327,6 +2613,36 @@ static ssize_t lut_flags_store(struct device *dev,
 	return count;
 }
 
+//ASUS_BSP Deeo : For dual duty_pcts & add flash_pcts to replace duty_pcts +++
+static ssize_t duty_pcts_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	struct qpnp_led_data *led;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pwm_config_data *pwm_cfg;
+	//int tmp[PWM_LUT_MAX_SIZE] = {0};
+	int i=0;
+	int previous_duty_pcts = 0;
+
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+	if( led->id == QPNP_ID_RGB_MIX )
+		return snprintf(buf, PAGE_SIZE,"Not support!!\n");
+
+	pwm_cfg = led->rgb_cfg->pwm_cfg;
+
+	//printk("[LED] pwm_cfg->duty_cycles->num_duty_pcts = %d\n",pwm_cfg->duty_cycles->num_duty_pcts);
+	//previous_duty_pcts = pwm_cfg->duty_cycles->duty_pcts;
+	
+	printk("[LED] num_flash_pcts : %d\n",pwm_cfg->duty_cycles->num_flash_pcts);
+	for (i = 0; i < pwm_cfg->duty_cycles->num_flash_pcts; i++) {
+		previous_duty_pcts = pwm_cfg->duty_cycles->flash_pcts[i];
+		printk("%d\n",previous_duty_pcts);
+	}
+	printk("[LED] duty_pcts End !!\n");
+
+	return snprintf(buf, PAGE_SIZE,"%d\n", previous_duty_pcts);
+}
+
 static ssize_t duty_pcts_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2341,7 +2657,148 @@ static ssize_t duty_pcts_store(struct device *dev,
 	struct pwm_config_data *pwm_cfg;
 	u32 previous_num_duty_pcts;
 	int value;
+	int *previous_duty_pcts = 0;
+	int tmp=0;
+
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+	switch (led->id) {
+	case QPNP_ID_LED_MPP:
+		pwm_cfg = led->mpp_cfg->pwm_cfg;
+		max_duty_pcts = PWM_LUT_MAX_SIZE;
+		break;
+	case QPNP_ID_RGB_RED:
+	case QPNP_ID_RGB_GREEN:
+	case QPNP_ID_RGB_BLUE:
+		pwm_cfg = led->rgb_cfg->pwm_cfg;
+		max_duty_pcts = PWM_LUT_MAX_SIZE;
+		break;
+	case QPNP_ID_KPDBL:
+		pwm_cfg = led->kpdbl_cfg->pwm_cfg;
+		max_duty_pcts = PWM_GPLED_LUT_MAX_SIZE;
+		break;
+	default:
+		dev_err(&led->spmi_dev->dev,
+			"Invalid LED id type for duty pcts\n");
+		return -EINVAL;
+	}
+
+	if (pwm_cfg->mode == LPG_MODE)
+		pwm_cfg->blinking = true;
+
+	buffer = (char *)buf;
+
+	for (i = 0; i < max_duty_pcts; i++) {
+		if (buffer == NULL)
+			break;
+		ret = sscanf((const char *)buffer, "%u,%s", &value, buffer);
+		pwm_cfg->old_duty_pcts[i] = value;
+		num_duty_pcts++;
+		if (ret <= 1)
+			break;
+	}
+
+	if (num_duty_pcts >= max_duty_pcts) {
+		dev_err(&led->spmi_dev->dev,
+			"Number of duty pcts given exceeds max (%d)\n",
+			max_duty_pcts);
+		return -EINVAL;
+	}
+
+	previous_num_duty_pcts = pwm_cfg->duty_cycles->num_flash_pcts;
+	previous_duty_pcts = pwm_cfg->duty_cycles->flash_pcts;
+
+//ASUS_BSP Deeo : printk duty info +++
+/*
+	printk("[LED] previous_num_duty_pcts : %d\n",previous_num_duty_pcts);
+	for(i=0;i < previous_num_duty_pcts;i++)
+	{
+		tmp = previous_duty_pcts[i];
+		printk("[LED] %d\n",tmp);
+	}
+*/
+	printk("[LED] new_num_flash_pcts : %d\n",num_duty_pcts);
+	for(i=0;i < num_duty_pcts ; i++)
+	{
+		tmp = pwm_cfg->old_duty_pcts[i];
+		printk("%d\n",tmp);
+	}
+	printk("[LED] flash_pcts End !!\n");
+//ASUS_BSP Deeo : printk duty info ---
+
+	pwm_cfg->duty_cycles->num_flash_pcts= num_duty_pcts;
+	pwm_cfg->duty_cycles->flash_pcts= pwm_cfg->old_duty_pcts;
+	pwm_cfg->old_duty_pcts = previous_duty_pcts;
+	pwm_cfg->lut_params.idx_len = pwm_cfg->duty_cycles->num_flash_pcts;
+
+	pwm_free(pwm_cfg->pwm_dev);
+	ret = qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+	if (ret)
+		goto restore;
+
+	qpnp_led_set(&led->cdev, led->cdev.brightness);
+	return count;
+
+restore:
+	dev_err(&led->spmi_dev->dev,
+		"Failed to initialize pwm with new duty pcts value\n");
+	pwm_cfg->duty_cycles->num_flash_pcts= previous_num_duty_pcts;
+	pwm_cfg->old_duty_pcts = pwm_cfg->duty_cycles->flash_pcts;
+	pwm_cfg->duty_cycles->flash_pcts= previous_duty_pcts;
+	pwm_cfg->lut_params.idx_len = pwm_cfg->duty_cycles->num_flash_pcts;
+	pwm_free(pwm_cfg->pwm_dev);
+	qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+	qpnp_led_set(&led->cdev, led->cdev.brightness);
+	return ret;
+}
+//ASUS_BSP Deeo : For dual duty_pcts & add flash_pcts to replace duty_pcts ---
+
+//ASUS_BSP Deeo : add for breathe_light attribute +++
+static ssize_t breathe_pcts_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	struct qpnp_led_data *led;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pwm_config_data *pwm_cfg;
+	//int tmp[PWM_LUT_MAX_SIZE] = {0};
+	int i=0;
+	int previous_duty_pcts = 0;
+
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+	if( led->id == QPNP_ID_RGB_MIX )
+		return snprintf(buf, PAGE_SIZE,"Not support!!\n");
+
+	pwm_cfg = led->rgb_cfg->pwm_cfg;
+
+	//printk("[LED] pwm_cfg->duty_cycles->num_duty_pcts = %d\n",pwm_cfg->duty_cycles->num_duty_pcts);
+	//previous_duty_pcts = pwm_cfg->duty_cycles->duty_pcts;
+
+	printk("[LED] num_breathe_pcts : %d\n",pwm_cfg->duty_cycles->num_breathe_pcts);
+	for (i = 0; i < pwm_cfg->duty_cycles->num_breathe_pcts; i++) {
+		previous_duty_pcts = pwm_cfg->duty_cycles->breahte_pcts[i];
+		printk("%d\n",previous_duty_pcts);
+	}
+	printk("[LED] duty_pcts End !!\n");
+
+	return snprintf(buf, PAGE_SIZE,"%d\n", previous_duty_pcts);
+}
+
+static ssize_t breathe_pcts_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct qpnp_led_data *led;
+	int num_duty_pcts = 0;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	char *buffer;
+	ssize_t ret;
+	int i = 0;
+	int max_duty_pcts;
+	struct pwm_config_data *pwm_cfg;
+	u32 previous_num_duty_pcts;
+	int value;
 	int *previous_duty_pcts;
+	int tmp=0;
 
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
 
@@ -2384,13 +2841,31 @@ static ssize_t duty_pcts_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	previous_num_duty_pcts = pwm_cfg->duty_cycles->num_duty_pcts;
-	previous_duty_pcts = pwm_cfg->duty_cycles->duty_pcts;
+	previous_num_duty_pcts = pwm_cfg->duty_cycles->num_breathe_pcts;
+	previous_duty_pcts = pwm_cfg->duty_cycles->breahte_pcts;
 
-	pwm_cfg->duty_cycles->num_duty_pcts = num_duty_pcts;
-	pwm_cfg->duty_cycles->duty_pcts = pwm_cfg->old_duty_pcts;
+//ASUS_BSP Deeo : printk duty info +++
+/*
+	printk("[LED] previous_num_duty_pcts : %d\n",previous_num_duty_pcts);
+	for(i=0;i < previous_num_duty_pcts;i++)
+	{
+		tmp = previous_duty_pcts[i];
+		printk("[LED] %d\n",tmp);
+	}
+*/
+	printk("[LED] new_num_duty_pcts : %d\n",num_duty_pcts);
+	for(i=0;i < num_duty_pcts ; i++)
+	{
+		tmp = pwm_cfg->old_duty_pcts[i];
+		printk("%d\n",tmp);
+	}
+	printk("[LED] duty_pcts End !!\n");
+//ASUS_BSP Deeo : printk duty info ---
+
+	pwm_cfg->duty_cycles->num_breathe_pcts = num_duty_pcts;
+	pwm_cfg->duty_cycles->breahte_pcts= pwm_cfg->old_duty_pcts;
 	pwm_cfg->old_duty_pcts = previous_duty_pcts;
-	pwm_cfg->lut_params.idx_len = pwm_cfg->duty_cycles->num_duty_pcts;
+	pwm_cfg->lut_params.idx_len = pwm_cfg->duty_cycles->num_breathe_pcts;
 
 	pwm_free(pwm_cfg->pwm_dev);
 	ret = qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
@@ -2403,19 +2878,68 @@ static ssize_t duty_pcts_store(struct device *dev,
 restore:
 	dev_err(&led->spmi_dev->dev,
 		"Failed to initialize pwm with new duty pcts value\n");
-	pwm_cfg->duty_cycles->num_duty_pcts = previous_num_duty_pcts;
-	pwm_cfg->old_duty_pcts = pwm_cfg->duty_cycles->duty_pcts;
-	pwm_cfg->duty_cycles->duty_pcts = previous_duty_pcts;
-	pwm_cfg->lut_params.idx_len = pwm_cfg->duty_cycles->num_duty_pcts;
+	pwm_cfg->duty_cycles->num_breathe_pcts = previous_num_duty_pcts;
+	pwm_cfg->old_duty_pcts = pwm_cfg->duty_cycles->breahte_pcts;
+	pwm_cfg->duty_cycles->breahte_pcts= previous_duty_pcts;
+	pwm_cfg->lut_params.idx_len = pwm_cfg->duty_cycles->num_breathe_pcts;
 	pwm_free(pwm_cfg->pwm_dev);
 	qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
 	qpnp_led_set(&led->cdev, led->cdev.brightness);
 	return ret;
 }
+//ASUS_BSP Deeo : add for breathe_light attribute ---
 
 static void led_blink(struct qpnp_led_data *led,
 			struct pwm_config_data *pwm_cfg)
 {
+	int rc;
+
+	flush_work(&led->work);
+	mutex_lock(&led->lock);
+	if (pwm_cfg->use_blink) {
+		if (led->cdev.brightness) {
+			pwm_cfg->blinking = true;
+			if (led->id == QPNP_ID_LED_MPP)
+				led->mpp_cfg->pwm_mode = LPG_MODE;
+			else if (led->id == QPNP_ID_KPDBL)
+				led->kpdbl_cfg->pwm_mode = LPG_MODE;
+			pwm_cfg->mode = LPG_MODE;
+		} else {
+			pwm_cfg->blinking = false;
+			pwm_cfg->mode = pwm_cfg->default_mode;
+			if (led->id == QPNP_ID_LED_MPP)
+				led->mpp_cfg->pwm_mode = pwm_cfg->default_mode;
+			else if (led->id == QPNP_ID_KPDBL)
+				led->kpdbl_cfg->pwm_mode =
+						pwm_cfg->default_mode;
+		}
+		pwm_free(pwm_cfg->pwm_dev);
+		qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
+		if (led->id == QPNP_ID_RGB_RED || led->id == QPNP_ID_RGB_GREEN
+				|| led->id == QPNP_ID_RGB_BLUE) {
+			rc = qpnp_rgb_set(led);
+			if (rc < 0)
+				dev_err(&led->spmi_dev->dev,
+				"RGB set brightness failed (%d)\n", rc);
+		} else if (led->id == QPNP_ID_LED_MPP) {
+			rc = qpnp_mpp_set(led);
+			if (rc < 0)
+				dev_err(&led->spmi_dev->dev,
+				"MPP set brightness failed (%d)\n", rc);
+		} else if (led->id == QPNP_ID_KPDBL) {
+			rc = qpnp_kpdbl_set(led);
+			if (rc < 0)
+				dev_err(&led->spmi_dev->dev,
+				"KPDBL set brightness failed (%d)\n", rc);
+		}
+	}
+	mutex_unlock(&led->lock);
+}
+//ASUS_BSP Deeo : divide setting lut table & set brightness process +++
+static void mix_led_blink(struct qpnp_led_data *led,
+			struct pwm_config_data *pwm_cfg)
+{
+	printk("[LED] led->id %d\n",led->id);
 	if (pwm_cfg->use_blink) {
 		if (led->cdev.brightness) {
 			pwm_cfg->blinking = true;
@@ -2430,10 +2954,70 @@ static void led_blink(struct qpnp_led_data *led,
 		}
 		pwm_free(pwm_cfg->pwm_dev);
 		qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
-		qpnp_led_set(&led->cdev, led->cdev.brightness);
 	}
 }
+//ASUS_BSP Deeo : divide setting lut table & set brightness process ---
 
+//ASUS_BSP Deeo : switch breathe & flash duty_pcts +++
+void switch_duty_pcs(struct qpnp_led_data *led, unsigned long blink)
+{
+	if( blink == 2 ){
+		led->rgb_cfg->pwm_cfg->lut_params.start_idx = led->rgb_cfg->pwm_cfg->duty_cycles->breathe_start_idx;
+		led->rgb_cfg->pwm_cfg->duty_cycles->start_idx = led->rgb_cfg->pwm_cfg->duty_cycles->breathe_start_idx;
+		led->rgb_cfg->pwm_cfg->duty_cycles->duty_pcts = led->rgb_cfg->pwm_cfg->duty_cycles->breahte_pcts;
+		led->rgb_cfg->pwm_cfg->duty_cycles->num_duty_pcts = led->rgb_cfg->pwm_cfg->duty_cycles->num_breathe_pcts;
+		led->rgb_cfg->pwm_cfg->lut_params.idx_len = led->rgb_cfg->pwm_cfg->duty_cycles->num_breathe_pcts;
+	}
+	else{
+		led->rgb_cfg->pwm_cfg->lut_params.start_idx = led->rgb_cfg->pwm_cfg->duty_cycles->blink_start_idx;
+		led->rgb_cfg->pwm_cfg->duty_cycles->start_idx = led->rgb_cfg->pwm_cfg->duty_cycles->blink_start_idx;
+		led->rgb_cfg->pwm_cfg->duty_cycles->duty_pcts = led->rgb_cfg->pwm_cfg->duty_cycles->flash_pcts;
+		led->rgb_cfg->pwm_cfg->duty_cycles->num_duty_pcts = led->rgb_cfg->pwm_cfg->duty_cycles->num_flash_pcts;
+		led->rgb_cfg->pwm_cfg->lut_params.idx_len = led->rgb_cfg->pwm_cfg->duty_cycles->num_flash_pcts;
+	}
+}
+//ASUS_BSP Deeo : switch breathe & flash duty_pcts ---
+
+//ASUS_BSP Deeo : Pad LED blink +++
+void led_pad_blink(struct qpnp_led_data *led, unsigned long blinking)
+{
+	u8 r_blink_mode = 0;
+	u8 g_blink_mode = 0;
+	u8 tmp=0;
+
+	tmp = blinking * 2;
+
+	if( tmp > 0 && tmp != 4)
+		tmp = 2;
+
+	tmp = ( tmp <= 0 ) ? 0 : tmp;
+
+	printk("[LED] Pad LED blink %d\n",tmp);
+
+	switch(led->id)
+	{
+		case QPNP_ID_RGB_RED:
+			r_blink_mode = tmp;
+		break;
+		
+		case QPNP_ID_RGB_GREEN:
+			g_blink_mode = tmp*2;
+		break;
+		
+		case QPNP_ID_RGB_BLUE:
+			printk("[LED] PAD no Blue LED\n");
+		break;
+		
+		case QPNP_ID_RGB_MIX:
+			r_blink_mode = tmp;
+			g_blink_mode = tmp;
+		break;
+	}
+#ifdef CONFIG_EEPROM_NUVOTON
+	AX_MicroP_ControlLED(r_blink_mode,g_blink_mode);
+#endif
+}
+//ASUS_BSP Deeo : Pad LED blink ---
 static ssize_t blink_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2447,17 +3031,52 @@ static ssize_t blink_store(struct device *dev,
 	if (ret)
 		return ret;
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
-	led->cdev.brightness = blinking ? led->cdev.max_brightness : 0;
+	//led->cdev.brightness = blinking ? led->cdev.max_brightness : 0;	//ASUS BSP : change place
+
+	if( led->id >= QPNP_ID_RGB_RED && led->id <= QPNP_ID_RGB_BLUE )
+		switch_duty_pcs(led,blinking);
 
 	switch (led->id) {
 	case QPNP_ID_LED_MPP:
+		led->cdev.brightness = blinking ? led->cdev.max_brightness : 0;
 		led_blink(led, led->mpp_cfg->pwm_cfg);
 		break;
 	case QPNP_ID_RGB_RED:
 	case QPNP_ID_RGB_GREEN:
 	case QPNP_ID_RGB_BLUE:
-		led_blink(led, led->rgb_cfg->pwm_cfg);
+//ASUS_BSP Deeo : add for PAD LED +++
+		if (pad_in )
+			led_pad_blink(led,blinking);
+		else{
+			led->cdev.brightness = blinking ? led->cdev.max_brightness : 0;
+			led_blink(led, led->rgb_cfg->pwm_cfg);
+		}
+//ASUS_BSP Deeo : add for PAD LED ---
 		break;
+	case QPNP_ID_KPDBL:
+		led_blink(led, led->kpdbl_cfg->pwm_cfg);
+		break;
+
+//ASUS_BSP Deeo : add for mix color +++
+	case QPNP_ID_RGB_MIX:
+		if (pad_in )
+			led_pad_blink(led,blinking);
+		else{
+			switch_duty_pcs(red_led,blinking);
+			switch_duty_pcs(green_led,blinking);
+
+			printk("[LED] set Red LED\n");
+			red_led->cdev.brightness = blinking ? red_led->cdev.max_brightness : 0;
+			mix_led_blink(red_led,red_led->rgb_cfg->pwm_cfg);
+			printk("[LED] set Green LED\n");
+			green_led->cdev.brightness = blinking ? green_led->cdev.max_brightness : 0;
+			mix_led_blink(green_led,green_led->rgb_cfg->pwm_cfg);
+
+			qpnp_led_set(&red_led->cdev, red_led->cdev.brightness);
+			qpnp_led_set(&green_led->cdev, green_led->cdev.brightness);
+		}
+		break;
+//ASUS_BSP Deeo : add for mix color ---
 	default:
 		dev_err(&led->spmi_dev->dev, "Invalid LED id type for blink\n");
 		return -EINVAL;
@@ -2465,20 +3084,67 @@ static ssize_t blink_store(struct device *dev,
 	return count;
 }
 
+// ASUS_BSP Deeo : Get TPID for separate panel color +++
+static void get_tpid(void)
+{
+	int value = 255;
+	panel_id = 0;
+
+	value = gpio_get_value(69);
+	//printk("[LED] GPIO 69 %d",value);
+	panel_id += value;
+
+	value = gpio_get_value(90);
+	//printk("[LED] GPIO 90 %d",value);
+	panel_id += 0x10*value;
+
+	switch(panel_id)
+	{
+		case 0x11:	// black panel
+			led_enhance = 2;
+		break;
+
+		case 0x01:	// white panel
+			led_enhance = 4;
+		break;
+
+		case 0x00:
+		case 0x10:
+		default :
+			led_enhance = 2;
+			printk("[LED] Not support this panel!!\n");
+		break;
+	}
+}
+
+static ssize_t tpid_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	get_tpid();
+	printk("[LED] panel ID : 0x%02x  Enhance %d\n",panel_id, led_enhance);
+
+	// 0x00 : black ; 0x01 : white
+	return snprintf(buf, PAGE_SIZE,"0x%02x\n", panel_id);
+}
+// ASUS_BSP Deeo : Get TPID for separate panel color ---
+
 static DEVICE_ATTR(led_mode, 0664, NULL, led_mode_store);
 static DEVICE_ATTR(strobe, 0664, NULL, led_strobe_type_store);
-static DEVICE_ATTR(pwm_us, 0664, NULL, pwm_us_store);
-static DEVICE_ATTR(pause_lo, 0664, NULL, pause_lo_store);
-static DEVICE_ATTR(pause_hi, 0664, NULL, pause_hi_store);
-static DEVICE_ATTR(start_idx, 0664, NULL, start_idx_store);
-static DEVICE_ATTR(ramp_step_ms, 0664, NULL, ramp_step_ms_store);
-static DEVICE_ATTR(lut_flags, 0664, NULL, lut_flags_store);
-static DEVICE_ATTR(duty_pcts, 0664, NULL, duty_pcts_store);
-static DEVICE_ATTR(blink, 0664, NULL, blink_store);
+static DEVICE_ATTR(hw_polarity, 0664, NULL, led_strobe_hw_polarity_store); //ASUS_BSP LiJen
+static DEVICE_ATTR(pwm_us, LED_RW_ATTR, pwm_us_show, pwm_us_store);
+static DEVICE_ATTR(pause_lo, LED_RW_ATTR, pause_lo_show, pause_lo_store);
+static DEVICE_ATTR(pause_hi, LED_RW_ATTR, pause_hi_show, pause_hi_store);
+static DEVICE_ATTR(start_idx, LED_RW_ATTR, start_idx_show, start_idx_store);
+static DEVICE_ATTR(ramp_step_ms, LED_RW_ATTR, ramp_step_ms_show, ramp_step_ms_store);
+static DEVICE_ATTR(lut_flags, LED_RW_ATTR, NULL, lut_flags_store);
+static DEVICE_ATTR(duty_pcts, LED_RW_ATTR, duty_pcts_show , duty_pcts_store);
+static DEVICE_ATTR(breathe_pcts, LED_RW_ATTR, breathe_pcts_show , breathe_pcts_store);	//ASUS_BSP : add for breathe light attribute
+static DEVICE_ATTR(blink, LED_RW_ATTR, NULL, blink_store);
+static DEVICE_ATTR(TPID, LED_RO_ATTR, tpid_show , NULL);
 
 static struct attribute *led_attrs[] = {
 	&dev_attr_led_mode.attr,
 	&dev_attr_strobe.attr,
+	&dev_attr_hw_polarity.attr, //ASUS_BSP LiJen
 	NULL
 };
 
@@ -2498,6 +3164,8 @@ static struct attribute *lpg_attrs[] = {
 	&dev_attr_ramp_step_ms.attr,
 	&dev_attr_lut_flags.attr,
 	&dev_attr_duty_pcts.attr,
+	&dev_attr_breathe_pcts.attr,
+	&dev_attr_TPID.attr,	// ASUS_BSP Deeo : Get TPID for separate panel color +++
 	NULL
 };
 
@@ -2517,8 +3185,59 @@ static const struct attribute_group lpg_attr_group = {
 static const struct attribute_group blink_attr_group = {
 	.attrs = blink_attrs,
 };
+#if 0
+//ASUS BSP Deeo : add for charger mode +++
+void led_set_charger_mode(uint8_t led_type)
+{
+	if(!g_Charger_mode)
+		return;
 
-static int qpnp_flash_init(struct qpnp_led_data *led)
+	printk("[LED] Charger mode type(%d) pad(%d)\n",led_type,pad_in);
+	if(led_type == 1)	// cable in
+	{
+		if (pad_in ){
+#ifdef CONFIG_EEPROM_NUVOTON
+			AX_MicroP_ControlLED(1,1);
+#endif
+			return;
+		}
+
+		red_led->cdev.brightness = 64;
+		green_led->cdev.brightness = 64;
+
+		schedule_work(&red_led->work);
+		schedule_work(&green_led->work);
+	}
+	else if(led_type == 2) // battery-full
+	{
+		if (pad_in ){
+#ifdef CONFIG_EEPROM_NUVOTON
+			AX_MicroP_ControlLED(0,1);
+#endif
+			return;
+		}
+
+		red_led->cdev.brightness = 0;
+		green_led->cdev.brightness = 128;
+
+		schedule_work(&red_led->work);
+		schedule_work(&green_led->work);
+	}
+	else				// cable out
+	{
+		if (pad_in )
+#ifdef CONFIG_EEPROM_NUVOTON
+			AX_MicroP_ControlLED(0,0);
+#endif
+
+		led_clean();
+		return;
+	}
+}
+//ASUS BSP Deeo : add for charger mode ---
+EXPORT_SYMBOL(led_set_charger_mode);
+#endif
+static int  qpnp_flash_init(struct qpnp_led_data *led)
 {
 	int rc;
 
@@ -2613,7 +3332,21 @@ static int qpnp_flash_init(struct qpnp_led_data *led)
 		return rc;
 	}
 
+//ASUS_BSP +++ LiJen: diasble PMIC internal thermal to avoid torch mode flicker issue
+       /* Disable internal thermal derating*/ 
+	rc = qpnp_led_masked_write(led,
+		FLASH_EN_THERMAL_DERATE_TIMER(led->base),
+		FLASH_EN_THERMAL_DERATE_TIMER_MASK, FLASH_DISABLE_THERMAL);
+    
+	if (rc) {
+		dev_err(&led->spmi_dev->dev,
+			"LED %d disable thermal write failed(%d)\n", led->id, rc);
+		return rc;
+	}
+//ASUS_BSP --- LiJen: diasble PMIC internal thermal to avoid torch mode flicker issue
+  
 	led->flash_cfg->strobe_type = 0;
+	led->flash_cfg->strobe_hw_polarity = 1; //ASUS_BSP LiJen: set flash hw polarity active high
 
 	/* dump flash registers */
 	qpnp_dump_regs(led, flash_debug_regs, ARRAY_SIZE(flash_debug_regs));
@@ -2621,7 +3354,7 @@ static int qpnp_flash_init(struct qpnp_led_data *led)
 	return 0;
 }
 
-static int qpnp_kpdbl_init(struct qpnp_led_data *led)
+static int  qpnp_kpdbl_init(struct qpnp_led_data *led)
 {
 	int rc;
 	u8 val;
@@ -2691,13 +3424,18 @@ static int qpnp_kpdbl_init(struct qpnp_led_data *led)
 		return rc;
 	}
 
+	if (led->kpdbl_cfg->always_on) {
+		kpdbl_master = led->kpdbl_cfg->pwm_cfg->pwm_dev;
+		kpdbl_master_period_us = led->kpdbl_cfg->pwm_cfg->pwm_period_us;
+	}
+
 	/* dump kpdbl registers */
 	qpnp_dump_regs(led, kpdbl_debug_regs, ARRAY_SIZE(kpdbl_debug_regs));
 
 	return 0;
 }
 
-static int qpnp_rgb_init(struct qpnp_led_data *led)
+static int  qpnp_rgb_init(struct qpnp_led_data *led)
 {
 	int rc;
 
@@ -2723,10 +3461,10 @@ static int qpnp_rgb_init(struct qpnp_led_data *led)
 	return 0;
 }
 
-static int qpnp_mpp_init(struct qpnp_led_data *led)
+static int  qpnp_mpp_init(struct qpnp_led_data *led)
 {
-	int rc, val;
-
+	int rc;
+	u8 val;
 
 	if (led->max_current < LED_MPP_CURRENT_MIN ||
 		led->max_current > LED_MPP_CURRENT_MAX) {
@@ -2769,22 +3507,7 @@ static int qpnp_mpp_init(struct qpnp_led_data *led)
 	return 0;
 }
 
-static int qpnp_gpio_init(struct qpnp_led_data *led)
-{
-	int rc;
-
-	rc = qpnp_led_masked_write(led, LED_GPIO_VIN_CTRL(led->base),
-		LED_GPIO_VIN_MASK, led->gpio_cfg->vin_ctrl);
-	if (rc) {
-		dev_err(&led->spmi_dev->dev,
-			"Failed to write led vin control reg\n");
-		return rc;
-	}
-
-	return 0;
-}
-
-static int qpnp_led_initialize(struct qpnp_led_data *led)
+static int  qpnp_led_initialize(struct qpnp_led_data *led)
 {
 	int rc = 0;
 
@@ -2816,18 +3539,16 @@ static int qpnp_led_initialize(struct qpnp_led_data *led)
 			dev_err(&led->spmi_dev->dev,
 				"MPP initialize failed(%d)\n", rc);
 		break;
-	case QPNP_ID_LED_GPIO:
-		rc = qpnp_gpio_init(led);
-		if (rc)
-			dev_err(&led->spmi_dev->dev,
-				"GPIO initialize failed(%d)\n", rc);
-		break;
 	case QPNP_ID_KPDBL:
 		rc = qpnp_kpdbl_init(led);
 		if (rc)
 			dev_err(&led->spmi_dev->dev,
 				"KPDBL initialize failed(%d)\n", rc);
 		break;
+//ASUS_BSP Deeo : add for mix color +++
+	case QPNP_ID_RGB_MIX:
+		break;
+//ASUS_BSP Deeo : add for mix color ---
 	default:
 		dev_err(&led->spmi_dev->dev, "Invalid LED(%d)\n", led->id);
 		return -EINVAL;
@@ -2836,7 +3557,7 @@ static int qpnp_led_initialize(struct qpnp_led_data *led)
 	return rc;
 }
 
-static int qpnp_get_common_configs(struct qpnp_led_data *led,
+static int  qpnp_get_common_configs(struct qpnp_led_data *led,
 				struct device_node *node)
 {
 	int rc;
@@ -2850,6 +3571,13 @@ static int qpnp_get_common_configs(struct qpnp_led_data *led,
 		led->cdev.default_trigger = temp_string;
 	else if (rc != -EINVAL)
 		return rc;
+
+	//ASUS_BSP Deeo : add for charger mode trigger +++
+	/*
+	if (led->id == QPNP_ID_RGB_GREEN && g_Charger_mode == true)
+		led->cdevdefault_trigger. = "none";//"battery-charging-or-full";
+	*/
+	//ASUS_BSP Deeo : add for charger mode trigger ---
 
 	led->default_on = false;
 	rc = of_property_read_string(node, "qcom,default-state",
@@ -2873,7 +3601,7 @@ static int qpnp_get_common_configs(struct qpnp_led_data *led,
 /*
  * Handlers for alternative sources of platform_data
  */
-static int qpnp_get_config_wled(struct qpnp_led_data *led,
+static int  qpnp_get_config_wled(struct qpnp_led_data *led,
 				struct device_node *node)
 {
 	u32 val;
@@ -2897,13 +3625,6 @@ static int qpnp_get_config_wled(struct qpnp_led_data *led,
 	rc = of_property_read_u32(node, "qcom,num-strings", &val);
 	if (!rc)
 		led->wled_cfg->num_strings = (u8) val;
-	else if (rc != -EINVAL)
-		return rc;
-
-	led->wled_cfg->num_physical_strings = led->wled_cfg->num_strings;
-	rc = of_property_read_u32(node, "qcom,num-physical-strings", &val);
-	if (!rc)
-		led->wled_cfg->num_physical_strings = (u8) val;
 	else if (rc != -EINVAL)
 		return rc;
 
@@ -2955,10 +3676,13 @@ static int qpnp_get_config_wled(struct qpnp_led_data *led,
 	led->wled_cfg->cs_out_en =
 		of_property_read_bool(node, "qcom,cs-out-en");
 
+	led->wled_cfg->cabc_out_en =
+		of_property_read_bool(node, "qcom,cabc-out-en");
+
 	return 0;
 }
 
-static int qpnp_get_config_flash(struct qpnp_led_data *led,
+static int  qpnp_get_config_flash(struct qpnp_led_data *led,
 				struct device_node *node, bool *reg_set)
 {
 	int rc;
@@ -2982,6 +3706,21 @@ static int qpnp_get_config_flash(struct qpnp_led_data *led,
 
 	led->flash_cfg->torch_enable =
 		of_property_read_bool(node, "qcom,torch-enable");
+
+	if (of_find_property(of_get_parent(node), "flash-wa-supply",
+					NULL) && (!*reg_set)) {
+		led->flash_cfg->flash_wa_reg =
+			devm_regulator_get(&led->spmi_dev->dev, "flash-wa");
+		if (IS_ERR_OR_NULL(led->flash_cfg->flash_wa_reg)) {
+			rc = PTR_ERR(led->flash_cfg->flash_wa_reg);
+			if (rc != EPROBE_DEFER) {
+				dev_err(&led->spmi_dev->dev,
+					"Flash wa regulator get failed(%d)\n",
+					rc);
+			}
+		} else
+			led->flash_cfg->flash_wa_reg_get = true;
+	}
 
 	if (led->id == QPNP_ID_FLASH1_LED0) {
 		led->flash_cfg->enable_module = FLASH_ENABLE_LED_0;
@@ -3049,59 +3788,38 @@ static int qpnp_get_config_flash(struct qpnp_led_data *led,
 			led->flash_cfg->enable_module = FLASH_ENABLE_MODULE;
 		} else
 			led->flash_cfg->enable_module = FLASH_ENABLE_ALL;
-		led->flash_cfg->trigger_flash = FLASH_TORCH_OUTPUT;
+//		led->flash_cfg->trigger_flash = FLASH_STROBE_SW; //ASUS_BSP LiJen
+	}
 
-		rc = of_property_read_u32(node, "qcom,duration", &val);
-		if (!rc)
-			led->flash_cfg->duration = ((u8) val) - 2;
-		else if (rc == -EINVAL)
-			led->flash_cfg->duration = TORCH_DURATION_12s;
-		else {
-			if (led->flash_cfg->peripheral_subtype ==
-							FLASH_SUBTYPE_SINGLE)
-				goto error_get_flash_reg;
-			else if (led->flash_cfg->peripheral_subtype ==
-							FLASH_SUBTYPE_DUAL)
-				goto error_get_torch_reg;
-		}
-
-		rc = of_property_read_u32(node, "qcom,current", &val);
-		if (!rc)
+	rc = of_property_read_u32(node, "qcom,current", &val);
+	if (!rc) {
+		if (led->flash_cfg->torch_enable) {
 			led->flash_cfg->current_prgm = (val *
 				TORCH_MAX_LEVEL / led->max_current);
-		else {
-			if (led->flash_cfg->peripheral_subtype ==
-							FLASH_SUBTYPE_SINGLE)
-				goto error_get_flash_reg;
-			else if (led->flash_cfg->peripheral_subtype ==
-							FLASH_SUBTYPE_DUAL)
-				goto error_get_torch_reg;
-			goto error_get_torch_reg;
+			return 0;
 		}
-
-		return 0;
-	} else {
-		rc = of_property_read_u32(node, "qcom,duration", &val);
-		if (!rc)
-			led->flash_cfg->duration = (u8)((val - 10) / 10);
-		else if (rc == -EINVAL)
-			led->flash_cfg->duration = FLASH_DURATION_200ms;
 		else
-			goto error_get_flash_reg;
-
-		rc = of_property_read_u32(node, "qcom,current", &val);
-		if (!rc)
 			led->flash_cfg->current_prgm = (val *
 				FLASH_MAX_LEVEL / led->max_current);
+	} else
+		if (led->flash_cfg->torch_enable)
+			goto error_get_torch_reg;
 		else
 			goto error_get_flash_reg;
-	}
 
 	rc = of_property_read_u32(node, "qcom,headroom", &val);
 	if (!rc)
 		led->flash_cfg->headroom = (u8) val;
 	else if (rc == -EINVAL)
 		led->flash_cfg->headroom = HEADROOM_500mV;
+	else
+		goto error_get_flash_reg;
+
+	rc = of_property_read_u32(node, "qcom,duration", &val);
+	if (!rc)
+		led->flash_cfg->duration = (u8)((val - 10) / 10);
+	else if (rc == -EINVAL)
+		led->flash_cfg->duration = FLASH_DURATION_200ms;
 	else
 		goto error_get_flash_reg;
 
@@ -3136,14 +3854,15 @@ error_get_flash_reg:
 
 }
 
-static int qpnp_get_config_pwm(struct pwm_config_data *pwm_cfg,
+static int  qpnp_get_config_pwm(struct pwm_config_data *pwm_cfg,
 				struct spmi_device *spmi_dev,
 				struct device_node *node)
 {
 	struct property *prop;
-	int rc, i;
+	int rc, i, lut_max_size;
 	u32 val;
 	u8 *temp_cfg;
+	const char *led_label;
 
 	rc = of_property_read_u32(node, "qcom,pwm-channel", &val);
 	if (!rc)
@@ -3151,7 +3870,7 @@ static int qpnp_get_config_pwm(struct pwm_config_data *pwm_cfg,
 	else
 		return rc;
 
-	if (pwm_cfg->mode == PWM_MODE) {
+	if (pwm_cfg->mode != MANUAL_MODE) {
 		rc = of_property_read_u32(node, "qcom,pwm-us", &val);
 		if (!rc)
 			pwm_cfg->pwm_period_us = val;
@@ -3187,6 +3906,18 @@ static int qpnp_get_config_pwm(struct pwm_config_data *pwm_cfg,
 			goto bad_lpg_params;
 		}
 
+		rc = of_property_read_string(node, "label", &led_label);
+		if (rc < 0) {
+			dev_err(&spmi_dev->dev,
+				"Failure reading label, rc = %d\n", rc);
+			return rc;
+		}
+
+		if (strcmp(led_label, "kpdbl") == 0)
+			lut_max_size = PWM_GPLED_LUT_MAX_SIZE;
+		else
+			lut_max_size = PWM_LUT_MAX_SIZE;
+
 		pwm_cfg->duty_cycles->duty_pcts =
 			devm_kzalloc(&spmi_dev->dev,
 			sizeof(int) * PWM_LUT_MAX_SIZE,
@@ -3198,6 +3929,18 @@ static int qpnp_get_config_pwm(struct pwm_config_data *pwm_cfg,
 			goto bad_lpg_params;
 		}
 
+//ASUS Deeo +++
+		pwm_cfg->duty_cycles->flash_pcts =
+			devm_kzalloc(&spmi_dev->dev,
+			sizeof(int) * PWM_LUT_MAX_SIZE,
+			GFP_KERNEL);
+		if (!pwm_cfg->duty_cycles->duty_pcts) {
+			dev_err(&spmi_dev->dev,
+				"Unable to allocate memory\n");
+			rc = -ENOMEM;
+			goto bad_lpg_params;
+		}
+//ASUS Deeo ---
 		pwm_cfg->old_duty_pcts =
 			devm_kzalloc(&spmi_dev->dev,
 			sizeof(int) * PWM_LUT_MAX_SIZE,
@@ -3223,16 +3966,76 @@ static int qpnp_get_config_pwm(struct pwm_config_data *pwm_cfg,
 			pwm_cfg->duty_cycles->num_duty_pcts);
 
 		for (i = 0; i < pwm_cfg->duty_cycles->num_duty_pcts; i++)
-			pwm_cfg->duty_cycles->duty_pcts[i] =
-				(int) temp_cfg[i];
+		{
+			pwm_cfg->duty_cycles->duty_pcts[i] = (int) temp_cfg[i];
+			pwm_cfg->duty_cycles->flash_pcts[i] = (int) temp_cfg[i];
+		}
 
+		pwm_cfg->duty_cycles->num_flash_pcts = pwm_cfg->duty_cycles->num_duty_pcts;
+//ASUS BSP Deeo : add breathe duty +++
+		prop = of_find_property(node, "qcom,breathe-pcts",
+			&pwm_cfg->duty_cycles->num_breathe_pcts);
+		if (!prop) {
+			dev_err(&spmi_dev->dev, "Looking up property " \
+				"node qcom,breahte-pcts failed\n");
+			rc =  -ENODEV;
+			goto bad_lpg_params;
+		} else if (!pwm_cfg->duty_cycles->num_breathe_pcts) {
+			dev_err(&spmi_dev->dev, "Invalid length of " \
+				"breathe pcts\n");
+			rc =  -EINVAL;
+			goto bad_lpg_params;
+		}
+
+		pwm_cfg->duty_cycles->breahte_pcts=
+			devm_kzalloc(&spmi_dev->dev,
+			sizeof(int) * PWM_LUT_MAX_SIZE,
+			GFP_KERNEL);
+		if (!pwm_cfg->duty_cycles->breahte_pcts) {
+			dev_err(&spmi_dev->dev,
+				"Unable to allocate memory\n");
+			rc = -ENOMEM;
+			goto bad_lpg_params;
+		}
+
+		temp_cfg = devm_kzalloc(&spmi_dev->dev,
+				pwm_cfg->duty_cycles->num_breathe_pcts *
+				sizeof(u8), GFP_KERNEL);
+		if (!temp_cfg) {
+			dev_err(&spmi_dev->dev, "Failed to allocate " \
+				"memory for breathe pcts\n");
+			rc = -ENOMEM;
+			goto bad_lpg_params;
+		}
+
+		memcpy(temp_cfg, prop->value,
+			pwm_cfg->duty_cycles->num_breathe_pcts);
+
+		for (i = 0; i < pwm_cfg->duty_cycles->num_breathe_pcts; i++)
+			pwm_cfg->duty_cycles->breahte_pcts[i] = (int) temp_cfg[i];
+//ASUS BSP Deeo : add breathe duty ---
+//ASUS_BSP Deeo : sparate breathe & blink start idx +++
+/*
 		rc = of_property_read_u32(node, "qcom,start-idx", &val);
 		if (!rc) {
 			pwm_cfg->lut_params.start_idx = val;
 			pwm_cfg->duty_cycles->start_idx = val;
 		} else
 			goto bad_lpg_params;
-
+*/
+		rc = of_property_read_u32(node, "qcom,blink-start-idx", &val);
+		if (!rc) {
+			pwm_cfg->lut_params.start_idx = val;
+			pwm_cfg->duty_cycles->start_idx = val;
+			pwm_cfg->duty_cycles->blink_start_idx= val;
+		} else
+			goto bad_lpg_params;
+		rc = of_property_read_u32(node, "qcom,breathe-start-idx", &val);
+		if (!rc) {
+			pwm_cfg->duty_cycles->breathe_start_idx= val;
+		} else
+			goto bad_lpg_params;
+//ASUS_BSP Deeo : sparate breathe & blink start idx ---
 		pwm_cfg->lut_params.lut_pause_hi = 0;
 		rc = of_property_read_u32(node, "qcom,pause-hi", &val);
 		if (!rc)
@@ -3289,7 +4092,7 @@ static int qpnp_led_get_mode(const char *mode)
 		return -EINVAL;
 };
 
-static int qpnp_get_config_kpdbl(struct qpnp_led_data *led,
+static int  qpnp_get_config_kpdbl(struct qpnp_led_data *led,
 				struct device_node *node)
 {
 	int rc;
@@ -3347,10 +4150,11 @@ static int qpnp_get_config_kpdbl(struct qpnp_led_data *led,
 	return 0;
 }
 
-static int qpnp_get_config_rgb(struct qpnp_led_data *led,
+static int  qpnp_get_config_rgb(struct qpnp_led_data *led,
 				struct device_node *node)
 {
 	int rc;
+	int i=0;		//ASUS_BSP Deeo : enhance Green Led by B/L panel +++
 	u8 led_mode;
 	const char *mode;
 
@@ -3361,12 +4165,29 @@ static int qpnp_get_config_rgb(struct qpnp_led_data *led,
 		return -ENOMEM;
 	}
 
-	if (led->id == QPNP_ID_RGB_RED)
+	if (led->id == QPNP_ID_RGB_RED){
 		led->rgb_cfg->enable = RGB_LED_ENABLE_RED;
-	else if (led->id == QPNP_ID_RGB_GREEN)
+		red_led = led;
+	}
+	else if (led->id == QPNP_ID_RGB_GREEN){
 		led->rgb_cfg->enable = RGB_LED_ENABLE_GREEN;
-	else if (led->id == QPNP_ID_RGB_BLUE)
+/*		if( g_ASUS_hwID == A90_EVB)
+			blue_led = led;
+		else
+*/			green_led = led;
+	}
+	else if (led->id == QPNP_ID_RGB_BLUE){
 		led->rgb_cfg->enable = RGB_LED_ENABLE_BLUE;
+/*		if( g_ASUS_hwID == A90_EVB)
+			green_led = led;
+		else
+*/			blue_led = led;
+	}
+//ASUS_BSP Deeo : add for mix color +++
+	else if (led->id == QPNP_ID_RGB_MIX){
+		printk("[LED] Config Mix RGB LEDs \n");
+	}
+//ASUS_BSP Deeo : add for mix color ---
 	else
 		return -EINVAL;
 
@@ -3386,19 +4207,61 @@ static int qpnp_get_config_rgb(struct qpnp_led_data *led,
 				"Unable to allocate memory\n");
 			return -ENOMEM;
 		}
-		led->rgb_cfg->pwm_cfg->mode = led_mode;
-		led->rgb_cfg->pwm_cfg->default_mode = led_mode;
+
+		//ASUS_BSP Deeo : add for charger mode trigger +++
+		//if (led->id == QPNP_ID_RGB_GREEN && g_Charger_mode == true){
+		if(0){
+			led->rgb_cfg->pwm_cfg->mode = LPG_MODE;
+			led->rgb_cfg->pwm_cfg->default_mode = LPG_MODE;
+		}
+		else{
+			led->rgb_cfg->pwm_cfg->mode = led_mode;
+			led->rgb_cfg->pwm_cfg->default_mode = led_mode;
+		}
+		//ASUS_BSP Deeo : add for charger mode trigger ---
 	} else
 		return rc;
+
+	//ASUS_BSP Deeo : add for mix color +++
+	if ( led->id == QPNP_ID_RGB_MIX ){
+		led->rgb_cfg->pwm_cfg->use_blink = true;
+		return 0;
+	}
+	//ASUS_BSP Deeo : add for mix color ---
 
 	rc = qpnp_get_config_pwm(led->rgb_cfg->pwm_cfg, led->spmi_dev, node);
 	if (rc < 0)
 		return rc;
 
+	//ASUS_BSP Deeo : add for charger mode trigger +++
+	/*
+	if (led->id == QPNP_ID_RGB_GREEN && g_Charger_mode == true){
+		led->rgb_cfg->pwm_cfg->use_blink = false;
+		led->rgb_cfg->pwm_cfg->lut_params.start_idx = led->rgb_cfg->pwm_cfg->duty_cycles->breathe_start_idx;
+		led->rgb_cfg->pwm_cfg->duty_cycles->start_idx = led->rgb_cfg->pwm_cfg->duty_cycles->breathe_start_idx;
+		led->rgb_cfg->pwm_cfg->duty_cycles->duty_pcts = led->rgb_cfg->pwm_cfg->duty_cycles->breahte_pcts;
+		led->rgb_cfg->pwm_cfg->duty_cycles->num_duty_pcts = led->rgb_cfg->pwm_cfg->duty_cycles->num_breathe_pcts;
+		led->rgb_cfg->pwm_cfg->lut_params.idx_len = led->rgb_cfg->pwm_cfg->duty_cycles->num_breathe_pcts;
+	}
+	*/
+	//ASUS_BSP Deeo : add for charger mode trigger ---
+
+	//ASUS_BSP Deeo : enhance Green Led by B/L panel +++
+	if (led->id == QPNP_ID_RGB_GREEN ){
+		for (i = 0; i < led->rgb_cfg->pwm_cfg->duty_cycles->num_flash_pcts; i++)
+		{
+			led->rgb_cfg->pwm_cfg->duty_cycles->flash_pcts[i] *= led_enhance;
+
+			if ( led->rgb_cfg->pwm_cfg->duty_cycles->flash_pcts[i] > LED_FULL)
+				led->rgb_cfg->pwm_cfg->duty_cycles->flash_pcts[i] = LED_FULL;
+		}
+	}
+	//ASUS_BSP Deeo : enhance Green Led by B/L panel ---
+
 	return 0;
 }
 
-static int qpnp_get_config_mpp(struct qpnp_led_data *led,
+static int  qpnp_get_config_mpp(struct qpnp_led_data *led,
 		struct device_node *node)
 {
 	int rc;
@@ -3413,47 +4276,6 @@ static int qpnp_get_config_mpp(struct qpnp_led_data *led,
 		return -ENOMEM;
 	}
 
-	if (of_find_property(of_get_parent(node), "mpp-power-supply", NULL)) {
-		led->mpp_cfg->mpp_reg =
-				regulator_get(&led->spmi_dev->dev,
-							"mpp-power");
-		if (IS_ERR(led->mpp_cfg->mpp_reg)) {
-			rc = PTR_ERR(led->mpp_cfg->mpp_reg);
-			dev_err(&led->spmi_dev->dev,
-				"MPP regulator get failed(%d)\n", rc);
-			return rc;
-		}
-	}
-
-	if (led->mpp_cfg->mpp_reg) {
-		rc = of_property_read_u32(of_get_parent(node),
-					"qcom,mpp-power-max-voltage", &val);
-		if (!rc)
-			led->mpp_cfg->max_uV = val;
-		else
-			goto err_config_mpp;
-
-		rc = of_property_read_u32(of_get_parent(node),
-					"qcom,mpp-power-min-voltage", &val);
-		if (!rc)
-			led->mpp_cfg->min_uV = val;
-		else
-			goto err_config_mpp;
-
-	} else {
-		rc = of_property_read_u32(of_get_parent(node),
-					"qcom,mpp-power-max-voltage", &val);
-		if (!rc)
-			dev_warn(&led->spmi_dev->dev,
-						"No regulator specified\n");
-
-		rc = of_property_read_u32(of_get_parent(node),
-					"qcom,mpp-power-min-voltage", &val);
-		if (!rc)
-			dev_warn(&led->spmi_dev->dev,
-						"No regulator specified\n");
-	}
-
 	led->mpp_cfg->current_setting = LED_MPP_CURRENT_MIN;
 	rc = of_property_read_u32(node, "qcom,current-setting", &val);
 	if (!rc) {
@@ -3464,35 +4286,35 @@ static int qpnp_get_config_mpp(struct qpnp_led_data *led,
 		else
 			led->mpp_cfg->current_setting = (u8) val;
 	} else if (rc != -EINVAL)
-		goto err_config_mpp;
+		return rc;
 
 	led->mpp_cfg->source_sel = LED_MPP_SOURCE_SEL_DEFAULT;
 	rc = of_property_read_u32(node, "qcom,source-sel", &val);
 	if (!rc)
 		led->mpp_cfg->source_sel = (u8) val;
 	else if (rc != -EINVAL)
-		goto err_config_mpp;
+		return rc;
 
 	led->mpp_cfg->mode_ctrl = LED_MPP_MODE_SINK;
 	rc = of_property_read_u32(node, "qcom,mode-ctrl", &val);
 	if (!rc)
 		led->mpp_cfg->mode_ctrl = (u8) val;
 	else if (rc != -EINVAL)
-		goto err_config_mpp;
+		return rc;
 
 	led->mpp_cfg->vin_ctrl = LED_MPP_VIN_CTRL_DEFAULT;
 	rc = of_property_read_u32(node, "qcom,vin-ctrl", &val);
 	if (!rc)
 		led->mpp_cfg->vin_ctrl = (u8) val;
 	else if (rc != -EINVAL)
-		goto err_config_mpp;
+		return rc;
 
 	led->mpp_cfg->min_brightness = 0;
 	rc = of_property_read_u32(node, "qcom,min-brightness", &val);
 	if (!rc)
 		led->mpp_cfg->min_brightness = (u8) val;
 	else if (rc != -EINVAL)
-		goto err_config_mpp;
+		return rc;
 
 	rc = of_property_read_string(node, "qcom,mode", &mode);
 	if (!rc) {
@@ -3503,8 +4325,7 @@ static int qpnp_get_config_mpp(struct qpnp_led_data *led,
 		else if (led_mode == -EINVAL) {
 			dev_err(&led->spmi_dev->dev, "Selected mode not " \
 				"supported for mpp.\n");
-			rc = -EINVAL;
-			goto err_config_mpp;
+			return -EINVAL;
 		}
 		led->mpp_cfg->pwm_cfg = devm_kzalloc(&led->spmi_dev->dev,
 					sizeof(struct pwm_config_data),
@@ -3512,8 +4333,7 @@ static int qpnp_get_config_mpp(struct qpnp_led_data *led,
 		if (!led->mpp_cfg->pwm_cfg) {
 			dev_err(&led->spmi_dev->dev,
 				"Unable to allocate memory\n");
-			rc = -ENOMEM;
-			goto err_config_mpp;
+			return -ENOMEM;
 		}
 		led->mpp_cfg->pwm_cfg->mode = led_mode;
 		led->mpp_cfg->pwm_cfg->default_mode = led_mode;
@@ -3522,57 +4342,12 @@ static int qpnp_get_config_mpp(struct qpnp_led_data *led,
 
 	rc = qpnp_get_config_pwm(led->mpp_cfg->pwm_cfg, led->spmi_dev, node);
 	if (rc < 0)
-		goto err_config_mpp;
+		return rc;
 
 	return 0;
-
-err_config_mpp:
-	if (led->mpp_cfg->mpp_reg)
-		regulator_put(led->mpp_cfg->mpp_reg);
-	return rc;
 }
 
-static int qpnp_get_config_gpio(struct qpnp_led_data *led,
-		struct device_node *node)
-{
-	int rc;
-	u32 val;
-
-	led->gpio_cfg = devm_kzalloc(&led->spmi_dev->dev,
-			sizeof(struct gpio_config_data), GFP_KERNEL);
-	if (!led->gpio_cfg) {
-		dev_err(&led->spmi_dev->dev, "Unable to allocate memory gpio struct\n");
-		return -ENOMEM;
-	}
-
-	led->gpio_cfg->source_sel = LED_GPIO_SOURCE_SEL_DEFAULT;
-	rc = of_property_read_u32(node, "qcom,source-sel", &val);
-	if (!rc)
-		led->gpio_cfg->source_sel = (u8) val;
-	else if (rc != -EINVAL)
-		goto err_config_gpio;
-
-	led->gpio_cfg->mode_ctrl = LED_GPIO_MODE_OUTPUT;
-	rc = of_property_read_u32(node, "qcom,mode-ctrl", &val);
-	if (!rc)
-		led->gpio_cfg->mode_ctrl = (u8) val;
-	else if (rc != -EINVAL)
-		goto err_config_gpio;
-
-	led->gpio_cfg->vin_ctrl = LED_GPIO_VIN_CTRL_DEFAULT;
-	rc = of_property_read_u32(node, "qcom,vin-ctrl", &val);
-	if (!rc)
-		led->gpio_cfg->vin_ctrl = (u8) val;
-	else if (rc != -EINVAL)
-		goto err_config_gpio;
-
-	return 0;
-
-err_config_gpio:
-	return rc;
-}
-
-static int qpnp_leds_probe(struct spmi_device *spmi)
+static int  qpnp_leds_probe(struct spmi_device *spmi)
 {
 	struct qpnp_led_data *led, *led_array;
 	struct resource *led_resource;
@@ -3671,6 +4446,9 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 				goto fail_id_check;
 			}
 		} else if (strncmp(led_label, "rgb", sizeof("rgb")) == 0) {
+			printk("[LED] [LED] qpnp_leds_probe +++ \n");
+			get_tpid();	// ASUS_BSP Deeo get panel id
+
 			rc = qpnp_get_config_rgb(led, temp);
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev,
@@ -3684,15 +4462,9 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 						"Unable to read mpp config data\n");
 				goto fail_id_check;
 			}
-		} else if (strcmp(led_label, "gpio") == 0) {
-			rc = qpnp_get_config_gpio(led, temp);
-			if (rc < 0) {
-				dev_err(&led->spmi_dev->dev,
-						"Unable to read gpio config data\n");
-				goto fail_id_check;
-			}
 		} else if (strncmp(led_label, "kpdbl", sizeof("kpdbl")) == 0) {
-			num_kpbl_leds_on = 0;
+			bitmap_zero(kpdbl_leds_in_use, NUM_KPDBL_LEDS);
+			is_kpdbl_master_turn_on = false;
 			rc = qpnp_get_config_kpdbl(led, temp);
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev,
@@ -3705,17 +4477,38 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 			goto fail_id_check;
 		}
 
-		mutex_init(&led->lock);
+		if (led->id != QPNP_ID_FLASH1_LED0 &&
+					led->id != QPNP_ID_FLASH1_LED1)
+			mutex_init(&led->lock);
+
+		led->in_order_command_processing = of_property_read_bool
+				(temp, "qcom,in-order-command-processing");
+
+		if (led->in_order_command_processing) {
+			/*
+			 * the command order from user space needs to be
+			 * maintained use ordered workqueue to prevent
+			 * concurrency
+			 */
+			led->workqueue = alloc_ordered_workqueue
+							("led_workqueue", 0);
+			if (!led->workqueue) {
+				rc = -ENOMEM;
+				goto fail_id_check;
+			}
+		}
+
 		INIT_WORK(&led->work, qpnp_led_work);
 
+		//printk("[LED] qpnp_led_initialize\n");
 		rc =  qpnp_led_initialize(led);
 		if (rc < 0)
 			goto fail_id_check;
-
+		//printk("[LED] qpnp_led_set_max_brightness\n");
 		rc = qpnp_led_set_max_brightness(led);
 		if (rc < 0)
 			goto fail_id_check;
-
+		//printk("[LED] led_classdev_register\n");
 		rc = led_classdev_register(&spmi->dev, &led->cdev);
 		if (rc) {
 			dev_err(&spmi->dev, "unable to register led %d,rc=%d\n",
@@ -3759,8 +4552,10 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 			}
 		} else if ((led->id == QPNP_ID_RGB_RED) ||
 			(led->id == QPNP_ID_RGB_GREEN) ||
-			(led->id == QPNP_ID_RGB_BLUE)) {
+			(led->id == QPNP_ID_RGB_BLUE) || (led->id == QPNP_ID_RGB_MIX)) {	//ASUS_BSP Deeo : add for mix color +++
+			printk("[LED] led->id = %d\n",led->id);
 			if (led->rgb_cfg->pwm_cfg->mode == PWM_MODE) {
+				printk("[LED] Default PWM mode\n");
 				rc = sysfs_create_group(&led->cdev.dev->kobj,
 					&pwm_attr_group);
 				if (rc)
@@ -3777,17 +4572,46 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 				if (rc)
 					goto fail_id_check;
 			} else if (led->rgb_cfg->pwm_cfg->mode == LPG_MODE) {
+				printk("[LED] Default LPG mode\n");
 				rc = sysfs_create_group(&led->cdev.dev->kobj,
 					&lpg_attr_group);
 				if (rc)
 					goto fail_id_check;
 			}
+		} else if (led->id == QPNP_ID_KPDBL) {
+			if (led->kpdbl_cfg->pwm_cfg->mode == PWM_MODE) {
+				rc = sysfs_create_group(&led->cdev.dev->kobj,
+					&pwm_attr_group);
+				if (rc)
+					goto fail_id_check;
+			}
+			if (led->kpdbl_cfg->pwm_cfg->use_blink) {
+				rc = sysfs_create_group(&led->cdev.dev->kobj,
+					&blink_attr_group);
+				if (rc)
+					goto fail_id_check;
+
+				rc = sysfs_create_group(&led->cdev.dev->kobj,
+					&lpg_attr_group);
+				if (rc)
+					goto fail_id_check;
+			} else if (led->kpdbl_cfg->pwm_cfg->mode == LPG_MODE) {
+				rc = sysfs_create_group(&led->cdev.dev->kobj,
+					&lpg_attr_group);
+				if (rc)
+					goto fail_id_check;
+			}
+			//printk("[LED] led->default_on = %d \n",led->default_on);
+			//printk("[LED] led->cdev.max_brightness = %d \n",led->cdev.max_brightness);
+			//printk("[LED] led->turn_off_delay_ms = %d \n",led->turn_off_delay_ms);
+			printk("[LED] qpnp_leds_probe --- \n");
 		}
 
 		/* configure default state */
 		if (led->default_on) {
 			led->cdev.brightness = led->cdev.max_brightness;
 			__qpnp_led_work(led, led->cdev.brightness);
+			schedule_work(&led->work);
 			if (led->turn_off_delay_ms > 0)
 				qpnp_led_turn_off(led);
 		} else
@@ -3795,12 +4619,35 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 
 		parsed_leds++;
 	}
+	//ASUS_BSP: Louis ++
+    if (strncmp(led_label, "wled", sizeof("wled")) == 0) {
+        g_spmi = spmi;
+    }
+    //ASUS_BSP: Louis --
+    
 	dev_set_drvdata(&spmi->dev, led_array);
+	
+//ASUS BSP Deeo +++
+#ifdef CONFIG_EEPROM_NUVOTON
+    if( !microp_notify )
+    {
+        printk("[LED] register MicroP notifier\n");
+        microp_notify = 1;
+        register_microp_notifier(&led_mp_notifier);
+        notify_register_microp_notifier(&led_mp_notifier, "pmic_led");
+    }
+#endif
+//ASUS BSP Deeo ---
+	
 	return 0;
 
 fail_id_check:
 	for (i = 0; i < parsed_leds; i++) {
-		mutex_destroy(&led_array[i].lock);
+		if (led_array[i].id != QPNP_ID_FLASH1_LED0 &&
+				led_array[i].id != QPNP_ID_FLASH1_LED1)
+			mutex_destroy(&led_array[i].lock);
+		if (led_array[i].in_order_command_processing)
+			destroy_workqueue(led_array[i].workqueue);
 		led_classdev_unregister(&led_array[i].cdev);
 	}
 
@@ -3814,7 +4661,12 @@ static int qpnp_leds_remove(struct spmi_device *spmi)
 
 	for (i = 0; i < parsed_leds; i++) {
 		cancel_work_sync(&led_array[i].work);
-		mutex_destroy(&led_array[i].lock);
+		if (led_array[i].id != QPNP_ID_FLASH1_LED0 &&
+				led_array[i].id != QPNP_ID_FLASH1_LED1)
+			mutex_destroy(&led_array[i].lock);
+
+		if (led_array[i].in_order_command_processing)
+			destroy_workqueue(led_array[i].workqueue);
 		led_classdev_unregister(&led_array[i].cdev);
 		switch (led_array[i].id) {
 		case QPNP_ID_WLED:
@@ -3833,6 +4685,7 @@ static int qpnp_leds_remove(struct spmi_device *spmi)
 		case QPNP_ID_RGB_RED:
 		case QPNP_ID_RGB_GREEN:
 		case QPNP_ID_RGB_BLUE:
+		case QPNP_ID_RGB_MIX:		//ASUS_BSP Deeo : add for mix color +++
 			if (led_array[i].rgb_cfg->pwm_cfg->mode == PWM_MODE)
 				sysfs_remove_group(&led_array[i].cdev.dev->\
 					kobj, &pwm_attr_group);
@@ -3861,8 +4714,20 @@ static int qpnp_leds_remove(struct spmi_device *spmi)
 					== LPG_MODE)
 				sysfs_remove_group(&led_array[i].cdev.dev->\
 					kobj, &lpg_attr_group);
-			if (led_array[i].mpp_cfg->mpp_reg)
-				regulator_put(led_array[i].mpp_cfg->mpp_reg);
+			break;
+		case QPNP_ID_KPDBL:
+			if (led_array[i].kpdbl_cfg->pwm_cfg->mode == PWM_MODE)
+				sysfs_remove_group(&led_array[i].cdev.dev->
+					kobj, &pwm_attr_group);
+			if (led_array[i].kpdbl_cfg->pwm_cfg->use_blink) {
+				sysfs_remove_group(&led_array[i].cdev.dev->
+					kobj, &blink_attr_group);
+				sysfs_remove_group(&led_array[i].cdev.dev->
+					kobj, &lpg_attr_group);
+			} else if (led_array[i].kpdbl_cfg->pwm_cfg->mode
+					== LPG_MODE)
+				sysfs_remove_group(&led_array[i].cdev.dev->
+					kobj, &lpg_attr_group);
 			break;
 		default:
 			dev_err(&led_array[i].spmi_dev->dev,
@@ -3901,6 +4766,17 @@ module_init(qpnp_led_init);
 
 static void __exit qpnp_led_exit(void)
 {
+//ASUS BSP Deeo +++
+#ifdef CONFIG_EEPROM_NUVOTON
+	if( !microp_notify )
+	{
+		printk("[LED] unregister MicroP notifier\n");
+		microp_notify = 0;
+		unregister_microp_notifier(&led_mp_notifier);
+		notify_unregister_microp_notifier(&led_mp_notifier, "pmic_led");
+	}
+#endif
+//ASUS BSP Deeo ---
 	spmi_driver_unregister(&qpnp_leds_driver);
 }
 module_exit(qpnp_led_exit);

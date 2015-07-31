@@ -194,4 +194,8 @@ config MSM_SPSS
 	help
 	  Support for Standby Processing Sub-System (SPSS) module.
 
+config ON_SEMI_VIBRATOR
+        bool "on_semi_LC898301 interface"
+        depends on I2C
+
 endmenu
