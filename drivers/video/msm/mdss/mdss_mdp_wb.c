@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/uaccess.h>
 #include <linux/iommu.h>
+#include <linux/switch.h>
 
 #include <mach/iommu.h>
 #include <linux/msm_iommu_domains.h>
@@ -419,11 +420,6 @@ static struct mdss_mdp_wb_data *get_user_node(struct msm_fb_data_type *mfd,
 		struct ion_client *iclient = mdss_get_ionclient();
 		struct ion_handle *ihdl;
 
-		if (!iclient) {
-			pr_err("iclient is NULL\n");
-			return NULL;
-		}
-
 		ihdl = ion_import_dma_buf(iclient, data->memory_id);
 		if (IS_ERR_OR_NULL(ihdl)) {
 			pr_err("unable to import fd %d\n", data->memory_id);
@@ -452,7 +448,6 @@ static struct mdss_mdp_wb_data *get_user_node(struct msm_fb_data_type *mfd,
 	node->user_alloc = true;
 	if (wb->is_secure)
 		flags |= MDP_SECURE_OVERLAY_SESSION;
-
 
 	ret = mdss_mdp_data_get(&node->buf_data, data, 1, flags);
 	if (IS_ERR_VALUE(ret)) {

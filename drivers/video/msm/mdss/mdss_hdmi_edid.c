@@ -12,7 +12,9 @@
 
 #include <linux/io.h>
 #include <linux/types.h>
-#include <mach/board.h>
+#include <linux/stat.h>
+#include <linux/slab.h>
+#include <linux/device.h>
 #include "mdss_hdmi_edid.h"
 
 #define DBC_START_OFFSET 4
@@ -31,7 +33,6 @@
  * descriptors with each SAD being 3 bytes long.
  * Thus, the maximum length of the audio data block would be 30 bytes
  */
-#define MAX_NUMBER_ADB                  5
 #define MAX_AUDIO_DATA_BLOCK_SIZE	30
 #define MAX_SPKR_ALLOC_DATA_BLOCK_SIZE	3
 
@@ -76,7 +77,7 @@ struct hdmi_edid_ctrl {
 	u16 audio_latency;
 	u16 video_latency;
 	u32 present_3d;
-	u8 audio_data_block[MAX_NUMBER_ADB * MAX_AUDIO_DATA_BLOCK_SIZE];
+	u8 audio_data_block[MAX_AUDIO_DATA_BLOCK_SIZE];
 	int adb_size;
 	u8 spkr_alloc_data_block[MAX_SPKR_ALLOC_DATA_BLOCK_SIZE];
 	int sadb_size;
@@ -205,6 +206,46 @@ static ssize_t hdmi_edid_sysfs_rda_modes(struct device *dev,
 } /* hdmi_edid_sysfs_rda_modes */
 static DEVICE_ATTR(edid_modes, S_IRUGO, hdmi_edid_sysfs_rda_modes, NULL);
 
+static ssize_t hdmi_edid_sysfs_rda_audio_latency(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct hdmi_edid_ctrl *edid_ctrl =
+		hdmi_get_featuredata_from_sysfs_dev(dev, HDMI_TX_FEAT_EDID);
+
+	if (!edid_ctrl) {
+		DEV_ERR("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", edid_ctrl->audio_latency);
+
+	DEV_DBG("%s: '%s'\n", __func__, buf);
+
+	return ret;
+} /* hdmi_edid_sysfs_rda_audio_latency */
+static DEVICE_ATTR(edid_audio_latency, S_IRUGO,
+	hdmi_edid_sysfs_rda_audio_latency, NULL);
+
+static ssize_t hdmi_edid_sysfs_rda_video_latency(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct hdmi_edid_ctrl *edid_ctrl =
+		hdmi_get_featuredata_from_sysfs_dev(dev, HDMI_TX_FEAT_EDID);
+
+	if (!edid_ctrl) {
+		DEV_ERR("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", edid_ctrl->video_latency);
+
+	DEV_DBG("%s: '%s'\n", __func__, buf);
+
+	return ret;
+} /* hdmi_edid_sysfs_rda_video_latency */
+static DEVICE_ATTR(edid_video_latency, S_IRUGO,
+	hdmi_edid_sysfs_rda_video_latency, NULL);
+
 static ssize_t hdmi_edid_sysfs_rda_physical_address(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -316,6 +357,8 @@ static struct attribute *hdmi_edid_fs_attrs[] = {
 	&dev_attr_edid_raw_data.attr,
 	&dev_attr_audio_data_block.attr,
 	&dev_attr_spkr_alloc_data_block.attr,
+	&dev_attr_edid_audio_latency.attr,
+	&dev_attr_edid_video_latency.attr,
 	NULL,
 };
 
@@ -547,8 +590,7 @@ static void hdmi_edid_extract_3d_present(struct hdmi_edid_ctrl *edid_ctrl,
 static void hdmi_edid_extract_audio_data_blocks(
 	struct hdmi_edid_ctrl *edid_ctrl, const u8 *in_buf)
 {
-	u8 len = 0;
-	u8 adb_max = 0;
+	u8 len;
 	const u8 *adb = NULL;
 	u32 offset = DBC_START_OFFSET;
 
@@ -559,24 +601,16 @@ static void hdmi_edid_extract_audio_data_blocks(
 
 	edid_ctrl->adb_size = 0;
 
-	memset(edid_ctrl->audio_data_block, 0,
-		sizeof(edid_ctrl->audio_data_block));
-
 	do {
-		len = 0;
 		adb = hdmi_edid_find_block(in_buf, offset, AUDIO_DATA_BLOCK,
 			&len);
-
-		if ((adb == NULL) || (len > MAX_AUDIO_DATA_BLOCK_SIZE ||
-			adb_max >= MAX_NUMBER_ADB)) {
-			if (!edid_ctrl->adb_size) {
+		if ((adb == NULL) || (len > MAX_AUDIO_DATA_BLOCK_SIZE)) {
+			if (!edid_ctrl->adb_size)
 				DEV_DBG("%s: No/Invalid Audio Data Block\n",
 					__func__);
-				return;
-			} else {
+			else
 				DEV_DBG("%s: No more valid ADB found\n",
 					__func__);
-			}
 
 			continue;
 		}
@@ -586,7 +620,6 @@ static void hdmi_edid_extract_audio_data_blocks(
 		offset = (adb - in_buf) + 1 + len;
 
 		edid_ctrl->adb_size += len;
-		adb_max++;
 	} while (adb);
 
 } /* hdmi_edid_extract_audio_data_blocks */

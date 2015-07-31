@@ -49,7 +49,6 @@ struct hdmi_hdcp_ctrl {
 	u32 auth_retries;
 	u32 tp_msgid;
 	u32 tz_hdcp;
-	bool cancel_requested;
 	enum hdmi_hdcp_state hdcp_state;
 	struct HDCP_V2V1_MSG_TOPOLOGY cached_tp;
 	struct HDCP_V2V1_MSG_TOPOLOGY current_tp;
@@ -187,11 +186,11 @@ static void hdmi_hdcp_hw_ddc_clean(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 		do {
 			hdcp_ddc_status = DSS_REG_R(io, HDMI_HDCP_DDC_STATUS);
 			ddc_hw_status = DSS_REG_R(io, HDMI_DDC_HW_STATUS);
-			ddc_xfer_done = (hdcp_ddc_status & BIT(10)) ;
-			ddc_xfer_req = (hdcp_ddc_status & BIT(4)) ;
-			ddc_hw_done = (ddc_hw_status & BIT(3)) ;
-			ddc_hw_not_ready = ((ddc_xfer_done != 1) ||
-			(ddc_xfer_req != 0) || (ddc_hw_done != 1));
+			ddc_xfer_done = hdcp_ddc_status & BIT(10);
+			ddc_xfer_req = hdcp_ddc_status & BIT(4);
+			ddc_hw_done = ddc_hw_status & BIT(3);
+			ddc_hw_not_ready = !ddc_xfer_done ||
+				ddc_xfer_req || !ddc_hw_done;
 
 			DEV_DBG("%s: %s: timeout count(%d):ddc hw%sready\n",
 				__func__, HDCP_STATE_NAME, timeout_count,
@@ -288,12 +287,6 @@ static int hdmi_hdcp_authentication_part1(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 		DEV_DBG("%s: %s: An ready even before enabling HDCP\n",
 		__func__, HDCP_STATE_NAME);
 		stale_an = true;
-	}
-
-	if (hdcp_ctrl->cancel_requested) {
-		DEV_DBG("%s: cancel auth requested\n", __func__);
-		rc = -EINVAL;
-		goto error;
 	}
 
 	/*
@@ -610,7 +603,7 @@ static int hdmi_hdcp_authentication_part1(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 error:
 	if (rc) {
 		DEV_ERR("%s: %s: Authentication Part I failed\n", __func__,
-			HDCP_STATE_NAME);
+			hdcp_ctrl ? HDCP_STATE_NAME : "???");
 	} else {
 		/* Enable HDCP Encryption */
 		DSS_REG_W(io, HDMI_HDCP_CTRL, BIT(0) | BIT(8));
@@ -771,7 +764,7 @@ static int hdmi_hdcp_authentication_part2(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	 * Wait until READY bit is set in BCAPS, as per HDCP specifications
 	 * maximum permitted time to check for READY bit is five seconds.
 	 */
-	timeout_count = 45;
+	timeout_count = 50;
 	do {
 		timeout_count--;
 		/* Read BCAPS at offset 0x40 */
@@ -792,15 +785,6 @@ static int hdmi_hdcp_authentication_part2(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 		}
 		msleep(100);
 	} while (!(bcaps & BIT(5)) && timeout_count);
-
-	if (!timeout_count) {
-		/* Disable encryption */
-		DSS_REG_W(io, HDMI_HDCP_CTRL,
-		DSS_REG_R(io, HDMI_HDCP_CTRL) & ~BIT(8));
-
-		rc = -EINVAL;
-		goto error;
-	}
 
 	/* Read BSTATUS at offset 0x41 */
 	memset(&ddc_data, 0, sizeof(ddc_data));
@@ -1057,11 +1041,16 @@ static int hdmi_hdcp_authentication_part2(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 error:
 	if (rc)
 		DEV_ERR("%s: %s: Authentication Part II failed\n", __func__,
-			HDCP_STATE_NAME);
+			hdcp_ctrl ? HDCP_STATE_NAME : "???");
 	else
 		DEV_INFO("%s: %s: Authentication Part II successful\n",
 			__func__, HDCP_STATE_NAME);
 
+	if (!hdcp_ctrl) {
+		DEV_ERR("%s: hdcp_ctrl null. Topology not updated\n",
+			__func__);
+		return rc;
+	}
 	/* Update topology information */
 	hdcp_ctrl->current_tp.dev_count = down_stream_devices;
 	hdcp_ctrl->current_tp.max_cascade_exceeded = max_cascade_exceeded;
@@ -1141,11 +1130,6 @@ static void hdmi_hdcp_auth_work(struct work_struct *work)
 		return;
 	}
 
-	if (hdcp_ctrl->cancel_requested) {
-		DEV_DBG("%s: cancel auth requested\n", __func__);
-		return;
-	}
-
 	io = hdcp_ctrl->init_data.core_io;
 	/* Enabling Software DDC */
 	DSS_REG_W_ND(io, HDMI_DDC_ARBITRATION , DSS_REG_R(io,
@@ -1168,12 +1152,12 @@ static void hdmi_hdcp_auth_work(struct work_struct *work)
 	} else {
 		DEV_INFO("%s: Downstream device is not a repeater\n", __func__);
 	}
-
-error:
 	/* Disabling software DDC before going into part3 to make sure
 	 * there is no Arbitration between software and hardware for DDC */
 	DSS_REG_W_ND(io, HDMI_DDC_ARBITRATION , DSS_REG_R(io,
 				HDMI_DDC_ARBITRATION) | (BIT(4)));
+
+error:
 	/*
 	 * Ensure that the state did not change during authentication.
 	 * If it did, it means that deauthenticate/reauthenticate was
@@ -1253,11 +1237,6 @@ int hdmi_hdcp_reauthenticate(void *input)
 		return 0;
 	}
 
-	if (hdcp_ctrl->cancel_requested) {
-		DEV_DBG("%s: cancel auth requested\n", __func__);
-		return 0;
-	}
-
 	/*
 	 * Disable HPD circuitry.
 	 * This is needed to reset the HDCP cipher engine so that when we
@@ -1294,12 +1273,6 @@ int hdmi_hdcp_reauthenticate(void *input)
 
 	return ret;
 } /* hdmi_hdcp_reauthenticate */
-
-void hdmi_hdcp_cancel_auth(void *input, bool req)
-{
-	struct hdmi_hdcp_ctrl *hdcp_ctrl = (struct hdmi_hdcp_ctrl *)input;
-	hdcp_ctrl->cancel_requested = req;
-}
 
 void hdmi_hdcp_off(void *input)
 {
@@ -1392,10 +1365,6 @@ int hdmi_hdcp_isr(void *input)
 		DEV_INFO("%s: %s: AUTH_FAIL_INT rcvd, LINK0_STATUS=0x%08x\n",
 			__func__, HDCP_STATE_NAME, link_status);
 		if (HDCP_STATE_AUTHENTICATED == hdcp_ctrl->hdcp_state) {
-			/* Disable encryption */
-			DSS_REG_W(io, HDMI_HDCP_CTRL,
-			DSS_REG_R(io, HDMI_HDCP_CTRL) & ~BIT(8));
-
 			/* Inform HDMI Tx of the failure */
 			queue_work(hdcp_ctrl->init_data.workq,
 				&hdcp_ctrl->hdcp_int_work);
@@ -1542,9 +1511,7 @@ void hdmi_hdcp_deinit(void *input)
 void *hdmi_hdcp_init(struct hdmi_hdcp_init_data *init_data)
 {
 	struct hdmi_hdcp_ctrl *hdcp_ctrl = NULL;
-	u32 scm_buf = TZ_HDCP_CMD_ID;
-	u32 ret  = 0;
-	u32 resp = 0;
+	int ret;
 
 	if (!init_data || !init_data->core_io || !init_data->qfprom_io ||
 		!init_data->mutex || !init_data->ddc_ctrl ||
@@ -1574,15 +1541,13 @@ void *hdmi_hdcp_init(struct hdmi_hdcp_init_data *init_data)
 	hdcp_ctrl->hdcp_state = HDCP_STATE_INACTIVE;
 	init_completion(&hdcp_ctrl->r0_checked);
 
-	ret = scm_call(SCM_SVC_INFO, SCM_CMD_HDCP, (void *) &scm_buf,
-		sizeof(scm_buf), (void *) &resp, sizeof(resp));
-
-	if (ret) {
-		DEV_ERR("%s: error: scm_call ret = %d, resp = %d\n",
-			__func__, ret, resp);
+	ret = scm_is_call_available(SCM_SVC_HDCP, SCM_CMD_HDCP);
+	if (ret <= 0) {
+		DEV_ERR("%s: error: secure hdcp service unavailable, ret = %d",
+			 __func__, ret);
 	} else {
-		DEV_DBG("%s: tz_hdcp = %d\n", __func__, resp);
-		hdcp_ctrl->tz_hdcp = resp;
+		DEV_DBG("%s: tz_hdcp = 1\n", __func__);
+		hdcp_ctrl->tz_hdcp = 1;
 	}
 
 	DEV_DBG("%s: HDCP module initialized. HDCP_STATE=%s", __func__,

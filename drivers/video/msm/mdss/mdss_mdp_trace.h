@@ -44,8 +44,6 @@ DECLARE_EVENT_CLASS(mdp_sspp_template,
 			__field(u16, dst_y)
 			__field(u16, dst_w)
 			__field(u16, dst_h)
-			__field(u16, vert_deci)
-			__field(u16, horz_deci)
 	),
 	TP_fast_assign(
 			__entry->num = pipe->num;
@@ -65,19 +63,16 @@ DECLARE_EVENT_CLASS(mdp_sspp_template,
 			__entry->dst_y = pipe->dst.y;
 			__entry->dst_w = pipe->dst.w;
 			__entry->dst_h = pipe->dst.h;
-			__entry->vert_deci = pipe->vert_deci;
-			__entry->horz_deci = pipe->horz_deci;
 	),
 
-	TP_printk("num=%d mixer=%d play_cnt=%d flags=0x%x stage=%d format=%d img=%dx%d src=[%d,%d,%d,%d] dst=[%d,%d,%d,%d] v:%d h:%d",
+	TP_printk("pnum=%d mixer=%d play_cnt=%d flags=0x%x stage=%d format=%d img=%dx%d src=[%d,%d,%d,%d] dst=[%d,%d,%d,%d]",
 			__entry->num, __entry->mixer, __entry->play_cnt,
 			__entry->flags, __entry->stage,
 			__entry->format, __entry->img_w, __entry->img_h,
 			__entry->src_x, __entry->src_y,
 			__entry->src_w, __entry->src_h,
 			__entry->dst_x, __entry->dst_y,
-			__entry->dst_w, __entry->dst_h,
-			__entry->vert_deci, __entry->horz_deci)
+			__entry->dst_w, __entry->dst_h)
 );
 
 DEFINE_EVENT(mdp_sspp_template, mdp_sspp_set,
@@ -88,6 +83,74 @@ DEFINE_EVENT(mdp_sspp_template, mdp_sspp_set,
 DEFINE_EVENT(mdp_sspp_template, mdp_sspp_change,
 	TP_PROTO(struct mdss_mdp_pipe *pipe),
 	TP_ARGS(pipe)
+);
+
+TRACE_EVENT(mdp_perf_set_wm_levels,
+	TP_PROTO(u32 pnum, u32 use_space, u32 priority_bytes, u32 wm0, u32 wm1,
+		u32 wm2, u32 mb_cnt, u32 mb_size),
+	TP_ARGS(pnum, use_space, priority_bytes, wm0, wm1, wm2, mb_cnt,
+		mb_size),
+	TP_STRUCT__entry(
+			__field(u32, pnum)
+			__field(u32, use_space)
+			__field(u32, priority_bytes)
+			__field(u32, wm0)
+			__field(u32, wm1)
+			__field(u32, wm2)
+			__field(u32, mb_cnt)
+			__field(u32, mb_size)
+	),
+	TP_fast_assign(
+			__entry->pnum = pnum;
+			__entry->use_space = use_space;
+			__entry->priority_bytes = priority_bytes;
+			__entry->wm0 = wm0;
+			__entry->wm1 = wm1;
+			__entry->wm2 = wm2;
+			__entry->mb_cnt = mb_cnt;
+			__entry->mb_size = mb_size;
+	),
+	TP_printk("pnum:%d useable_space:%d priority_bytes:%d watermark:[%d | %d | %d] nmb=%d mb_size=%d",
+			__entry->pnum, __entry->use_space,
+			__entry->priority_bytes, __entry->wm0, __entry->wm1,
+			__entry->wm2, __entry->mb_cnt, __entry->mb_size)
+);
+
+TRACE_EVENT(mdp_perf_prefill_calc,
+	TP_PROTO(u32 pnum, u32 latency_buf, u32 ot, u32 y_buf, u32 y_scaler,
+		u32 pp_lines, u32 pp_bytes, u32 post_sc, u32 fbc_bytes,
+		u32 prefill_bytes),
+	TP_ARGS(pnum, latency_buf, ot, y_buf, y_scaler, pp_lines, pp_bytes,
+		post_sc, fbc_bytes, prefill_bytes),
+	TP_STRUCT__entry(
+			__field(u32, pnum)
+			__field(u32, latency_buf)
+			__field(u32, ot)
+			__field(u32, y_buf)
+			__field(u32, y_scaler)
+			__field(u32, pp_lines)
+			__field(u32, pp_bytes)
+			__field(u32, post_sc)
+			__field(u32, fbc_bytes)
+			__field(u32, prefill_bytes)
+	),
+	TP_fast_assign(
+			__entry->pnum = pnum;
+			__entry->latency_buf = latency_buf;
+			__entry->ot = ot;
+			__entry->y_buf = y_buf;
+			__entry->y_scaler = y_scaler;
+			__entry->pp_lines = pp_lines;
+			__entry->pp_bytes = pp_bytes;
+			__entry->post_sc = post_sc;
+			__entry->fbc_bytes = fbc_bytes;
+			__entry->prefill_bytes = prefill_bytes;
+	),
+	TP_printk("pnum:%d latency_buf:%d ot:%d y_buf:%d y_scaler:%d pp_lines:%d, pp_bytes=%d post_sc:%d fbc_bytes:%d prefill:%d",
+			__entry->pnum, __entry->latency_buf, __entry->ot,
+			__entry->y_buf, __entry->y_scaler, __entry->pp_lines,
+			__entry->pp_bytes, __entry->post_sc,
+			__entry->fbc_bytes, __entry->prefill_bytes)
 );
 
 TRACE_EVENT(mdp_mixer_update,
@@ -140,52 +203,22 @@ TRACE_EVENT(mdp_video_underrun_done,
 			__entry->ctl_num, __entry->underrun_cnt)
 );
 
-TRACE_EVENT(tracing_mark_write,
-	TP_PROTO(int pid, const char *name, bool trace_begin),
-	TP_ARGS(pid, name, trace_begin),
-	TP_STRUCT__entry(
-			__field(int, pid)
-			__string(trace_name, name)
-			__field(bool, trace_begin)
-	),
-	TP_fast_assign(
-			__entry->pid = pid;
-			__assign_str(trace_name, name);
-			__entry->trace_begin = trace_begin;
-	),
-	TP_printk("%s|%d|%s", __entry->trace_begin ? "B" : "E",
-		__entry->pid, __get_str(trace_name))
-);
-
-TRACE_EVENT(mdp_trace_counter,
-	TP_PROTO(int pid, char *name, int value),
-	TP_ARGS(pid, name, value),
-	TP_STRUCT__entry(
-			__field(int, pid)
-			__string(counter_name, name)
-			__field(int, value)
-	),
-	TP_fast_assign(
-			__entry->pid = current->tgid;
-			__assign_str(counter_name, name);
-			__entry->value = value;
-	),
-	TP_printk("%d|%s|%d", __entry->pid,
-			__get_str(counter_name), __entry->value)
-);
-
 TRACE_EVENT(mdp_perf_update_bus,
-	TP_PROTO(unsigned long long ab_quota, unsigned long long ib_quota),
-	TP_ARGS(ab_quota, ib_quota),
+	TP_PROTO(int client, unsigned long long ab_quota,
+	unsigned long long ib_quota),
+	TP_ARGS(client, ab_quota, ib_quota),
 	TP_STRUCT__entry(
+			__field(int, client)
 			__field(u64, ab_quota)
 			__field(u64, ib_quota)
 	),
 	TP_fast_assign(
+			__entry->client = client;
 			__entry->ab_quota = ab_quota;
 			__entry->ib_quota = ib_quota;
 	),
-	TP_printk("ab=%llu ib=%llu",
+	TP_printk("Request client:%d ab=%llu ib=%llu",
+			__entry->client,
 			__entry->ab_quota,
 			__entry->ib_quota)
 );
@@ -252,6 +285,40 @@ TRACE_EVENT(mdp_cmd_wait_pingpong,
 	TP_printk("pingpong ctl=%d cnt=%d",
 			__entry->ctl_num,
 			__entry->kickoff_cnt)
+);
+
+TRACE_EVENT(tracing_mark_write,
+	TP_PROTO(int pid, const char *name, bool trace_begin),
+	TP_ARGS(pid, name, trace_begin),
+	TP_STRUCT__entry(
+			__field(int, pid)
+			__string(trace_name, name)
+			__field(bool, trace_begin)
+	),
+	TP_fast_assign(
+			__entry->pid = pid;
+			__assign_str(trace_name, name);
+			__entry->trace_begin = trace_begin;
+	),
+	TP_printk("%s|%d|%s", __entry->trace_begin ? "B" : "E",
+		__entry->pid, __get_str(trace_name))
+);
+
+TRACE_EVENT(mdp_trace_counter,
+	TP_PROTO(int pid, char *name, int value),
+	TP_ARGS(pid, name, value),
+	TP_STRUCT__entry(
+			__field(int, pid)
+			__string(counter_name, name)
+			__field(int, value)
+	),
+	TP_fast_assign(
+			__entry->pid = current->tgid;
+			__assign_str(counter_name, name);
+			__entry->value = value;
+	),
+	TP_printk("%d|%s|%d", __entry->pid,
+			__get_str(counter_name), __entry->value)
 );
 
 #endif /* if !defined(TRACE_MDSS_MDP_H) || defined(TRACE_HEADER_MULTI_READ) */

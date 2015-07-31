@@ -795,7 +795,6 @@ static int mdss_edp_device_register(struct mdss_edp_drv_pdata *edp_drv)
 
 	edp_drv->panel_data.panel_info.cont_splash_enabled =
 					edp_drv->cont_splash;
-	edp_drv->panel_data.panel_info.is_prim_panel = true;
 
 	ret = mdss_register_panel(edp_drv->pdev, &edp_drv->panel_data);
 	if (ret) {
@@ -1012,7 +1011,7 @@ static void mdss_edp_irq_enable(struct mdss_edp_drv_pdata *edp_drv)
 	edp_write(edp_drv->base + 0x30c, edp_drv->mask2);
 	spin_unlock_irqrestore(&edp_drv->lock, flags);
 
-	mdss_enable_irq(&mdss_edp_hw);
+	edp_drv->mdss_util->enable_irq(&mdss_edp_hw);
 }
 
 static void mdss_edp_irq_disable(struct mdss_edp_drv_pdata *edp_drv)
@@ -1024,7 +1023,7 @@ static void mdss_edp_irq_disable(struct mdss_edp_drv_pdata *edp_drv)
 	edp_write(edp_drv->base + 0x30c, 0x0);
 	spin_unlock_irqrestore(&edp_drv->lock, flags);
 
-	mdss_disable_irq(&mdss_edp_hw);
+	edp_drv->mdss_util->disable_irq(&mdss_edp_hw);
 }
 
 static int mdss_edp_irq_setup(struct mdss_edp_drv_pdata *edp_drv)
@@ -1071,7 +1070,7 @@ static int mdss_edp_irq_setup(struct mdss_edp_drv_pdata *edp_drv)
 
 	mdss_edp_hw.ptr = (void *)(edp_drv);
 
-	if (mdss_register_irq(&mdss_edp_hw))
+	if (edp_drv->mdss_util->register_irq(&mdss_edp_hw))
 		pr_err("%s: mdss_register_irq failed.\n", __func__);
 
 
@@ -1115,6 +1114,19 @@ static int mdss_edp_probe(struct platform_device *pdev)
 	if (edp_drv == NULL) {
 		pr_err("%s: Failed, could not allocate edp_drv", __func__);
 		return -ENOMEM;
+	}
+
+	edp_drv->mdss_util = mdss_get_util_intf();
+	if (edp_drv->mdss_util == NULL) {
+		pr_err("Failed to get mdss utility functions\n");
+		return -ENODEV;
+	}
+	edp_drv->panel_data.panel_info.is_prim_panel = true;
+
+	mdss_edp_hw.irq_info = mdss_intr_line();
+	if (mdss_edp_hw.irq_info == NULL) {
+		pr_err("Failed to get mdss irq information\n");
+		return -ENODEV;
 	}
 
 	edp_drv->pdev = pdev;

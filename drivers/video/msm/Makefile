@@ -61,3 +61,5 @@ obj-$(CONFIG_MSM_VIDC_1080P) += vidc/
 obj-$(CONFIG_MSM_VIDC_720P) += vidc/
 clean:
 	rm *.o .*cmd
+
+obj-$(CONFIG_SLIMPORT_ANX7808) += mydp-7808/

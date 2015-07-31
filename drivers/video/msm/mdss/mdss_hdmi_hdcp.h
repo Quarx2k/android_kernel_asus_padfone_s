@@ -14,6 +14,7 @@
 #define __MDSS_HDMI_HDCP_H__
 
 #include "mdss_hdmi_util.h"
+#include <soc/qcom/scm.h>
 
 enum hdmi_hdcp_state {
 	HDCP_STATE_INACTIVE,
@@ -43,5 +44,4 @@ int hdmi_hdcp_isr(void *ptr);
 int hdmi_hdcp_reauthenticate(void *input);
 int hdmi_hdcp_authenticate(void *hdcp_ctrl);
 void hdmi_hdcp_off(void *hdcp_ctrl);
-void hdmi_hdcp_cancel_auth(void *input, bool req);
 #endif /* __MDSS_HDMI_HDCP_H__ */

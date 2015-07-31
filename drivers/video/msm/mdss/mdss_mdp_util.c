@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,7 +16,7 @@
 #include <linux/errno.h>
 #include <linux/file.h>
 #include <linux/msm_ion.h>
-#include <linux/iommu.h>
+#include <mach/iommu.h>
 #include <linux/msm_kgsl.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
@@ -211,7 +211,8 @@ irqreturn_t mdss_mdp_isr(int irq, void *ptr)
 		mdss_misr_crc_collect(mdata, DISPLAY_MISR_MDP);
 	}
 
-	if (isr & MDSS_MDP_INTR_WB_2_DONE) {
+	if (isr & ((mdata->mdp_rev == MDSS_MDP_HW_REV_108) ?
+		MDSS_MDP_INTR_WB_2_DONE >> 2 : MDSS_MDP_INTR_WB_2_DONE)) {
 		mdss_mdp_intr_done(MDP_INTR_WB_2);
 		mdss_misr_crc_collect(mdata, DISPLAY_MISR_MDP);
 	}
@@ -324,7 +325,7 @@ int mdss_mdp_get_rau_strides(u32 w, u32 h,
 }
 
 int mdss_mdp_get_plane_sizes(u32 format, u32 w, u32 h,
-			     struct mdss_mdp_plane_sizes *ps, u32 bwc_mode)
+	struct mdss_mdp_plane_sizes *ps, u32 bwc_mode, bool rotation)
 {
 	struct mdss_mdp_format_params *fmt;
 	int i, rc;
@@ -378,9 +379,24 @@ int mdss_mdp_get_plane_sizes(u32 format, u32 w, u32 h,
 			u8 hmap[] = { 1, 2, 1, 2 };
 			u8 vmap[] = { 1, 1, 2, 2 };
 			u8 horiz, vert, stride_align, height_align;
+			u32 chroma_samp;
 
-			horiz = hmap[fmt->chroma_sample];
-			vert = vmap[fmt->chroma_sample];
+			chroma_samp = fmt->chroma_sample;
+
+			if (rotation) {
+				if (chroma_samp == MDSS_MDP_CHROMA_H2V1)
+					chroma_samp = MDSS_MDP_CHROMA_H1V2;
+				else if (chroma_samp == MDSS_MDP_CHROMA_H1V2)
+					chroma_samp = MDSS_MDP_CHROMA_H2V1;
+			}
+
+			if (chroma_samp >= ARRAY_SIZE(hmap) ||
+				chroma_samp >= ARRAY_SIZE(vmap)) {
+				pr_err("%s: out of bounds error\n", __func__);
+				return -ERANGE;
+			}
+			horiz = hmap[chroma_samp];
+			vert = vmap[chroma_samp];
 
 			switch (format) {
 			case MDP_Y_CR_CB_GH2V2:
@@ -506,10 +522,6 @@ static int mdss_mdp_put_img(struct mdss_mdp_img_data *data)
 				ion_unmap_iommu(iclient, data->srcp_ihdl,
 					mdss_get_iommu_domain(domain), 0);
 
-				if (domain == MDSS_IOMMU_DOMAIN_SECURE) {
-					msm_ion_unsecure_buffer(iclient,
-							data->srcp_ihdl);
-				}
 				data->mapped = false;
 			}
 			ion_free(iclient, data->srcp_ihdl);
@@ -534,7 +546,7 @@ static int mdss_mdp_get_img(struct msmfb_data *img,
 	struct ion_client *iclient = mdss_get_ionclient();
 
 	start = &data->addr;
-	len = (unsigned long *) &data->len;
+	len = &data->len;
 	data->flags |= img->flags;
 	data->p_need = 0;
 	data->offset = img->offset;
@@ -606,35 +618,21 @@ static int mdss_mdp_map_buffer(struct mdss_mdp_img_data *data)
 		return 0;
 
 	if (!IS_ERR_OR_NULL(data->srcp_ihdl)) {
-		if (is_mdss_iommu_attached()) {
+		if (mdss_res->mdss_util->iommu_attached()) {
 			int domain;
-			if (data->flags & MDP_SECURE_OVERLAY_SESSION) {
+			if (data->flags & MDP_SECURE_OVERLAY_SESSION)
 				domain = MDSS_IOMMU_DOMAIN_SECURE;
-				ret = msm_ion_secure_buffer(iclient,
-					data->srcp_ihdl, 0x2, 0);
-				if (IS_ERR_VALUE(ret)) {
-					ion_free(iclient, data->srcp_ihdl);
-					pr_err("failed to secure handle (%d)\n",
-						ret);
-					return ret;
-				}
-			} else {
+			else
 				domain = MDSS_IOMMU_DOMAIN_UNSECURE;
-			}
 
 			ret = ion_map_iommu(iclient, data->srcp_ihdl,
 						mdss_get_iommu_domain(domain),
 						0, SZ_4K, 0, &data->addr,
 						&data->len, 0, 0);
-			if (ret && (domain == MDSS_IOMMU_DOMAIN_SECURE))
-				msm_ion_unsecure_buffer(iclient,
-						data->srcp_ihdl);
-
 			data->mapped = true;
 		} else {
 			ret = ion_phys(iclient, data->srcp_ihdl,
-					&data->addr,
-					(size_t *) &data->len);
+					&data->addr, (size_t *) &data->len);
 		}
 
 		if (IS_ERR_VALUE(ret)) {
@@ -664,11 +662,10 @@ static int mdss_mdp_map_buffer(struct mdss_mdp_img_data *data)
 	return ret;
 }
 
-
 int mdss_mdp_data_get(struct mdss_mdp_data *data, struct msmfb_data *planes,
 		int num_planes, u32 flags)
 {
-	int i, rc;
+	int i, rc = 0;
 
 	if ((num_planes <= 0) || (num_planes > MAX_PLANES))
 		return -EINVAL;
@@ -693,7 +690,7 @@ int mdss_mdp_data_get(struct mdss_mdp_data *data, struct msmfb_data *planes,
 
 int mdss_mdp_data_map(struct mdss_mdp_data *data)
 {
-	int i, rc;
+	int i, rc = 0;
 
 	if (!data || !data->num_planes)
 		return -EINVAL;

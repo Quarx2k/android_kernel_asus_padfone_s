@@ -32,6 +32,11 @@ struct msm_hdmi_mode_timing_info {
 	enum aspect_ratio ar;
 };
 
+enum {
+	HDMI_TYPE_TV = 1,
+	HDMI_TYPE_PAD = 2
+};
+
 #define MSM_HDMI_MODES_CEA		(1 << 0)
 #define MSM_HDMI_MODES_XTND		(1 << 1)
 #define MSM_HDMI_MODES_DVI		(1 << 2)

@@ -49,6 +49,22 @@
 #include "smd_private.h"
 #include "../../../drivers/soc/qcom/smem_private.h"
 
+//ASUS_BSP Daniel_Kuo +++ "antenna switch with the phone/pad mode"
+/*------------------------------*/
+#include <linux/proc_fs.h>
+//#include <linux/asusdebug.h>
+#include <linux/gpio.h>
+#include <linux/of.h>
+#include <linux/of_gpio.h>
+#include <linux/syscalls.h>
+/*------------------------------*/
+//ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
+
+//ASUS_BSP Daniel_Kuo+++ "for PG test in pad mod with Y-cable (20130322)"
+#include <linux/file.h>
+#include <asm/uaccess.h>
+//ASUS_BSP Daniel_Kuo--- "for PG test in pad mod with Y-cable (20130322)"
+
 #define SMSM_SNAPSHOT_CNT 64
 #define SMSM_SNAPSHOT_SIZE ((SMSM_NUM_ENTRIES + 1) * 4 + sizeof(uint64_t))
 #define RSPIN_INIT_WAIT_MS 1000
@@ -200,6 +216,16 @@ void *smsm_log_ctx;
 static inline void smd_write_intr(unsigned int val,
 				const void __iomem *addr);
 
+//ASUS_BSP Daniel_Kuo+++ "antenna switch with the phone/pad mode"
+/*--------------------------------------------------*/
+static int g_padfone_plug_in = 0;
+static char g_rf_switch_status[10];
+static int g_ANT_GPIO_122 = 0;
+static int has_PG_run = 0;
+module_param(has_PG_run, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+/*--------------------------------------------------*/
+//ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
+
 static void smd_fake_irq_handler(unsigned long arg);
 static void smsm_cb_snapshot(uint32_t use_wakeup_source);
 
@@ -213,6 +239,37 @@ static int smd_stream_write_avail(struct smd_channel *ch);
 static int smd_stream_read_avail(struct smd_channel *ch);
 
 static bool pid_is_on_edge(uint32_t edge_num, unsigned pid);
+
+//ASUS_BSP Daniel_Kuo+++ "antenna switch with the phone/pad mode"
+/*--------------------------------------------------------------------------------*/
+int PadFone_IN_OUT(int isin);
+void Check_antenna(void);
+void set_antenna_PHONE(void);
+void set_antenna_PADMAIN(void);
+//static int rf_switch_read_proc(char *page, char **start, off_t off, int count, int *eof, void *data);
+//static int rf_switch_write_proc(struct file *file, const char __user *buffer, unsigned long count, void *data);
+int Check_PG_Run(void);
+/*--------------------------------------------------------------------------------*/
+//ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
+//ASUS_BSP Daniel_Kuo+++ "for PG test in pad mod with Y-cable (20130322)"
+int Check_PG_Run(void)
+{
+    mm_segment_t oldfs;
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+
+    if(sys_access("/data/.tmp/has_PG_run",0) != 0){ //+++ Daniel_Kuo Check whether the file exits (20140108)
+        printk("[smd]: filp_open fail.\n");
+    }
+    else {
+        has_PG_run = 1;
+        printk("[smd]: filp_open OK.\n");
+    }
+
+    set_fs(oldfs);
+    return 0;
+}
+//ASUS_BSP Daniel_Kuo--- "for PG test in pad mod with Y-cable (20130322)"
 
 static inline void smd_write_intr(unsigned int val,
 				const void __iomem *addr)
@@ -2908,6 +2965,113 @@ int smsm_state_cb_deregister(uint32_t smsm_entry, uint32_t mask,
 }
 EXPORT_SYMBOL(smsm_state_cb_deregister);
 
+//ASUS_BSP Daniel_Kuo+++ "antenna switch with the phone/pad mode"
+/*--------------------------------------------------------------------------------*/
+
+int PadFone_IN_OUT(int isin)
+{
+    //PadFone is IN
+    if( isin ) {
+        g_padfone_plug_in = 1;
+    }
+    else { //PadFone is OUT
+        g_padfone_plug_in = 0;
+    }
+
+    printk("[smd]: g_padfone_plug_in=%d.\n", g_padfone_plug_in);
+
+    //ASUS_BSP Daniel_Kuo+++ "for PG test in pad mod with Y-cable (20130322)"
+    Check_PG_Run();
+    if( has_PG_run == 1 ) {
+        set_antenna_PHONE();
+        printk("[smd]: set_antenna_PHONE().\n");
+        return g_padfone_plug_in;
+    }
+    //ASUS_BSP Daniel_Kuo--- "for PG test in pad mod with Y-cable (20130322)"
+
+    Check_antenna();
+
+    return g_padfone_plug_in;
+}
+EXPORT_SYMBOL(PadFone_IN_OUT);
+
+
+void Check_antenna( void )
+{
+    if( g_padfone_plug_in == 1 ) {
+        set_antenna_PADMAIN();
+    }
+    else {
+        set_antenna_PHONE();
+    }
+}
+
+void set_antenna_PHONE( void )
+{
+  if(g_ASUS_hwID != A90_EVB0){    
+    if( g_ANT_GPIO_122 > 0 ) {
+	printk("[smd]: set_antenna_PHONE.\n");
+        gpio_direction_output(g_ANT_GPIO_122, 0);
+    }
+    else {
+        printk("[smd]: set_antenna_PHONE, RF_SW GPIO wrong.\n");
+    }
+  }
+    strcpy(g_rf_switch_status, "phone");
+}
+
+
+void set_antenna_PADMAIN( void )
+{
+  if(g_ASUS_hwID != A90_EVB0){ 
+    if( g_ANT_GPIO_122 > 0 ) {
+	printk("[smd]: set_antenna_PADMAIN.\n");
+        gpio_direction_output(g_ANT_GPIO_122, 1);
+    }
+    else {
+        printk("[smd]: set_antenna_PADMAIN, RF_SW GPIO wrong.\n");
+    }
+  }
+    strcpy(g_rf_switch_status, "pad_main");
+}
+#if 0
+static int rf_switch_read_proc(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+    int len = 0;
+
+    len = sprintf(page, "%s\n", g_rf_switch_status);
+    return len ;
+}
+
+static int rf_switch_write_proc(struct file *file, const char __user *buffer, unsigned long count, void *data)
+{
+    char buf[16];
+    unsigned long len = count;
+
+    if( len > 16 ) {
+        len = 16;
+    }
+
+    if( copy_from_user(buf, buffer, len) ) {
+        return -EFAULT;
+    }
+
+    if( strncmp(buf, "phone", 5) == 0 ) {
+        set_antenna_PHONE();
+    } 
+    else if( strncmp(buf, "pad_main", 8) == 0 ) {
+        set_antenna_PADMAIN();
+    }
+    else {
+        printk("[smd]: usage, echo {phone/pad_main} > /proc/rf_switch_status\n");
+    }
+
+    return len;
+}
+#endif
+/*--------------------------------------------------------------------------------*/
+//ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
+
 static int restart_notifier_cb(struct notifier_block *this,
 				  unsigned long code,
 				  void *data);
@@ -3144,6 +3308,8 @@ int __init msm_smd_init(void)
 	static bool registered;
 	int rc;
 	int i;
+	int ret;
+ 	//struct proc_dir_entry *entry;
 
 	if (registered)
 		return 0;
@@ -3181,6 +3347,49 @@ int __init msm_smd_init(void)
 			__func__, rc);
 		return rc;
 	}
+
+    //ASUS_BSP Daniel_Kuo+++ "antenna switch with the phone/pad mode"
+    /*--------------------------------------------------------------------------------*/
+
+  if(g_ASUS_hwID != A90_EVB0){ 
+    //g_ANT_GPIO_122 = of_get_named_gpio(node, "qcom,ant_gpio_122", 0);
+    g_ANT_GPIO_122 = 122;
+    if( !gpio_is_valid(g_ANT_GPIO_122) ) {
+        printk("[smd]: gpio_is_valid fail, (g_ANT_GPIO_122=%d).\n", g_ANT_GPIO_122);
+    }
+    else {
+	    ret = gpio_request(g_ANT_GPIO_122, "ANT_GPIO_122");
+	    if( ret < 0 ) {
+		    printk("[smd]: gpio_request fail, (g_ANT_GPIO_122=%d).\n", g_ANT_GPIO_122);
+	    }
+        else {
+            printk("[smd]: g_ANT_GPIO_122=%d.\n", g_ANT_GPIO_122);
+        }
+
+	    ret = gpio_direction_output(g_ANT_GPIO_122, 1);
+	    if( ret < 0 ) {
+		 printk("[smd]:g_ANT_GPIO_122 output fail.\n");
+	    }
+            else {
+                 printk("[smd]:g_ANT_GPIO_122 output (1).\n");
+            }
+    }
+  }
+    strcpy(g_rf_switch_status, "phone");
+    Check_antenna();
+/* TODO Quarx 
+    entry = create_proc_entry("rf_switch_status", 0666, NULL);
+    if( entry == NULL ) {
+        printk("[smd]: create_proc_entry fail (rf_switch_status).\r\n");
+    }
+    else {
+        entry->read_proc = rf_switch_read_proc;
+        entry->write_proc = rf_switch_write_proc;
+    } 
+*/
+    /*--------------------------------------------------------------------------------*/
+    //ASUS_BSP Daniel_Kuo--- "antenna switch with the phone/pad mode"
+
 	return 0;
 }
 

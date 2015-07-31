@@ -531,6 +531,14 @@ static int msm_wdog_dt_to_pdata(struct platform_device *pdev,
 	return 0;
 }
 
+void ASUS_pet_watchdog_v2(void)
+{
+	if (wdog_data->do_ipi_ping)
+		ping_other_cpus(wdog_data);
+	pet_watchdog(wdog_data);
+	printk("[WatchDogV2]\n");
+}
+
 static int msm_watchdog_probe(struct platform_device *pdev)
 {
 	int ret;
