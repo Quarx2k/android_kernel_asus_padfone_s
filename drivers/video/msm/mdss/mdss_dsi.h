@@ -601,4 +601,6 @@ static inline bool mdss_dsi_ulps_feature_enabled(
 	return pdata->panel_info.ulps_feature_enabled;
 }
 
+int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value);
+
 #endif /* MDSS_DSI_H */

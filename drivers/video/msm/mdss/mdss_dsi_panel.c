@@ -34,6 +34,68 @@
 
 #define MIN_REFRESH_RATE 30
 
+#ifdef ASUS_PF500KL_PROJECT
+#define LCD_ID_DETECT 26
+enum {
+    SHARP_DISP = 0,
+    INNOLUX_DISP,
+};
+extern void asus_mdss_mdp_clk_ctl(bool enable);
+static bool CABC_MOVING = true;
+static struct mutex cmd_mutex;
+extern struct mdss_panel_data *g_mdss_pdata;
+#ifdef CONFIG_LEDS_QPNP
+extern void qpnp_wled_ctrl(bool enable);
+#endif
+extern int himax_ts_suspend(void);
+extern int himax_ts_resume(void);
+int A91_lcd_id = 0; // 0:sharp; 1:innolux
+static char a86_bl_val[3] = {0x51, 0x01, 0x00};
+static char a86_bl_init_val[3] = {0x51, 0x01, 0x00};	// jacob add for skip abnormal backlight value
+static char a86_ctrl_display[2] = {0x53, 0x2C};     //enable dimming ctrl bit
+static char cabc_ctrl[2] = {0x55, 0x3}; //moving mode
+static char a90_bl_val[2] = {0x51, 0x64};
+static char a90_bl_init_val[2] = {0x51, 0x35};	// jacob add for skip abnormal backlight value
+#ifdef CONFIG_P05_NOVATEK_CM
+extern void nvt71890_cabc_set(bool bOn);
+#endif
+#ifdef CONFIG_A86_BACKLIGHT
+extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
+#endif
+static struct dsi_cmd_desc renesas_brightness_set = {
+    {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(a86_bl_val)},
+    a86_bl_val
+};
+static struct dsi_cmd_desc nvt_brightness_set = {
+    {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(a90_bl_val)},
+    a90_bl_val
+};
+extern void asus_set_bl_brightness(struct mdss_dsi_ctrl_pdata *, int );
+static struct dsi_cmd_desc a86_cabc_cmd[] = {
+    { {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(a86_ctrl_display)}, a86_ctrl_display},
+    { {DTYPE_DCS_LWRITE, 1, 0, 0, 0, sizeof(cabc_ctrl)}, cabc_ctrl},
+};
+
+void sharp_set_cabc(struct mdss_dsi_ctrl_pdata *ctrl, int mode)
+{
+        struct dcs_cmd_req cmdreq;
+        mutex_lock(&cmd_mutex);
+
+        cabc_ctrl[1] = cabc_ctrl[1] & 0xf0;
+        cabc_ctrl[1] += mode;
+        printk("[Display][CABC] write cabc mode = 0x%x\n", cabc_ctrl[1]);
+
+        memset(&cmdreq, 0, sizeof(cmdreq));
+        cmdreq.cmds = a86_cabc_cmd;
+        cmdreq.cmds_cnt = ARRAY_SIZE(a86_cabc_cmd);
+        cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+        cmdreq.rlen = 0;
+        cmdreq.cb = NULL;
+        mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+        mutex_unlock(&cmd_mutex);
+}
+#endif 
+
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
 #if defined(CONFIG_BACKLIGHT_LM3630)
@@ -176,7 +238,7 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
-
+#ifndef ASUS_PF500KL_PROJECT
 static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
 static struct dsi_cmd_desc backlight_cmd = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
@@ -207,7 +269,54 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
-
+#else
+int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value)
+{
+    struct dcs_cmd_req cmdreq;
+    if (value == 0) {
+        return 0;
+    }
+    if (A91_lcd_id == SHARP_DISP) {
+        value *= 4;
+        a86_bl_val[1] = value/256;
+        a86_bl_val[2] = value%256;
+        if (value > 7*4) {
+            memcpy(a86_bl_init_val,a86_bl_val,sizeof(a86_bl_val));
+        }
+    }
+    else{
+        a90_bl_val[1] = value;
+        if (value > 7) {
+            a90_bl_init_val[1] = value;
+        }
+    }
+    if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
+        if (value <= 150 && CABC_MOVING == true) {   //turn off cabc once duty < 15 %
+            sharp_set_cabc(ctrl, 0);
+            CABC_MOVING = false;
+        } else if (value > 150 && CABC_MOVING == false) {
+            sharp_set_cabc(ctrl, 3);
+            CABC_MOVING = true;
+        }
+    }
+    mutex_lock(&cmd_mutex);
+    memset(&cmdreq, 0, sizeof(cmdreq));
+    cmdreq.cmds_cnt = 1;
+    cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+    cmdreq.rlen = 0;
+    cmdreq.cb = NULL;
+    if (g_ASUS_hwID == A90_EVB || A91_lcd_id == INNOLUX_DISP) {
+        cmdreq.cmds = &nvt_brightness_set;
+    //    printk("[BL] Set nvt brightness (%d)n", a90_bl_val[1]);
+    } else {
+        cmdreq.cmds = &renesas_brightness_set;
+    //    printk("[BL] Set renesas brightness (%d)n", (a86_bl_val[1]*256 + a86_bl_val[2]));
+    }
+    mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+    mutex_unlock(&cmd_mutex);
+    return 0;
+}
+#endif
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	int rc = 0;
@@ -571,9 +680,10 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	case BL_PWM:
 		mdss_dsi_panel_bklt_pwm(ctrl_pdata, bl_level);
 		break;
+
 	case BL_DCS_CMD:
 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
-			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
+			asus_set_bl_brightness(ctrl_pdata, bl_level);
 			break;
 		}
 		/*
@@ -587,12 +697,12 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		sctrl = mdss_dsi_get_other_ctrl(ctrl_pdata);
 		if (mdss_dsi_sync_wait_trigger(ctrl_pdata)) {
 			if (sctrl)
-				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
-			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
+				asus_set_bl_brightness(sctrl, bl_level);
+			asus_set_bl_brightness(ctrl_pdata, bl_level);
 		} else {
-			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
+			asus_set_bl_brightness(ctrl_pdata, bl_level);
 			if (sctrl)
-				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
+				asus_set_bl_brightness(sctrl, bl_level);
 		}
 		break;
 	default:
@@ -606,7 +716,9 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
-
+#ifdef ASUS_PF500KL_PROJECT
+	int indx = 2;
+#endif		
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
@@ -622,13 +734,36 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
+#ifdef ASUS_PF500KL_PROJECT
+	mutex_lock(&cmd_mutex);
 
+	if (pdata->panel_info.type == MIPI_VIDEO_PANEL)
+		indx = 2;   // add for video dtsi VBP / VFP
+
+	if (A91_lcd_id) {
+             ctrl->on_cmds.cmds[523+indx].payload[1] = a90_bl_init_val[1];
+        if (!CABC_MOVING)
+            ctrl->on_cmds.cmds[525+indx].payload[1] = 0x0;
+	} else {
+	         memcpy(ctrl->on_cmds.cmds[4].payload,a86_bl_init_val,sizeof(a86_bl_init_val));
+	}
+#endif
 	if (ctrl->on_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
-
+#ifdef ASUS_PF500KL_PROJECT
+#ifdef CONFIG_LEDS_QPNP
+	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
+		//qpnp_wled_ctrl(1);
+	}
+	//himax_ts_resume();
+#endif
+#endif
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
 	pr_debug("%s:-\n", __func__);
+#ifdef ASUS_PF500KL_PROJECT
+    	mutex_unlock(&cmd_mutex);
+#endif
 	return 0;
 }
 
@@ -1709,6 +1844,9 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->low_power_config = mdss_dsi_panel_low_power_config;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
-
+#ifdef ASUS_PF500KL_PROJECT
+	A91_lcd_id = gpio_get_value(LCD_ID_DETECT);
+	mutex_init(&cmd_mutex);
+#endif
 	return 0;
 }
