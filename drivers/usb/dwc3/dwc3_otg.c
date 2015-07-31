@@ -35,6 +35,8 @@ static int dwc3_otg_set_host(struct usb_otg *otg, struct usb_bus *host);
 static void dwc3_otg_notify_host_mode(struct usb_otg *otg, int host_mode);
 static void dwc3_otg_reset(struct dwc3_otg *dotg);
 
+extern int isHdmiConnected(void);
+
 /**
  * dwc3_otg_set_host_regs - reset dwc3 otg registers to host operation.
  *
@@ -757,10 +759,16 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 					work = 1;
 					break;
 				case DWC3_SDP_CHARGER:
-					dwc3_otg_start_peripheral(&dotg->otg,
+					if (isHdmiConnected() == 1) {
+						dwc3_otg_set_power(phy,
+							CONFIG_USB_GADGET_VBUS_DRAW);
+						pm_runtime_put_sync(phy->dev);
+					} else {
+						dwc3_otg_start_peripheral(&dotg->otg,
 									1);
-					phy->state = OTG_STATE_B_PERIPHERAL;
-					work = 1;
+						phy->state = OTG_STATE_B_PERIPHERAL;
+						work = 1;
+					}
 					break;
 				case DWC3_FLOATED_CHARGER:
 					if (dotg->charger_retry_count <

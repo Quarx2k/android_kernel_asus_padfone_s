@@ -56,6 +56,8 @@
 #include "dbm.h"
 #include "debug.h"
 
+static struct dwc3_msm *context;
+
 /* cpu to fix usb interrupt */
 static int cpu_to_affin;
 module_param(cpu_to_affin, int, S_IRUGO|S_IWUSR);
@@ -989,6 +991,38 @@ static void dwc3_msm_qscratch_reg_init(struct dwc3_msm *mdwc)
 		dwc3_msm_read_reg(mdwc->base, QSCRATCH_CTRL_REG);
 }
 
+void asus_dwc3_mode_switch(enum dwc3_usb_mode_type req_mode)
+{
+	struct dwc3_msm *mdwc = context;
+
+	switch (req_mode) {
+	case DWC3_USB_NONE:
+		printk("[usb_dwc3] switch to none mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		mdwc->ext_xceiv.bsv = false;
+		break;
+	case DWC3_USB_PERIPHERAL:
+		printk("[usb_dwc3] switch to peripheral mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		break;
+	case DWC3_USB_HOST:
+		printk("[usb_dwc3] switch to host mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_GROUND;
+		break;
+	case DWC3_USB_AUTO:
+		printk("[usb_dwc3] switch to peripheral mode (auto)\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		break;
+	default:
+		printk("[usb_dwc3] unknown mode!!! (%d)\r\n", req_mode);
+		goto out;
+	}
+
+	queue_delayed_work(system_nrt_wq,&mdwc->resume_work, 0);
+out:
+	return;
+}
+
 static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
@@ -1867,7 +1901,7 @@ static enum power_supply_property dwc3_msm_pm_power_props_usb[] = {
 	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_SCOPE,
 };
-
+#ifndef CONFIG_SLIMPORT_ANX7808
 static void dwc3_init_adc_work(struct work_struct *w);
 
 static void dwc3_ext_notify_online(void *ctx, int on)
@@ -2069,7 +2103,7 @@ static ssize_t adc_enable_store(struct device *dev,
 
 static DEVICE_ATTR(adc_enable, S_IRUGO | S_IWUSR, adc_enable_show,
 		adc_enable_store);
-
+#endif
 static int dwc3_msm_ext_chg_open(struct inode *inode, struct file *file)
 {
 	struct dwc3_msm *mdwc =
@@ -2242,6 +2276,19 @@ unreg_chrdev:
 	return ret;
 }
 
+#ifdef CONFIG_SLIMPORT_ANX7808
+static void asus_dwc3_set_id_state(int online)
+{
+	if (online) {
+		printk("[usb_dwc3] OTG ID in\n");
+		asus_dwc3_mode_switch(DWC3_USB_HOST);
+	} else {
+		printk("[usb_dwc3] OTG ID out\n");
+		asus_dwc3_mode_switch(DWC3_USB_PERIPHERAL);
+	}
+}
+#endif
+
 static int msm_dwc3_hsphy_autosuspend(struct usb_phy *x, struct device *dev,
 				int enable_autosuspend)
 {
@@ -2267,7 +2314,9 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	struct dwc3	*dwc;
 	struct resource *res;
 	void __iomem *tcsr;
+#ifndef CONFIG_SLIMPORT_ANX7808
 	unsigned long flags;
+#endif
 	bool host_mode;
 	int ret = 0;
 
@@ -2284,13 +2333,16 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, mdwc);
 	mdwc->dev = &pdev->dev;
+	context = mdwc;
 
 	INIT_LIST_HEAD(&mdwc->req_complete_list);
 	INIT_DELAYED_WORK(&mdwc->chg_work, dwc3_chg_detect_work);
 	INIT_DELAYED_WORK(&mdwc->resume_work, dwc3_resume_work);
 	INIT_WORK(&mdwc->restart_usb_work, dwc3_restart_usb_work);
+#ifndef CONFIG_SLIMPORT_ANX7808
 	INIT_WORK(&mdwc->id_work, dwc3_id_work);
 	INIT_DELAYED_WORK(&mdwc->init_adc_work, dwc3_init_adc_work);
+#endif
 	init_completion(&mdwc->ext_chg_wait);
 
 	ret = dwc3_msm_config_gdsc(mdwc, 1);
@@ -2413,7 +2465,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 		enable_irq_wake(mdwc->hs_phy_irq);
 	}
-
+#ifndef CONFIG_SLIMPORT_ANX7808
 	if (mdwc->ext_xceiv.otg_capability) {
 		mdwc->pmic_id_irq =
 			platform_get_irq_byname(pdev, "pmic_id_irq");
@@ -2450,7 +2502,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 			mdwc->pmic_id_irq = 0;
 		}
 	}
-
+#endif
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	if (!res) {
 		dev_dbg(&pdev->dev, "missing TCSR memory resource\n");
@@ -2656,10 +2708,15 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	}
 
 	mdwc->irq_to_affin = platform_get_irq(mdwc->dwc3, 0);
+#ifndef CONFIG_SLIMPORT_ANX7808
 	mdwc->dwc3_cpu_notifier.notifier_call = dwc3_cpu_notifier_cb;
-
+#endif
 	if (cpu_to_affin)
 		register_cpu_notifier(&mdwc->dwc3_cpu_notifier);
+
+#ifdef CONFIG_SLIMPORT_ANX7808
+	dp_registerCarkitInOutNotificaition(&asus_dwc3_set_id_state);
+#endif
 
 	device_init_wakeup(mdwc->dev, 1);
 	pm_stay_awake(mdwc->dev);
@@ -2669,6 +2726,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	pm_runtime_enable(mdwc->dev);
 
 	enable_irq(mdwc->hs_phy_irq);
+#ifndef CONFIG_SLIMPORT_ANX7808
 	/* Update initial ID state */
 	if (mdwc->pmic_id_irq) {
 		enable_irq(mdwc->pmic_id_irq);
@@ -2679,7 +2737,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		local_irq_restore(flags);
 		enable_irq_wake(mdwc->pmic_id_irq);
 	}
-
+#endif
 	if (of_property_read_bool(node, "qcom,reset_hsphy_sleep_clk_on_init")) {
 		ret = clk_reset(mdwc->hsphy_sleep_clk, CLK_RESET_ASSERT);
 		if (ret) {

@@ -1203,6 +1203,7 @@ static void slimport_cable_plug_proc(struct anx7808_data *anx7808)
 		sp_tx_set_sys_state(STATE_CABLE_PLUG);
 	}else{
 #ifdef CONFIG_ON_SEMI_VIBRATOR
+#ifdef CONFIG_ASUS_HDMI
 		int vib_count=10;
 		if(needWait && gpio_get_value(75)){
 			while(vib_count--&& gpio_get_value(75)){
@@ -1210,6 +1211,7 @@ static void slimport_cable_plug_proc(struct anx7808_data *anx7808)
 				msleep(1500);
 			}
 		}
+#endif
 #endif
 	}
 }
