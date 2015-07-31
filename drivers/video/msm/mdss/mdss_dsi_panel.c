@@ -755,7 +755,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
 		//qpnp_wled_ctrl(1);
 	}
-	//himax_ts_resume();
+	himax_ts_resume();
 #endif
 #endif
 end:
@@ -782,7 +782,15 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 				panel_data);
 
 	pr_debug("%s: ctrl=%p ndx=%d\n", __func__, ctrl, ctrl->ndx);
-
+#ifdef ASUS_PF500KL_PROJECT
+	mutex_lock(&cmd_mutex);
+#ifdef CONFIG_LEDS_QPNP
+	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
+	//	qpnp_wled_ctrl(0);
+	}
+#endif
+	himax_ts_suspend();
+#endif
 	if (pinfo->dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
@@ -794,6 +802,9 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_BLANK;
 	pr_debug("%s:-\n", __func__);
+#ifdef ASUS_PF500KL_PROJECT
+	mutex_unlock(&cmd_mutex);
+#endif
 	return 0;
 }
 
