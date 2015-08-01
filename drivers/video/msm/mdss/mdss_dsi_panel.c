@@ -753,7 +753,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 #ifdef ASUS_PF500KL_PROJECT
 #ifdef CONFIG_LEDS_QPNP
 	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
-		//qpnp_wled_ctrl(1);
+		qpnp_wled_ctrl(1);
 	}
 	himax_ts_resume();
 #endif
@@ -786,7 +786,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	mutex_lock(&cmd_mutex);
 #ifdef CONFIG_LEDS_QPNP
 	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
-	//	qpnp_wled_ctrl(0);
+		qpnp_wled_ctrl(0);
 	}
 #endif
 	himax_ts_suspend();
