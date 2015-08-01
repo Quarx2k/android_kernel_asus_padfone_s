@@ -67,6 +67,38 @@
 
 #define AUDIO_SET_SRS_TRUMEDIA_PARAM _IOW(AUDIO_IOCTL_MAGIC, 43, unsigned)
 
+#ifdef CONFIG_ASUS_PF500KL
+#define AUDIO_SET_BT_TYPE           _IOW(AUDIO_IOCTL_MAGIC, 60, unsigned)
+#define AUDIO_GET_BT_TYPE           _IOR(AUDIO_IOCTL_MAGIC, 61, unsigned)
+#define AUDIO_SET_OUT_ACDB_ID       _IOW(AUDIO_IOCTL_MAGIC, 62, unsigned)
+#define AUDIO_GET_OUT_ACDB_ID       _IOR(AUDIO_IOCTL_MAGIC, 63, unsigned)
+#define AUDIO_SET_RINGTONE_PROFILE  _IOW(AUDIO_IOCTL_MAGIC, 64, unsigned)
+#define AUDIO_GET_RINGTONE_PROFILE  _IOR(AUDIO_IOCTL_MAGIC, 65, unsigned)
+// ASUS_BSP Paul ---
+
+//Bruno++
+#define AUDIO_SET_SKYPE_STATE       _IOW(AUDIO_IOCTL_MAGIC, 72, unsigned)
+#define AUDIO_GET_SKYPE_STATE       _IOR(AUDIO_IOCTL_MAGIC, 73, unsigned)
+#define AUDIO_SET_RINGBACKTONE_STATE       _IOW(AUDIO_IOCTL_MAGIC, 66, unsigned)
+#define AUDIO_GET_RINGBACKTONE_STATE       _IOR(AUDIO_IOCTL_MAGIC, 67, unsigned)
+
+//ASUS Tim++
+#define AUDIO_SET_change_device     _IOW(AUDIO_IOCTL_MAGIC, 68, unsigned)
+#define AUDIO_GET_change_device     _IOR(AUDIO_IOCTL_MAGIC, 69, unsigned)
+#define AUDIO_SET_Garmin_STATE      _IOW(AUDIO_IOCTL_MAGIC, 70, unsigned)
+#define AUDIO_GET_Garmin_STATE      _IOR(AUDIO_IOCTL_MAGIC, 71, unsigned)
+#define AUDIO_SET_HAC_mode          _IOW(AUDIO_IOCTL_MAGIC, 74, unsigned)
+#define AUDIO_GET_HAC_mode          _IOR(AUDIO_IOCTL_MAGIC, 75, unsigned)
+//ASUS Tim--
+
+#define AUDIO_SET_RINGTONE_STATE    _IOW(AUDIO_IOCTL_MAGIC, 76, unsigned)
+#define AUDIO_GET_RINGTONE_STATE    _IOR(AUDIO_IOCTL_MAGIC, 77, unsigned)
+#define AUDIO_SET_VR_STATE          _IOR(AUDIO_IOCTL_MAGIC, 78, unsigned)
+#define AUDIO_GET_VR_STATE          _IOR(AUDIO_IOCTL_MAGIC, 79, unsigned)
+
+#define AUDIO_SET_INCALL_STATE      _IOW(AUDIO_IOCTL_MAGIC, 99, unsigned)
+#endif
+
 /* Qualcomm extensions */
 #define AUDIO_SET_STREAM_CONFIG   _IOW(AUDIO_IOCTL_MAGIC, 80, \
 				struct msm_audio_stream_config)
