@@ -2424,11 +2424,10 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup2_spi_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup3_i2c_apps_clk, ""),
 
-	CLK_LOOKUP("core_clk", gcc_blsp2_qup5_i2c_apps_clk.c, ""),
 
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup3_spi_apps_clk, "f9965000.spi"),//ASUS_BSP : Camera
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup4_i2c_apps_clk, "f9966000.i2c"),//ASUS_BSP : NFC, ON_semi_vibrator
-	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup5_i2c_apps_clk, "f9967000.i2c"),
+	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup5_i2c_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup4_spi_apps_clk, "f9966000.spi"),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup5_spi_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_qup6_i2c_apps_clk, "f9968000.i2c"),//ASUS_BSP : Sensors
@@ -2483,13 +2482,13 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 	CLK_LOOKUP_OF("bus_clk",      gcc_ce1_axi_clk,     "scm"),
 	CLK_LOOKUP_OF("core_clk_src", ce1_clk_src,         "scm"),
 
-	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, ""),
-	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, "4-003c"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
-	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, "3c.qcom,camera"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
-	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, "4-006a"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
-	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, "6a.qcom,camera"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
-	CLK_LOOKUP("core_clk", gcc_gp2_clk.c, ""),
-	CLK_LOOKUP("core_clk", gcc_gp3_clk.c, ""),
+	CLK_LOOKUP_OF("core_clk", gcc_gp1_clk, ""),
+	CLK_LOOKUP_OF("core_clk", gcc_gp1_clk, "4-003c"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("core_clk", gcc_gp1_clk, "3c.qcom,camera"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("core_clk", gcc_gp1_clk, "4-006a"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("core_clk", gcc_gp1_clk, "6a.qcom,camera"), //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
+	CLK_LOOKUP_OF("core_clk", gcc_gp2_clk, ""),
+	CLK_LOOKUP_OF("core_clk", gcc_gp3_clk, ""),
 
 	CLK_LOOKUP_OF("core_clk", gcc_pdm2_clk, ""),
 	CLK_LOOKUP_OF("iface_clk", gcc_pdm_ahb_clk, ""),
