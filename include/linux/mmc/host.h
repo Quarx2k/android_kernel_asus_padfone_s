@@ -142,7 +142,6 @@ struct mmc_host_ops {
 
 	/* The tuning command opcode value is different for SD and eMMC cards */
 	int	(*execute_tuning)(struct mmc_host *host, u32 opcode);
-	void	(*enable_preset_value)(struct mmc_host *host, bool enable);
 	int	(*select_drive_strength)(unsigned int max_dtr, int host_drv, int card_drv);
 	void	(*hw_reset)(struct mmc_host *host);
 	unsigned long (*get_max_frequency)(struct mmc_host *host);
@@ -412,15 +411,6 @@ struct mmc_host {
 	} perf;
 	bool perf_enable;
 #endif
-	unsigned int cd_delay;  //ASUS_BSP +++ Gavin_Chang "card detect config"
-	unsigned int sd_status; //ASUS_BSP +++ Gavin_Chang "sd status for ATD"
-//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
-#ifdef CONFIG_MMC_SUSPENDTEST
-	bool suspendtest;
-	unsigned int suspendcnt;
-	unsigned int suspend_datasz;
-#endif
-//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
 	struct mmc_ios saved_ios;
 	struct {
 		unsigned long	busy_time_us;
