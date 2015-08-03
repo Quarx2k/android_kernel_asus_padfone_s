@@ -43,8 +43,57 @@
 #include "../clock.h"
 #include "../platsmp.h"
 
+#ifdef CONFIG_PSTORE_RAM
+#include <linux/pstore_ram.h>
+#include <linux/memblock.h>
+
+#define PERSISTENT_RAM_SIZE SZ_1M
+#define RAM_CONSOLE_SIZE (256 * SZ_1K)
+#define RAM_CONSOLE_BASE (SZ_1G + SZ_256M)
+
+static struct ramoops_platform_data ramoops_data = {
+	.console_size = RAM_CONSOLE_SIZE,
+	.mem_address  = RAM_CONSOLE_BASE,
+	.mem_size     = PERSISTENT_RAM_SIZE,
+};
+
+static struct platform_device ramoops_dev = {
+	.name = "ramoops",
+	.dev = {
+		.platform_data = &ramoops_data,
+	}
+};
+
+static void __init add_persist_ram_device(void)
+{
+	int ret = memblock_reserve(RAM_CONSOLE_BASE, PERSISTENT_RAM_SIZE);
+
+	if (ret)
+		pr_err("%s: failed to initialize persistent ram\n", __func__);
+	else
+		pr_info("%s:initialize persistent ram ok\n", __func__);
+}
+
+static void __init add_persistent_device(void)
+{
+	int ret;
+
+	if (!ramoops_data.mem_address) {
+		pr_err("%s: No allocated memory for ramoops\n", __func__);
+		return;
+	}
+
+	ret = platform_device_register(&ramoops_dev);
+	if (ret)
+		pr_err("%s: Unable to register platform device\n", __func__);
+}
+#endif
+
 void __init msm_8974_reserve(void)
 {
+#ifdef CONFIG_PSTORE_RAM
+	add_persist_ram_device();
+#endif
 	of_scan_flat_dt(dt_scan_for_memory_reserve, NULL);
 }
 
@@ -64,6 +113,9 @@ void __init msm8974_add_drivers(void)
 	krait_power_init();
 	tsens_tm_init_driver();
 	msm_thermal_device_init();
+#ifdef CONFIG_PSTORE_RAM
+	add_persistent_device();
+#endif
 }
 
 static struct of_dev_auxdata msm_hsic_host_adata[] = {
