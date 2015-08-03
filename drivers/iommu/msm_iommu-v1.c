@@ -649,52 +649,59 @@ static int msm_iommu_attach_dev(struct iommu_domain *domain, struct device *dev)
 	bool set_m2v = false;
 
 	mutex_lock(&msm_iommu_lock);
-
+	printk("%s: 0\n",__func__);
 	priv = domain->priv;
+	printk("%s: 1\n",__func__);
 	if (!priv || !dev) {
 		ret = -EINVAL;
 		goto unlock;
 	}
-
+	printk("%s: 2\n",__func__);
 	iommu_drvdata = dev_get_drvdata(dev->parent);
+	printk("%s: 3\n",__func__);
 	ctx_drvdata = dev_get_drvdata(dev);
+	printk("%s: 4\n",__func__);
 	if (!iommu_drvdata || !ctx_drvdata) {
 		ret = -EINVAL;
 		goto unlock;
 	}
-
+	printk("%s: 5\n",__func__);
 	++ctx_drvdata->attach_count;
-
+	printk("%s: 6\n",__func__);
 	if (ctx_drvdata->attach_count > 1)
 		goto already_attached;
+
+	printk("%s: 7\n",__func__);
 
 	if (!list_empty(&ctx_drvdata->attached_elm)) {
 		ret = -EBUSY;
 		goto unlock;
 	}
 
+	printk("%s: 8\n",__func__);
+
 	list_for_each_entry(tmp_drvdata, &priv->list_attached, attached_elm)
 		if (tmp_drvdata == ctx_drvdata) {
 			ret = -EBUSY;
 			goto unlock;
 		}
-
+	printk("%s: 9\n",__func__);
 	is_secure = iommu_drvdata->sec_id != -1;
-
+	printk("%s: 10\n",__func__);
 	ret = __enable_regulators(iommu_drvdata);
 	if (ret)
 		goto unlock;
-
+	printk("%s: 11\n",__func__);
 	ret = apply_bus_vote(iommu_drvdata, 1);
 	if (ret)
 		goto unlock;
-
+	printk("%s: 12\n",__func__);
 	ret = __enable_clocks(iommu_drvdata);
 	if (ret) {
 		__disable_regulators(iommu_drvdata);
 		goto unlock;
 	}
-
+	printk("%s: 13\n",__func__);
 	/* We can only do this once */
 	if (!iommu_drvdata->ctx_attach_count) {
 		if (!is_secure) {
@@ -714,19 +721,21 @@ static int msm_iommu_attach_dev(struct iommu_domain *domain, struct device *dev)
 					   iommu_drvdata->bfb_settings);
 		set_m2v = true;
 	}
-
+	printk("%s: 14\n",__func__);
 	iommu_halt(iommu_drvdata);
-
+	printk("%s: 15\n",__func__);
 	__program_context(iommu_drvdata, ctx_drvdata, priv, is_secure, set_m2v);
-
+	printk("%s: 16\n",__func__);
 	iommu_resume(iommu_drvdata);
-
+	printk("%s: 17\n",__func__);
 	__disable_clocks(iommu_drvdata);
-
+	printk("%s: 18\n",__func__);
 	list_add(&(ctx_drvdata->attached_elm), &priv->list_attached);
+	printk("%s: 19\n",__func__);
 	ctx_drvdata->attached_domain = domain;
+	printk("%s: 20\n",__func__);
 	++iommu_drvdata->ctx_attach_count;
-
+	printk("%s: 21\n",__func__);
 already_attached:
 	mutex_unlock(&msm_iommu_lock);
 
