@@ -605,7 +605,7 @@ static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev)
 		&vfe_dev->reset_complete, msecs_to_jiffies(80))<=0) {
 		pr_info("[YM] %s timeout try again\n", __func__);
 		msm_camera_io_w_mb(0x1FF, vfe_dev->vfe_base + 0xC);
-		l_rc = wait_for_completion_timeout(
+		l_rc = wait_for_completion_interruptible_timeout(
 			&vfe_dev->reset_complete, msecs_to_jiffies(80));
 	       pr_info("[YM] %s retry result(%d) X\n", __func__, (int)l_rc);
 		return l_rc;
