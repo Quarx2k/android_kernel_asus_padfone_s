@@ -687,9 +687,6 @@ int msm_post_event(struct v4l2_event *event, int timeout)
 		return -EIO;
 	}
 
-	/*re-init wait_complete */
-	INIT_COMPLETION(cmd_ack->wait_complete);
-
 	v4l2_event_queue(vdev, event);
 
 	if (timeout < 0) {
@@ -697,10 +694,15 @@ int msm_post_event(struct v4l2_event *event, int timeout)
 		return rc;
 	}
 
-	/* should wait on session based condition */
-	rc = wait_for_completion_timeout(&cmd_ack->wait_complete,
-			msecs_to_jiffies(timeout));
+	/*check list first*/
+	if (list_empty_careful(&cmd_ack->command_q.list)) {
+		/* should wait on session based condition */
+		rc = wait_for_completion_timeout(&cmd_ack->wait_complete,
+				msecs_to_jiffies(timeout));
+	}
 
+	/*re-init wait_complete */
+	INIT_COMPLETION(cmd_ack->wait_complete);
 
 	if (list_empty_careful(&cmd_ack->command_q.list)) {
 		if (!rc) {
