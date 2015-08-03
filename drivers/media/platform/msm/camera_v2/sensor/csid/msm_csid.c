@@ -515,14 +515,17 @@ static long msm_csid_subdev_ioctl(struct v4l2_subdev *sd,
 	mutex_lock(&csid_dev->mutex);
 	CDBG("%s:%d id %d\n", __func__, __LINE__, csid_dev->pdev->id);
 	switch (cmd) {
-	case VIDIOC_MSM_SENSOR_GET_SUBDEV_ID:
+	case VIDIOC_MSM_SENSOR_GET_SUBDEV_ID:	
+		CDBG("%s:%d id %d  - VIDIOC_MSM_SENSOR_GET_SUBDEV_ID\n", __func__, __LINE__, csid_dev->pdev->id);
 		rc = msm_csid_get_subdev_id(csid_dev, arg);
 		break;
 	case VIDIOC_MSM_CSID_IO_CFG:
+		CDBG("%s:%d id %d  - VIDIOC_MSM_CSID_IO_CFG\n", __func__, __LINE__, csid_dev->pdev->id);
 		rc = msm_csid_cmd(csid_dev, arg);
 		break;
 	case VIDIOC_MSM_CSID_RELEASE:
 	case MSM_SD_SHUTDOWN:
+		CDBG("%s:%d id %d  - VIDIOC_MSM_CSID_RELEASE\n", __func__, __LINE__, csid_dev->pdev->id);
 		rc = msm_csid_release(csid_dev);
 		break;
 	default:

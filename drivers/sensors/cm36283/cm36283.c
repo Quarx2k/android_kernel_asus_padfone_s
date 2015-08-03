@@ -100,8 +100,9 @@ struct input_dev *this_input_dev_ps = NULL;
 static struct workqueue_struct *cm36283_workqueue;
 static struct workqueue_struct *cm36283_delay_workqueue;
 //[CR] Queue a work to write ATD self-detect file;
-
+#ifdef CONFIG_EEPROM_NUVOTON
 static struct work_struct cm36283_attached_Pad_work;
+#endif
 static struct work_struct cm36283_light_interrupt_work;
 static struct work_struct cm36283_proximity_interrupt_work;
 static struct delayed_work cm36283_light_interrupt_delay_work;
@@ -327,8 +328,9 @@ static int cm36283_als_calibration_accuracy = 100000;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //P02 reltaed
-
+#ifdef CONFIG_EEPROM_NUVOTON
 static void cm36283_lightsensor_attached_pad(struct work_struct *work);
+#endif
 bool g_cm36283_als_switch_on = false;    //this var. means if cm36283 als hw is turn on or not
 
 extern bool g_bIsP01Attached;
@@ -2795,7 +2797,9 @@ static int init_cm36283(void)
 	INIT_WORK(&cm36283_ISR_work, cm36283_interrupt_handler);
 	INIT_WORK(&cm36283_light_interrupt_work, light_interrupt_work);
 	INIT_WORK(&cm36283_proximity_interrupt_work, proximity_interrupt_work);
+#ifdef CONFIG_EEPROM_NUVOTON
 	INIT_WORK(&cm36283_attached_Pad_work, cm36283_lightsensor_attached_pad);
+#endif
 	INIT_DELAYED_WORK( &Proximity_test_work, Proximity_test_delayed_work);
 	INIT_DELAYED_WORK(&cm36283_light_interrupt_delay_work, light_interrupt_work);
 
@@ -3065,7 +3069,7 @@ static int cm36283_resume(struct i2c_client *client)
 	printk("[cm36283]--cm36283_resume\n");
 	return 0 ;
 }
-
+#ifdef CONFIG_EEPROM_NUVOTON
 /////////////////////////////////////////////////////////////////////////////////
 // Pad mode reltaed
 //
@@ -3153,7 +3157,7 @@ static struct notifier_block cm36283_lightsensor_mp_notifier = {
         .notifier_call = cm36283_lightsensor_mp_event,
         .priority = CM36283_LIGHTSENSOR_MP_NOTIFY,
 };
-
+#endif
 static int cm36283_platform_probe( struct platform_device *pdev )
 {
 	int err = 0;
@@ -3223,10 +3227,10 @@ static int __init cm36283_init(void)
 		err = platform_driver_register(&cm36283_platform_driver);
 		if ( err != 0 )
 			printk("[cm36283] platform_driver_register fail, Error : %d\n",err);
-
+#ifdef CONFIG_EEPROM_NUVOTON
 		register_microp_notifier(&cm36283_lightsensor_mp_notifier);
 		notify_register_microp_notifier(&cm36283_lightsensor_mp_notifier, "cm36283"); //ASUS_BSP Lenter+
-
+#endif
 		printk("[cm36283] cm36283_platform_init -.\n");
 	}
 	return err;

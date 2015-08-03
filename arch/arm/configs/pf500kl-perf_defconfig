@@ -1215,7 +1215,7 @@ CONFIG_QPNP_MISC=y
 CONFIG_USB_HSIC_SMSC_HUB=y
 CONFIG_TI_DRV2667=y
 # CONFIG_APQ8084_DOCKING_STATION is not set
-# CONFIG_MICROP_NOTIFIER_CONTROLLER is not set
+CONFIG_MICROP_NOTIFIER_CONTROLLER=y
 # CONFIG_C2PORT is not set
 
 #
@@ -1227,7 +1227,7 @@ CONFIG_TI_DRV2667=y
 # CONFIG_EEPROM_MAX6875 is not set
 CONFIG_EEPROM_93CX6=y
 # CONFIG_EEPROM_93XX46 is not set
-# CONFIG_EEPROM_NUVOTON is not set
+CONFIG_EEPROM_NUVOTON=y
 
 #
 # Texas Instruments shared transport line discipline
@@ -2093,27 +2093,17 @@ CONFIG_MEDIA_SUPPORT=y
 #
 CONFIG_MEDIA_CAMERA_SUPPORT=y
 # CONFIG_MEDIA_ANALOG_TV_SUPPORT is not set
-CONFIG_MEDIA_DIGITAL_TV_SUPPORT=y
-CONFIG_MEDIA_RADIO_SUPPORT=y
+# CONFIG_MEDIA_DIGITAL_TV_SUPPORT is not set
+# CONFIG_MEDIA_RADIO_SUPPORT is not set
 # CONFIG_MEDIA_RC_SUPPORT is not set
 CONFIG_MEDIA_CONTROLLER=y
 CONFIG_VIDEO_DEV=y
-CONFIG_VIDEO_V4L2_SUBDEV_API=y
+CONFIG_VIDEO_V4L2_COMMON=y
 CONFIG_VIDEO_V4L2=y
-# CONFIG_VIDEO_ADV_DEBUG is not set
-# CONFIG_VIDEO_FIXED_MINOR_RANGES is not set
 CONFIG_VIDEOBUF2_CORE=y
 CONFIG_VIDEOBUF2_MEMOPS=y
-CONFIG_VIDEOBUF2_DMA_CONTIG=y
 CONFIG_VIDEOBUF2_VMALLOC=y
-CONFIG_VIDEOBUF2_DMA_SG=y
-CONFIG_VIDEOBUF2_MSM_MEM=y
-# CONFIG_VIDEO_V4L2_INT_DEVICE is not set
-CONFIG_DVB_CORE=y
-CONFIG_DVB_NET=y
 # CONFIG_TTPCI_EEPROM is not set
-CONFIG_DVB_MAX_ADAPTERS=8
-# CONFIG_DVB_DYNAMIC_MINORS is not set
 
 #
 # Media drivers
@@ -2129,7 +2119,7 @@ CONFIG_V4L_PLATFORM_DRIVERS=y
 #
 # CONFIG_MSM_CAMERA is not set
 CONFIG_MSMB_CAMERA=y
-# CONFIG_MSMB_CAMERA_DEBUG is not set
+CONFIG_MSMB_CAMERA_DEBUG=y
 CONFIG_MSM_CAMERA_SENSOR=y
 CONFIG_MSM_CPP=y
 CONFIG_MSM_CCI=y
@@ -2161,130 +2151,122 @@ CONFIG_ASUS_CAMERA_STS=y
 CONFIG_MSM_VIDC_V4L2=y
 CONFIG_MSM_WFD=y
 # CONFIG_MSM_WFD_DEBUG is not set
-# CONFIG_DVB_MPQ is not set
-# CONFIG_TSPP is not set
+CONFIG_TSPP=y
 # CONFIG_CI_BRIDGE_SPI is not set
 # CONFIG_MSM_VPU is not set
 
 #
 # Supported MMC/SDIO adapters
 #
-# CONFIG_SMS_SDIO_DRV is not set
-CONFIG_RADIO_ADAPTERS=y
-# CONFIG_RADIO_SI470X is not set
-# CONFIG_USB_MR800 is not set
-# CONFIG_USB_DSBR is not set
-# CONFIG_RADIO_SHARK is not set
-# CONFIG_RADIO_SHARK2 is not set
-# CONFIG_I2C_SI4713 is not set
-# CONFIG_RADIO_SI4713 is not set
-# CONFIG_USB_KEENE is not set
-# CONFIG_USB_MA901 is not set
-# CONFIG_RADIO_TEA5764 is not set
-# CONFIG_RADIO_SAA7706H is not set
-# CONFIG_RADIO_TEF6862 is not set
-# CONFIG_RADIO_WL1273 is not set
-
-#
-# Texas Instruments WL128x FM driver (ST based)
-#
-# CONFIG_RADIO_WL128X is not set
-# CONFIG_RADIO_IRIS is not set
 # CONFIG_CYPRESS_FIRMWARE is not set
 
 #
 # Media ancillary drivers (tuners, sensors, i2c, frontends)
 #
-CONFIG_MEDIA_SUBDRV_AUTOSELECT=y
+# CONFIG_MEDIA_SUBDRV_AUTOSELECT is not set
+
+#
+# Encoders, decoders, sensors and other helper chips
+#
 
 #
 # Audio decoders, processors and mixers
 #
+# CONFIG_VIDEO_TVAUDIO is not set
+# CONFIG_VIDEO_TDA7432 is not set
+# CONFIG_VIDEO_TDA9840 is not set
+# CONFIG_VIDEO_TEA6415C is not set
+# CONFIG_VIDEO_TEA6420 is not set
+# CONFIG_VIDEO_MSP3400 is not set
+# CONFIG_VIDEO_CS5345 is not set
+# CONFIG_VIDEO_CS53L32A is not set
+# CONFIG_VIDEO_TLV320AIC23B is not set
+# CONFIG_VIDEO_UDA1342 is not set
+# CONFIG_VIDEO_WM8775 is not set
+# CONFIG_VIDEO_WM8739 is not set
+# CONFIG_VIDEO_VP27SMPX is not set
+# CONFIG_VIDEO_SONY_BTF_MPX is not set
 
 #
 # RDS decoders
 #
+# CONFIG_VIDEO_SAA6588 is not set
 
 #
 # Video decoders
 #
+# CONFIG_VIDEO_ADV7180 is not set
+# CONFIG_VIDEO_ADV7183 is not set
+# CONFIG_VIDEO_BT819 is not set
+# CONFIG_VIDEO_BT856 is not set
+# CONFIG_VIDEO_BT866 is not set
+# CONFIG_VIDEO_KS0127 is not set
+# CONFIG_VIDEO_SAA7110 is not set
+# CONFIG_VIDEO_SAA711X is not set
+# CONFIG_VIDEO_SAA7191 is not set
+# CONFIG_VIDEO_TVP514X is not set
+# CONFIG_VIDEO_TVP5150 is not set
+# CONFIG_VIDEO_TVP7002 is not set
+# CONFIG_VIDEO_TW2804 is not set
+# CONFIG_VIDEO_TW9903 is not set
+# CONFIG_VIDEO_TW9906 is not set
+# CONFIG_VIDEO_VPX3220 is not set
 
 #
 # Video and audio decoders
 #
+# CONFIG_VIDEO_SAA717X is not set
+# CONFIG_VIDEO_CX25840 is not set
 
 #
 # Video encoders
 #
+# CONFIG_VIDEO_SAA7127 is not set
+# CONFIG_VIDEO_SAA7185 is not set
+# CONFIG_VIDEO_ADV7170 is not set
+# CONFIG_VIDEO_ADV7175 is not set
+# CONFIG_VIDEO_ADV7343 is not set
+# CONFIG_VIDEO_ADV7393 is not set
+# CONFIG_VIDEO_AK881X is not set
 
 #
 # Camera sensor devices
 #
+# CONFIG_VIDEO_OV7640 is not set
+# CONFIG_VIDEO_OV7670 is not set
+# CONFIG_VIDEO_VS6624 is not set
+# CONFIG_VIDEO_MT9V011 is not set
+# CONFIG_VIDEO_SR030PC30 is not set
 
 #
 # Flash devices
 #
+# CONFIG_VIDEO_ADP1653 is not set
+# CONFIG_VIDEO_AS3645A is not set
 
 #
 # Video improvement chips
 #
+# CONFIG_VIDEO_UPD64031A is not set
+# CONFIG_VIDEO_UPD64083 is not set
 
 #
 # Miscelaneous helper chips
 #
+# CONFIG_VIDEO_THS7303 is not set
+# CONFIG_VIDEO_M52790 is not set
 
 #
 # Sensors used on soc_camera driver
 #
-CONFIG_MEDIA_TUNER=y
-CONFIG_MEDIA_TUNER_SIMPLE=y
-CONFIG_MEDIA_TUNER_TDA8290=y
-CONFIG_MEDIA_TUNER_TDA827X=y
-CONFIG_MEDIA_TUNER_TDA18271=y
-CONFIG_MEDIA_TUNER_TDA9887=y
-CONFIG_MEDIA_TUNER_TEA5761=y
-CONFIG_MEDIA_TUNER_TEA5767=y
-CONFIG_MEDIA_TUNER_MT20XX=y
-CONFIG_MEDIA_TUNER_XC2028=y
-CONFIG_MEDIA_TUNER_XC5000=y
-CONFIG_MEDIA_TUNER_XC4000=y
-CONFIG_MEDIA_TUNER_MC44S803=y
 
 #
-# Multistandard (satellite) frontends
+# Customise DVB Frontends
 #
-
-#
-# Multistandard (cable + terrestrial) frontends
-#
-
-#
-# DVB-S (satellite) frontends
-#
-
-#
-# DVB-T (terrestrial) frontends
-#
-
-#
-# DVB-C (cable) frontends
-#
-
-#
-# ATSC (North American/Korean Terrestrial/Cable DTV) frontends
-#
-
-#
-# ISDB-T (terrestrial) frontends
-#
-
-#
-# Digital terrestrial only tuners/PLL
-#
-
-#
-# SEC control devices for DVB-S
-#
+CONFIG_DVB_AU8522=y
+CONFIG_DVB_AU8522_V4L=y
+# CONFIG_DVB_TUNER_DIB0070 is not set
+# CONFIG_DVB_TUNER_DIB0090 is not set
 
 #
 # Tools to develop new frontends
@@ -2454,7 +2436,7 @@ CONFIG_DOLBY_DAP=y
 CONFIG_DTS_SRS_TM=y
 CONFIG_QTI_PP=y
 CONFIG_SND_SOC_MSM8974=y
-CONFIG_SND_SOC_APQ8074=n
+# CONFIG_SND_SOC_APQ8074 is not set
 CONFIG_SND_SOC_I2C_AND_SPI=y
 # CONFIG_SND_SOC_ALL_CODECS is not set
 CONFIG_SND_SOC_WCD9320=y
@@ -3024,7 +3006,7 @@ CONFIG_IOMMU_SUPPORT=y
 CONFIG_OF_IOMMU=y
 CONFIG_MSM_IOMMU=y
 CONFIG_MSM_IOMMU_V1=y
-# CONFIG_MSM_IOMMU_PMON is not set
+CONFIG_MSM_IOMMU_PMON=y
 CONFIG_IOMMU_PGTABLES_L2=y
 # CONFIG_IOMMU_LPAE is not set
 # CONFIG_IOMMU_NON_SECURE is not set
@@ -3074,6 +3056,7 @@ CONFIG_MSM_IRQ=y
 #
 # CONFIG_SENSORS_CM36283 is not set
 # CONFIG_SENSORS_CAP1106 is not set
+CONFIG_SENSORS=y
 
 #
 # PHY Subsystem

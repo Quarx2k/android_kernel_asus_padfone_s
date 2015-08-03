@@ -216,11 +216,11 @@ int is_Mode_APROM(void){
 static void microp_reconnected(void);
 
 
-extern bool asus_padstation_exist_realtime(void); //ASUS_BSP:joe1_++ 
-
+//extern bool asus_padstation_exist_realtime(void); //ASUS_BSP:joe1_++ 
+bool asus_padstation_exist_realtime = false;
 // need modification
 bool pad_exist(void){
-        return asus_padstation_exist_realtime()?1:0; //ASUS_BSP:joe1_++
+        return false;//asus_padstation_exist_realtime()?1:0; //ASUS_BSP:joe1_++
 }
 static int uP_i2c_read(u8 addr, int len, void *data)
 {

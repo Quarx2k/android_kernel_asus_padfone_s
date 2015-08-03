@@ -12,4 +12,10 @@ config SENSORS_CAP1106
 	---help---
 	  ASUS SENSORS folder
 
+config SENSORS
+	bool "Asus sensors support"
+	default y
+	---help---
+	  ASUS SENSORS folder
+
 endmenu

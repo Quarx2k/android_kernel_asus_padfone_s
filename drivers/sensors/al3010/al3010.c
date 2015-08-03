@@ -97,7 +97,9 @@ struct al3010_data *g_al3010_data_as;
 struct input_dev *this_input_dev_p02_als = NULL;
 
 static struct workqueue_struct *al3010light_workqueue = NULL;
+#ifdef CONFIG_EEPROM_NUVOTON
 static struct delayed_work al3010_attached_P02_work;
+#endif
 static struct work_struct al3010_ISR_work;
 static struct delayed_work al3010_ISR_delay_work;
 bool al3010_interrupt_busy = false;	
@@ -322,12 +324,16 @@ static int al3010_set_power_state(struct i2c_client *client, int state)
 	if(AL3010_POW_UP == state)	{
 		g_al3010_switch_on = true;
 		// Enable microp lightsensor interrupt
+#ifdef CONFIG_EEPROM_NUVOTON
 		AX_MicroP_enablePinInterrupt( INTR_EN_ALS_INT, 1 );
+#endif
 	}
 	else if(AL3010_POW_DOWN == state)	{
 		g_al3010_switch_on = false;
 		// Disable microp lightsensor interrupt
+#ifdef CONFIG_EEPROM_NUVOTON
 		AX_MicroP_enablePinInterrupt( INTR_EN_ALS_INT, 0 );
+#endif
 		g_last_al3010_light = -1;
 	}
 	g_al3010_light_first=1;
@@ -359,11 +365,12 @@ int set_als_power_state_of_P01(int state)
 	int microp_state = -1;
 	
 	printk("[als_P01]set_als_pwr_state: %d\n", state );
+#ifdef CONFIG_EEPROM_NUVOTON
 	if( !AX_MicroP_IsP01Connected() )	{
 		printk("[als_P01]Without P03 plug in\n");
 		return -1;		
 	}
-	
+#endif
 	if( g_al3010_switch_earlysuspend == 1 )	{
 		g_al3010_suspend_switch_on = state;
 		printk("[als_P01][als] Al3010 without resume, by pass; state:%d\n", g_al3010_switch_earlysuspend);
@@ -381,9 +388,9 @@ int set_als_power_state_of_P01(int state)
 		microp_state = st_MICROP_Sleep;
 	}
 	else
-#endif
+
 		microp_state = AX_MicroP_getOPState();
-	
+#endif
 	if(microp_state == st_MICROP_Active)	{
 		al3010_power_on_retry_time = 0;
 		printk("[al3010][als] Microp in Active mode\n");
@@ -1198,7 +1205,7 @@ static int al3010_resume(struct i2c_client *client)
 #endif
 	return 0;
 }
-
+#ifdef CONFIG_EEPROM_NUVOTON
 /////////////////////////////////////////////////////////////////////////////////
 //---Pad feature part---
 //
@@ -1342,7 +1349,7 @@ static struct notifier_block lightsensor_pad_mp_notifier = {
        .notifier_call = lightsensor_pad_mp_event,
         .priority = AL3010_LIGHTSENSOR_MP_NOTIFY,
 };
-
+#endif
 /*.......................................Al3010 prob port.........................................*/
 static int al3010_input_init(void)
 {
@@ -1392,7 +1399,9 @@ static int al3010_probe(struct i2c_client *client, const struct i2c_device_id *i
 	printk("[als_P01] al3010_init++\n");
 	
 	al3010light_workqueue = create_singlethread_workqueue("al3010light_wq");
+#ifdef CONFIG_EEPROM_NUVOTON
 	INIT_DELAYED_WORK(&al3010_attached_P02_work, lightsensor_attached_pad);
+#endif
 	INIT_WORK(&al3010_ISR_work, mp_als_interrupt_handler);
 
 	/*For resume and debounce I2C issue*/
@@ -1401,11 +1410,11 @@ static int al3010_probe(struct i2c_client *client, const struct i2c_device_id *i
 	INIT_DELAYED_WORK( &Al3010light_debounce_work, mp_als_interrupt_delay_work);
 	INIT_DELAYED_WORK(&al3010_ISR_delay_work, mp_als_interrupt_handler);
 	wake_lock_init(&pad_lightsensoer_wake_lock, WAKE_LOCK_SUSPEND, "al3010_wake_lock");
-
+#ifdef CONFIG_EEPROM_NUVOTON
 	//Disable P01 attached temporarily for 1st ICS check-in
 	register_microp_notifier(&lightsensor_pad_mp_notifier);
 	notify_register_microp_notifier(&lightsensor_pad_mp_notifier, "al3010");
-
+#endif
 	printk("[als_P01] al3010_init--\n");
 
 	/*......................................Driver prob port......................................*/
