@@ -22,7 +22,7 @@
 #include <linux/slab.h>
 #include <mach/board.h>
 #include <mach/iommu.h>
-#include <linux/msm_iommu_domains.h>
+#include <mach/iommu_domains.h>
 #include <media/msm_vidc.h>
 #include "msm_vidc_internal.h"
 #include "msm_vidc_debug.h"
@@ -35,7 +35,7 @@
 
 struct msm_vidc_drv *vidc_driver;
 
-uint32_t msm_vidc_pwr_collapse_delay = 2000;
+uint32_t msm_vidc_pwr_collapse_delay = 10000;
 
 static inline struct msm_vidc_inst *get_vidc_inst(struct file *filp, void *fh)
 {
@@ -173,7 +173,7 @@ int msm_v4l2_streamoff(struct file *file, void *fh,
 }
 
 static int msm_v4l2_subscribe_event(struct v4l2_fh *fh,
-				const struct v4l2_event_subscription *sub)
+				struct v4l2_event_subscription *sub)
 {
 	struct msm_vidc_inst *vidc_inst = container_of(fh,
 			struct msm_vidc_inst, event_handler);
@@ -181,7 +181,7 @@ static int msm_v4l2_subscribe_event(struct v4l2_fh *fh,
 }
 
 static int msm_v4l2_unsubscribe_event(struct v4l2_fh *fh,
-				const struct v4l2_event_subscription *sub)
+				struct v4l2_event_subscription *sub)
 {
 	struct msm_vidc_inst *vidc_inst = container_of(fh,
 			struct msm_vidc_inst, event_handler);
@@ -233,7 +233,6 @@ static int msm_v4l2_enum_framesizes(struct file *file, void *fh,
 	struct msm_vidc_inst *vidc_inst = get_vidc_inst(file, fh);
 	return msm_vidc_enum_framesizes((void *)vidc_inst, fsize);
 }
-
 static const struct v4l2_ioctl_ops msm_v4l2_ioctl_ops = {
 	.vidioc_querycap = msm_v4l2_querycap,
 	.vidioc_enum_fmt_vid_cap_mplane = msm_v4l2_enum_fmt,
@@ -354,7 +353,7 @@ static ssize_t msm_vidc_link_name_show(struct device *dev,
 		return 0;
 }
 
-static DEVICE_ATTR(link_name, 0444, msm_vidc_link_name_show, NULL);
+static DEVICE_ATTR(link_name, 0644, msm_vidc_link_name_show, NULL);
 
 static ssize_t store_pwr_collapse_delay(struct device *dev,
 		struct device_attribute *attr,
@@ -423,7 +422,6 @@ static int msm_vidc_probe(struct platform_device *pdev)
 		msm_vidc_release_video_device;
 	core->vdev[MSM_VIDC_DECODER].vdev.fops = &msm_v4l2_vidc_fops;
 	core->vdev[MSM_VIDC_DECODER].vdev.ioctl_ops = &msm_v4l2_ioctl_ops;
-	core->vdev[MSM_VIDC_DECODER].vdev.vfl_dir = VFL_DIR_M2M;
 	core->vdev[MSM_VIDC_DECODER].type = MSM_VIDC_DECODER;
 	rc = video_register_device(&core->vdev[MSM_VIDC_DECODER].vdev,
 					VFL_TYPE_GRABBER, nr);
@@ -444,7 +442,6 @@ static int msm_vidc_probe(struct platform_device *pdev)
 		msm_vidc_release_video_device;
 	core->vdev[MSM_VIDC_ENCODER].vdev.fops = &msm_v4l2_vidc_fops;
 	core->vdev[MSM_VIDC_ENCODER].vdev.ioctl_ops = &msm_v4l2_ioctl_ops;
-	core->vdev[MSM_VIDC_ENCODER].vdev.vfl_dir = VFL_DIR_M2M;
 	core->vdev[MSM_VIDC_ENCODER].type = MSM_VIDC_ENCODER;
 	rc = video_register_device(&core->vdev[MSM_VIDC_ENCODER].vdev,
 				VFL_TYPE_GRABBER, nr + 1);

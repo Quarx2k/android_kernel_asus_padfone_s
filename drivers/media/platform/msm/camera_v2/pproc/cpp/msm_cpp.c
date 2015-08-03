@@ -1644,7 +1644,7 @@ int msm_cpp_subscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,
 	struct v4l2_event_subscription *sub)
 {
 	CPP_DBG("Called\n");
-	return v4l2_event_subscribe(fh, sub, MAX_CPP_V4l2_EVENTS, NULL);
+	return v4l2_event_subscribe(fh, sub, MAX_CPP_V4l2_EVENTS);
 }
 
 int msm_cpp_unsubscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,

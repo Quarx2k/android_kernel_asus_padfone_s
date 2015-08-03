@@ -243,7 +243,7 @@ int msm_isp_subscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,
 {
 	struct vfe_device *vfe_dev = v4l2_get_subdevdata(sd);
 	int rc = 0;
-	rc = v4l2_event_subscribe(fh, sub, MAX_ISP_V4l2_EVENTS, NULL);
+	rc = v4l2_event_subscribe(fh, sub, MAX_ISP_V4l2_EVENTS);
 	if (rc == 0) {
 		if (sub->type == V4L2_EVENT_ALL) {
 			int i;

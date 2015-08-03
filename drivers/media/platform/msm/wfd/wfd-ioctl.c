@@ -1231,16 +1231,15 @@ set_parm_fail:
 }
 
 static int wfdioc_subscribe_event(struct v4l2_fh *fh,
-		const struct v4l2_event_subscription *sub)
+		struct v4l2_event_subscription *sub)
 {
 	struct wfd_inst *inst = container_of(fh, struct wfd_inst,
 			event_handler);
-	return v4l2_event_subscribe(&inst->event_handler, sub, MAX_EVENTS,
-			NULL);
+	return v4l2_event_subscribe(&inst->event_handler, sub, MAX_EVENTS);
 }
 
 static int wfdioc_unsubscribe_event(struct v4l2_fh *fh,
-		const struct v4l2_event_subscription *sub)
+		struct v4l2_event_subscription *sub)
 {
 	struct wfd_inst *inst = container_of(fh, struct wfd_inst,
 			event_handler);
@@ -1425,7 +1424,7 @@ static struct vb2_mem_ops wfd_vb2_mem_ops = {
 
 int wfd_initialize_vb2_queue(struct vb2_queue *q, void *priv)
 {
-	q->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+//	q->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	q->io_modes = VB2_USERPTR;
 	q->ops = &wfd_vidbuf_ops;

@@ -1395,7 +1395,7 @@ static long msm_vpe_subdev_ioctl(struct v4l2_subdev *sd,
 static int msm_vpe_subscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,
 				struct v4l2_event_subscription *sub)
 {
-	return v4l2_event_subscribe(fh, sub, MAX_VPE_V4l2_EVENTS, NULL);
+	return v4l2_event_subscribe(fh, sub, MAX_VPE_V4l2_EVENTS);
 }
 
 static int msm_vpe_unsubscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,

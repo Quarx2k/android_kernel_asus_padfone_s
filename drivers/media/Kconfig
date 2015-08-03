@@ -88,19 +88,35 @@ config MEDIA_CONTROLLER
 	  This API is mostly used by camera interfaces in embedded platforms.
 
 #
-# Video4Linux support
-#	Only enables if one of the V4L2 types (ATV, webcam, radio) is selected
+# V4L core and enabled API's
 #
 
 config VIDEO_DEV
+	tristate "Video For Linux"
+	---help---
+	  V4L core support for video capture and overlay devices, webcams and
+	  AM/FM radio cards.
+
+	  This kernel includes support for the new Video for Linux Two API,
+	  (V4L2).
+
+	  Additional info and docs are available on the web at
+	  <http://linuxtv.org>
+
+	  Documentation for V4L2 is also available on the web at
+	  <http://bytesex.org/v4l/>.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called videodev.
+
+config VIDEO_V4L2_COMMON
 	tristate
-	depends on MEDIA_SUPPORT
-	depends on MEDIA_CAMERA_SUPPORT || MEDIA_ANALOG_TV_SUPPORT || MEDIA_RADIO_SUPPORT
-	default y
+	depends on (I2C || I2C=n) && VIDEO_DEV
+	default (I2C || I2C=n) && VIDEO_DEV
 
 config VIDEO_V4L2_SUBDEV_API
-	bool "V4L2 sub-device userspace API"
-	depends on VIDEO_DEV && MEDIA_CONTROLLER
+	bool "V4L2 sub-device userspace API (EXPERIMENTAL)"
+	depends on VIDEO_DEV && MEDIA_CONTROLLER && EXPERIMENTAL
 	---help---
 	  Enables the V4L2 sub-device pad-level userspace API used to configure
 	  video format, size and frame rate between hardware blocks.

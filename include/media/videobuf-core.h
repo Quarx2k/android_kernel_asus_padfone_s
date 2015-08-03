@@ -72,6 +72,7 @@ struct videobuf_buffer {
 	unsigned int            height;
 	unsigned int            bytesperline; /* use only if != 0 */
 	unsigned long           size;
+	unsigned int            input;
 	enum v4l2_field         field;
 	enum videobuf_state     state;
 	struct list_head        stream;  /* QBUF/DQBUF list */
@@ -141,6 +142,7 @@ struct videobuf_queue {
 	wait_queue_head_t	   wait; /* wait if queue is empty */
 
 	enum v4l2_buf_type         type;
+	unsigned int               inputs; /* for V4L2_BUF_FLAG_INPUT */
 	unsigned int               msize;
 	enum v4l2_field            field;
 	enum v4l2_field            last;   /* for field=V4L2_FIELD_ALTERNATE */

@@ -90,7 +90,7 @@ static int camera_v4l2_querycap(struct file *filep, void *fh,
 }
 
 static int camera_v4l2_s_crop(struct file *filep, void *fh,
-	const struct v4l2_crop *crop)
+	struct v4l2_crop *crop)
 {
 	int rc = 0;
 	struct v4l2_event event;
@@ -422,18 +422,18 @@ error:
 }
 
 static int camera_v4l2_subscribe_event(struct v4l2_fh *fh,
-	const struct v4l2_event_subscription *sub)
+	struct v4l2_event_subscription *sub)
 {
 	int rc = 0;
 	struct camera_v4l2_private *sp = fh_to_private(fh);
 
-	rc = v4l2_event_subscribe(&sp->fh, sub, 5, NULL);
+	rc = v4l2_event_subscribe(&sp->fh, sub, 5);
 
 	return rc;
 }
 
 static int camera_v4l2_unsubscribe_event(struct v4l2_fh *fh,
-	const struct v4l2_event_subscription *sub)
+	struct v4l2_event_subscription *sub)
 {
 	int rc = 0;
 	struct camera_v4l2_private *sp = fh_to_private(fh);

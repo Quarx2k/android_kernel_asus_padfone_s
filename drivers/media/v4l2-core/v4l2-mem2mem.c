@@ -19,9 +19,6 @@
 
 #include <media/videobuf2-core.h>
 #include <media/v4l2-mem2mem.h>
-#include <media/v4l2-dev.h>
-#include <media/v4l2-fh.h>
-#include <media/v4l2-event.h>
 
 MODULE_DESCRIPTION("Mem to mem device framework for videobuf");
 MODULE_AUTHOR("Pawel Osciak, <pawel@osciak.com>");
@@ -62,7 +59,7 @@ struct v4l2_m2m_dev {
 	struct list_head	job_queue;
 	spinlock_t		job_spinlock;
 
-	const struct v4l2_m2m_ops *m2m_ops;
+	struct v4l2_m2m_ops	*m2m_ops;
 };
 
 static struct v4l2_m2m_queue_ctx *get_queue_ctx(struct v4l2_m2m_ctx *m2m_ctx,
@@ -105,7 +102,7 @@ void *v4l2_m2m_next_buf(struct v4l2_m2m_queue_ctx *q_ctx)
 		return NULL;
 	}
 
-	b = list_first_entry(&q_ctx->rdy_queue, struct v4l2_m2m_buffer, list);
+	b = list_entry(q_ctx->rdy_queue.next, struct v4l2_m2m_buffer, list);
 	spin_unlock_irqrestore(&q_ctx->rdy_spinlock, flags);
 	return &b->vb;
 }
@@ -125,7 +122,7 @@ void *v4l2_m2m_buf_remove(struct v4l2_m2m_queue_ctx *q_ctx)
 		spin_unlock_irqrestore(&q_ctx->rdy_spinlock, flags);
 		return NULL;
 	}
-	b = list_first_entry(&q_ctx->rdy_queue, struct v4l2_m2m_buffer, list);
+	b = list_entry(q_ctx->rdy_queue.next, struct v4l2_m2m_buffer, list);
 	list_del(&b->list);
 	q_ctx->num_rdy--;
 	spin_unlock_irqrestore(&q_ctx->rdy_spinlock, flags);
@@ -178,7 +175,7 @@ static void v4l2_m2m_try_run(struct v4l2_m2m_dev *m2m_dev)
 		return;
 	}
 
-	m2m_dev->curr_ctx = list_first_entry(&m2m_dev->job_queue,
+	m2m_dev->curr_ctx = list_entry(m2m_dev->job_queue.next,
 				   struct v4l2_m2m_ctx, queue);
 	m2m_dev->curr_ctx->job_flags |= TRANS_RUNNING;
 	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
@@ -205,7 +202,7 @@ static void v4l2_m2m_try_run(struct v4l2_m2m_dev *m2m_dev)
 static void v4l2_m2m_try_schedule(struct v4l2_m2m_ctx *m2m_ctx)
 {
 	struct v4l2_m2m_dev *m2m_dev;
-	unsigned long flags_job, flags_out, flags_cap;
+	unsigned long flags_job, flags;
 
 	m2m_dev = m2m_ctx->m2m_dev;
 	dprintk("Trying to schedule a job for m2m_ctx: %p\n", m2m_ctx);
@@ -223,26 +220,20 @@ static void v4l2_m2m_try_schedule(struct v4l2_m2m_ctx *m2m_ctx)
 		return;
 	}
 
-	spin_lock_irqsave(&m2m_ctx->out_q_ctx.rdy_spinlock, flags_out);
+	spin_lock_irqsave(&m2m_ctx->out_q_ctx.rdy_spinlock, flags);
 	if (list_empty(&m2m_ctx->out_q_ctx.rdy_queue)) {
-		spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock,
-					flags_out);
+		spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock, flags);
 		spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags_job);
 		dprintk("No input buffers available\n");
 		return;
 	}
-	spin_lock_irqsave(&m2m_ctx->cap_q_ctx.rdy_spinlock, flags_cap);
 	if (list_empty(&m2m_ctx->cap_q_ctx.rdy_queue)) {
-		spin_unlock_irqrestore(&m2m_ctx->cap_q_ctx.rdy_spinlock,
-					flags_cap);
-		spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock,
-					flags_out);
+		spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock, flags);
 		spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags_job);
 		dprintk("No output buffers available\n");
 		return;
 	}
-	spin_unlock_irqrestore(&m2m_ctx->cap_q_ctx.rdy_spinlock, flags_cap);
-	spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock, flags_out);
+	spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock, flags);
 
 	if (m2m_dev->m2m_ops->job_ready
 		&& (!m2m_dev->m2m_ops->job_ready(m2m_ctx->priv))) {
@@ -375,33 +366,6 @@ int v4l2_m2m_dqbuf(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 EXPORT_SYMBOL_GPL(v4l2_m2m_dqbuf);
 
 /**
- * v4l2_m2m_create_bufs() - create a source or destination buffer, depending
- * on the type
- */
-int v4l2_m2m_create_bufs(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
-			 struct v4l2_create_buffers *create)
-{
-	struct vb2_queue *vq;
-
-	vq = v4l2_m2m_get_vq(m2m_ctx, create->format.type);
-	return vb2_create_bufs(vq, create);
-}
-EXPORT_SYMBOL_GPL(v4l2_m2m_create_bufs);
-
-/**
- * v4l2_m2m_expbuf() - export a source or destination buffer, depending on
- * the type
- */
-int v4l2_m2m_expbuf(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
-		  struct v4l2_exportbuffer *eb)
-{
-	struct vb2_queue *vq;
-
-	vq = v4l2_m2m_get_vq(m2m_ctx, eb->type);
-	return vb2_expbuf(vq, eb);
-}
-EXPORT_SYMBOL_GPL(v4l2_m2m_expbuf);
-/**
  * v4l2_m2m_streamon() - turn on streaming for a video queue
  */
 int v4l2_m2m_streamon(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
@@ -425,35 +389,10 @@ EXPORT_SYMBOL_GPL(v4l2_m2m_streamon);
 int v4l2_m2m_streamoff(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 		       enum v4l2_buf_type type)
 {
-	struct v4l2_m2m_dev *m2m_dev;
-	struct v4l2_m2m_queue_ctx *q_ctx;
-	unsigned long flags_job, flags;
-	int ret;
+	struct vb2_queue *vq;
 
-	q_ctx = get_queue_ctx(m2m_ctx, type);
-	ret = vb2_streamoff(&q_ctx->q, type);
-	if (ret)
-		return ret;
-
-	m2m_dev = m2m_ctx->m2m_dev;
-	spin_lock_irqsave(&m2m_dev->job_spinlock, flags_job);
-	/* We should not be scheduled anymore, since we're dropping a queue. */
-	INIT_LIST_HEAD(&m2m_ctx->queue);
-	m2m_ctx->job_flags = 0;
-
-	spin_lock_irqsave(&q_ctx->rdy_spinlock, flags);
-	/* Drop queue, since streamoff returns device to the same state as after
-	 * calling reqbufs. */
-	INIT_LIST_HEAD(&q_ctx->rdy_queue);
-	spin_unlock_irqrestore(&q_ctx->rdy_spinlock, flags);
-
-	if (m2m_dev->curr_ctx == m2m_ctx) {
-		m2m_dev->curr_ctx = NULL;
-		wake_up(&m2m_ctx->finished);
-	}
-	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags_job);
-
-	return 0;
+	vq = v4l2_m2m_get_vq(m2m_ctx, type);
+	return vb2_streamoff(vq, type);
 }
 EXPORT_SYMBOL_GPL(v4l2_m2m_streamoff);
 
@@ -468,23 +407,10 @@ EXPORT_SYMBOL_GPL(v4l2_m2m_streamoff);
 unsigned int v4l2_m2m_poll(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 			   struct poll_table_struct *wait)
 {
-	struct video_device *vfd = video_devdata(file);
-	unsigned long req_events = poll_requested_events(wait);
 	struct vb2_queue *src_q, *dst_q;
 	struct vb2_buffer *src_vb = NULL, *dst_vb = NULL;
 	unsigned int rc = 0;
 	unsigned long flags;
-
-	if (test_bit(V4L2_FL_USES_V4L2_FH, &vfd->flags)) {
-		struct v4l2_fh *fh = file->private_data;
-
-		if (v4l2_event_pending(fh))
-			rc = POLLPRI;
-		else if (req_events & POLLPRI)
-			poll_wait(file, &fh->wait, wait);
-		if (!(req_events & (POLLOUT | POLLWRNORM | POLLIN | POLLRDNORM)))
-			return rc;
-	}
 
 	src_q = v4l2_m2m_get_src_vq(m2m_ctx);
 	dst_q = v4l2_m2m_get_dst_vq(m2m_ctx);
@@ -496,17 +422,15 @@ unsigned int v4l2_m2m_poll(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 	 */
 	if ((!src_q->streaming || list_empty(&src_q->queued_list))
 		&& (!dst_q->streaming || list_empty(&dst_q->queued_list))) {
-		rc |= POLLERR;
+		rc = POLLERR;
 		goto end;
 	}
 
 	if (m2m_ctx->m2m_dev->m2m_ops->unlock)
 		m2m_ctx->m2m_dev->m2m_ops->unlock(m2m_ctx->priv);
 
-	if (list_empty(&src_q->done_list))
-		poll_wait(file, &src_q->done_wq, wait);
-	if (list_empty(&dst_q->done_list))
-		poll_wait(file, &dst_q->done_wq, wait);
+	poll_wait(file, &src_q->done_wq, wait);
+	poll_wait(file, &dst_q->done_wq, wait);
 
 	if (m2m_ctx->m2m_dev->m2m_ops->lock)
 		m2m_ctx->m2m_dev->m2m_ops->lock(m2m_ctx->priv);
@@ -566,13 +490,15 @@ EXPORT_SYMBOL(v4l2_m2m_mmap);
  *
  * Usually called from driver's probe() function.
  */
-struct v4l2_m2m_dev *v4l2_m2m_init(const struct v4l2_m2m_ops *m2m_ops)
+struct v4l2_m2m_dev *v4l2_m2m_init(struct v4l2_m2m_ops *m2m_ops)
 {
 	struct v4l2_m2m_dev *m2m_dev;
 
-	if (!m2m_ops || WARN_ON(!m2m_ops->device_run) ||
-			WARN_ON(!m2m_ops->job_abort))
+	if (!m2m_ops)
 		return ERR_PTR(-EINVAL);
+
+	BUG_ON(!m2m_ops->device_run);
+	BUG_ON(!m2m_ops->job_abort);
 
 	m2m_dev = kzalloc(sizeof *m2m_dev, GFP_KERNEL);
 	if (!m2m_dev)
