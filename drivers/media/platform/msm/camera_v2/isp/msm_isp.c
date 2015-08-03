@@ -120,6 +120,7 @@ static int vfe_probe(struct platform_device *pdev)
 	snprintf(vfe_dev->subdev.sd.name,
 		ARRAY_SIZE(vfe_dev->subdev.sd.name),
 		"vfe");
+
 	vfe_dev->subdev.sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	vfe_dev->subdev.sd.flags |= V4L2_SUBDEV_FL_HAS_EVENTS;
 	v4l2_set_subdevdata(&vfe_dev->subdev.sd, vfe_dev);
@@ -133,15 +134,17 @@ static int vfe_probe(struct platform_device *pdev)
 	vfe_dev->subdev.sd.entity.group_id = MSM_CAMERA_SUBDEV_VFE;
 	vfe_dev->subdev.sd.entity.name = pdev->name;
 	vfe_dev->subdev.close_seq = MSM_SD_CLOSE_1ST_CATEGORY | 0x2;
-	rc = msm_sd_register(&vfe_dev->subdev);
-	if (rc != 0) {
-		pr_err("%s: msm_sd_register error = %d\n", __func__, rc);
-		goto probe_fail;
-	}
+
+	//rc = msm_sd_register(&vfe_dev->subdev);
+	//if (rc != 0) {
+	//	pr_err("%s: msm_sd_register error = %d\n", __func__, rc);
+	//	goto probe_fail;
+	//}
 
 	vfe_dev->buf_mgr = &vfe_buf_mgr;
 	v4l2_subdev_notify(&vfe_dev->subdev.sd,
 		MSM_SD_NOTIFY_REQ_CB, &vfe_vb2_ops);
+
 	rc = msm_isp_create_isp_buf_mgr(vfe_dev->buf_mgr,
 		&vfe_vb2_ops, &vfe_layout);
 	if (rc < 0) {
@@ -149,6 +152,7 @@ static int vfe_probe(struct platform_device *pdev)
 		kfree(vfe_dev);
 		return -EINVAL;
 	}
+
 	vfe_dev->buf_mgr->ops->register_ctx(vfe_dev->buf_mgr,
 		&vfe_dev->iommu_ctx[0], vfe_dev->hw_info->num_iommu_ctx);
 	vfe_dev->vfe_open_cnt = 0;

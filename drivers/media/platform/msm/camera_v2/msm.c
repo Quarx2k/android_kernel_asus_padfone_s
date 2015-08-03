@@ -327,6 +327,7 @@ int msm_sd_register(struct msm_sd_subdev *msm_subdev)
 		return -EIO;
 
 	msm_add_sd_in_position(msm_subdev, &ordered_sd_list);
+	printk("%s: OK\n",__func__);
 	return __msm_sd_register_subdev(&msm_subdev->sd);
 }
 
@@ -1051,6 +1052,7 @@ probe_end:
 
 static const struct of_device_id msm_dt_match[] = {
 	{.compatible = "qcom,msm-cam"},
+	{}
 }
 
 MODULE_DEVICE_TABLE(of, msm_dt_match);

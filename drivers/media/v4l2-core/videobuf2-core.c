@@ -2069,7 +2069,7 @@ int vb2_queue_init(struct vb2_queue *q)
 
 	/* Warn that the driver should choose an appropriate timestamp type */
 	WARN_ON(q->timestamp_type == V4L2_BUF_FLAG_TIMESTAMP_UNKNOWN);
-
+	printk("%s: Second WARN\n", __func__);
 	INIT_LIST_HEAD(&q->queued_list);
 	INIT_LIST_HEAD(&q->done_list);
 	spin_lock_init(&q->done_lock);
