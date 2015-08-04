@@ -1418,7 +1418,7 @@ int spi_rx_transfer(struct spi_device *spi,u8 *rx_buf,unsigned int len) //ASUS_B
         return spi_sync(spi, &spi_msg);
 }
 
-static int __devinit spi_test_probe(struct spi_device *spi)
+static int spi_test_probe(struct spi_device *spi)
 {
 	//int irq_gpio = -1;
 	int irq;
@@ -2400,8 +2400,7 @@ struct msm_sensor_ctrl_t mt9m114_s_ctrl = { //ASUS_BSP LiJen "[A86][Camera][NA][
 #define	S5K3L1YX_PROC_FILE_FLASH	"driver/camera_flash"
 #define	S5K3L1YX_PROC_FILE_POWER	"driver/mt9m114_power"
 
-static ssize_t mt9m114_proc_read_camera_status(char *page, char **start, off_t off, int count, 
-            	int *eof, void *data)
+static int mt9m114_proc_read_camera_status(struct file *file, char __user *page, size_t count, loff_t *eof)
 {
 	int len=0;
 	if(*eof == 0){
@@ -2412,14 +2411,12 @@ static ssize_t mt9m114_proc_read_camera_status(char *page, char **start, off_t o
 	  return len;
 }
 
-static ssize_t mt9m114_proc_read_camera_fled(char *page, char **start, off_t off, int count, 
-            	int *eof, void *data)
+static int mt9m114_proc_read_camera_fled(struct file *file, char __user *buff, size_t count, loff_t *offp)
 {
 	return 0;
 }
 
-static ssize_t mt9m114_proc_write_camera_fled(struct file *filp, const char __user *buff, 
-	            unsigned long len, void *data)
+static int mt9m114_proc_write_camera_fled(struct file *file, const char __user *buff, size_t len, loff_t *offp)
 {
 	static char messages = '\0';
 
@@ -2465,13 +2462,12 @@ static ssize_t mt9m114_proc_write_camera_fled(struct file *filp, const char __us
 
 }
 
-static ssize_t mt9m114_proc_read_camera_power(char *page, char **start, off_t off, int count, 
-            	int *eof, void *data)
+static int mt9m114_proc_read_camera_power(struct file *file, char __user *page, size_t count, loff_t *offp)
 {
 	int len=0;
        unsigned char camera_power_enable = false;
        
-	if(*eof == 0){
+	if(*offp == 0){
               //if(g_mi1040_power == true || g_mt9m114_power == true){ // LiJen: tmp
 #if 0              
               if(true){
@@ -2481,14 +2477,14 @@ static ssize_t mt9m114_proc_read_camera_power(char *page, char **start, off_t of
               }
 #endif              
 		len+=sprintf(page+len, "%x\n", camera_power_enable);
-		*eof = 1;
+		*offp = 1;
 		pr_info("%s:CameraPowe=%s", __func__, (char *)page);
 	}
 	  return len;
 }
 
-static ssize_t mt9m114_proc_write_camera_power(struct file *filp, const char __user *buff, 
-	            unsigned long len, void *data)
+
+static int mt9m114_proc_write_camera_power(struct file *file, const char __user *buff, size_t len, loff_t *offp)
 {
 	static char messages = '\0';
 
@@ -2548,28 +2544,36 @@ static ssize_t mt9m114_proc_write_camera_power(struct file *filp, const char __u
 
 }
 
+struct file_operations mt9m114_flash_fops = {
+	.write = mt9m114_proc_write_camera_fled,
+	.read = mt9m114_proc_read_camera_fled,
+};
+
+struct file_operations mt9m114_power_fops = {
+	.write = mt9m114_proc_write_camera_power,
+	.read = mt9m114_proc_read_camera_power,
+};
+struct file_operations mt9m114_status_fops = {
+	.read = mt9m114_proc_read_camera_status,
+};
+
+
 void create_mt9m114_proc_file(void)
 {
 	static struct proc_dir_entry *mt9m114_proc_file, *mt9m114_proc_file_power;
-	
-	if(create_proc_read_entry(S5K3L1YX_PROC_FILE_STATUS, 0666, NULL, 
-			mt9m114_proc_read_camera_status, NULL) == NULL){
+
+	mt9m114_proc_file = proc_create(S5K3L1YX_PROC_FILE_STATUS, 0666, NULL, &mt9m114_status_fops);
+	if (!mt9m114_proc_file) {
 		pr_err("[Camera]proc file create failed!\n");
 	}
 
-	mt9m114_proc_file = create_proc_entry(S5K3L1YX_PROC_FILE_FLASH, 0666, NULL);
-	if (mt9m114_proc_file) {
-		mt9m114_proc_file->read_proc = mt9m114_proc_read_camera_fled;
-		mt9m114_proc_file->write_proc = mt9m114_proc_write_camera_fled;
-	} else{
+	mt9m114_proc_file = proc_create(S5K3L1YX_PROC_FILE_FLASH, 0666, NULL, &mt9m114_flash_fops);
+	if (!mt9m114_proc_file) {
 		pr_err("[Camera]proc file create failed!\n");
 	}
 
-	mt9m114_proc_file_power = create_proc_entry(S5K3L1YX_PROC_FILE_POWER, 0666, NULL);
-	if (mt9m114_proc_file_power) {
-		mt9m114_proc_file_power->read_proc = mt9m114_proc_read_camera_power;
-		mt9m114_proc_file_power->write_proc = mt9m114_proc_write_camera_power;
-	} else{
+	mt9m114_proc_file_power = proc_create(S5K3L1YX_PROC_FILE_POWER, 0666, NULL, &mt9m114_power_fops);
+	if (!mt9m114_proc_file_power) {
 		pr_err("[Camera]mt9m114_proc_file_power create failed!\n");
 	}
     

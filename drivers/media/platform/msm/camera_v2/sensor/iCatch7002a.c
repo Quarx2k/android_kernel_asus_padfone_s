@@ -1969,9 +1969,10 @@ static void iCtach_flash_status_restore(void)
 static void iCatch_torch_off_work(struct work_struct *work)
 {
 	pr_info("%s E\n",__func__);
-       led_pmic_torch_enable(false,false);
+	if (g_flash_mode != 3) 
+		led_pmic_torch_enable(false,false);
        //led_pmic_flash_enable(true,true);
-       iCtach_flash_status_restore();
+	iCtach_flash_status_restore();
 	pr_info("%s X\n",__func__);
 	return;
 }
@@ -3689,8 +3690,7 @@ static struct proc_dir_entry *iCatch_proc_file;
 #define	ICATCH_FIRMWARE_VERSION_PROC_FILE	"driver/isp_fw_version"
 static struct proc_dir_entry *iCatch_fw_version_proc_file;
 
-static ssize_t iCatch_fw_version_proc_read(char *page, char **start, off_t off, int count,
-            	int *eof, void *data)
+static ssize_t iCatch_fw_version_proc_read(struct file *file, char __user *page, size_t count, loff_t *eof)
 {
 	int len=0;
 
@@ -3717,15 +3717,13 @@ static ssize_t iCatch_fw_version_proc_read(char *page, char **start, off_t off, 
 	return len;
 }
 
-static ssize_t iCatch_fw_version_proc_write(struct file *filp, const char __user *buff,
-	            unsigned long len, void *data)
+static ssize_t iCatch_fw_version_proc_write(struct file *file, const char __user *buff, size_t len, loff_t *offp)
 {
 	pr_info("%s\n",__func__);
 	return len;
 }
 
-static ssize_t iCatch_proc_read(char *page, char **start, off_t off, int count, 
-            	int *eof, void *data)
+static ssize_t iCatch_proc_read(struct file *file, char __user *page, size_t count, loff_t *eof)
 {
 	int len=0;
 
@@ -3877,8 +3875,7 @@ int cp(const char *to, const char *from)
     return -1;
 }
 
-static ssize_t iCatch_proc_write(struct file *filp, const char __user *buff, 
-	            unsigned long len, void *data)
+static ssize_t iCatch_proc_write(struct file *file, const char __user *buff, size_t len, loff_t *offp)
 {
 	static char messages[256]="";
        //static char cmd[256]="";
@@ -3955,21 +3952,25 @@ static ssize_t iCatch_proc_write(struct file *filp, const char __user *buff,
 	return len;
 }
 
+struct file_operations iCatch_fops = {
+	.write = iCatch_proc_write,
+	.read = iCatch_proc_read,
+};
+
+struct file_operations iCatch_fw_fops = {
+	.write = iCatch_fw_version_proc_write,
+	.read = iCatch_fw_version_proc_read,
+};
+
 void create_iCatch_proc_file(void)
 {
-    iCatch_proc_file = create_proc_entry(ICATCH_PROC_FILE, 0666, NULL);
-    if (iCatch_proc_file) {
-		iCatch_proc_file->read_proc = iCatch_proc_read;
-		iCatch_proc_file->write_proc = iCatch_proc_write;
-    } else{
+    iCatch_proc_file = proc_create(ICATCH_PROC_FILE, 0666, NULL, &iCatch_fops);
+    if (!iCatch_proc_file) {
         pr_err("proc file create failed!\n");
     }
 
-    iCatch_fw_version_proc_file = create_proc_entry(ICATCH_FIRMWARE_VERSION_PROC_FILE, 0666, NULL);
-    if (iCatch_fw_version_proc_file) {
-		iCatch_fw_version_proc_file->read_proc = iCatch_fw_version_proc_read;
-		iCatch_fw_version_proc_file->write_proc = iCatch_fw_version_proc_write;
-    } else{
+    iCatch_fw_version_proc_file = proc_create(ICATCH_FIRMWARE_VERSION_PROC_FILE, 0666, NULL, &iCatch_fw_fops);
+    if (!iCatch_fw_version_proc_file) {
         pr_err("proc file iCatch fw version create failed!\n");
     }
 
@@ -4380,22 +4381,23 @@ void iCatch_set_led_mode(int16_t mode)
     switch(mode)
     {
         case CAM_FLASH_MODE_ON: 
-            // pr_info("jim CAM_FLASH_MODE_ON");
+            pr_info("jim CAM_FLASH_MODE_ON");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x02);
             g_flash_mode = 1;
             break;
         case CAM_FLASH_MODE_OFF: 
-            // pr_info("jim CAM_FLASH_MODE_OFF");
+            pr_info("jim CAM_FLASH_MODE_OFF");
+            led_pmic_torch_enable(false, false);
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x01);
             g_flash_mode = 0;
             break;
         case CAM_FLASH_MODE_AUTO: 
-            // pr_info("jim CAM_FLASH_MODE_AUTO");
+            pr_info("jim CAM_FLASH_MODE_AUTO");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x00);
             g_flash_mode = 2;
             break;
         case CAM_FLASH_MODE_TORCH: 
-            // pr_info("jim CAM_FLASH_MODE_TORCH");
+            pr_info("jim CAM_FLASH_MODE_TORCH");
             sensor_write_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x7104, 0x04);
             g_flash_mode = 3;
             break;
