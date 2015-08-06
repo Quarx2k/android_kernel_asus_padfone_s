@@ -2377,6 +2377,7 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 	CLK_LOOKUP_OF("gpll0", gpll0_clk_src, ""),
 
 	CLK_LOOKUP_OF("dma_bam_pclk", gcc_bam_dma_ahb_clk, "msm_sps"),
+
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f991f000.serial"),
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9923000.i2c"),			//ASUS_BSP : Wireless Charger IC
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9924000.i2c"),			//ASUS_BSP : Touch
@@ -2384,8 +2385,6 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9926000.i2c"),			//ASUS_BSP : Camera
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9928000.i2c"),			//ASUS_BSP : Pad bus
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f991e000.serial"),
-	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup1_i2c_apps_clk, "f9923000.i2c"),
-	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9923000.i2c"),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup1_i2c_apps_clk, "f9923000.i2c"),//ASUS_BSP : Wireless Charger IC
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup2_i2c_apps_clk, "f9924000.i2c"),//ASUS_BSP : Touch
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup3_i2c_apps_clk, "f9925000.i2c"),//ASUS_BSP : Mydp
@@ -2394,14 +2393,9 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup6_i2c_apps_clk, "f9928000.i2c"),//ASUS_BSP : Pad bus
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup2_spi_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup1_spi_apps_clk, "f9923000.spi"),
-	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk, "f9923000.spi"),
-	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup3_i2c_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup3_spi_apps_clk, ""),
-	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup4_i2c_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup4_spi_apps_clk, ""),
-	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup5_i2c_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup5_spi_apps_clk, ""),
-	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup6_i2c_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_qup6_spi_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_uart1_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_uart2_apps_clk, "f991e000.serial"),

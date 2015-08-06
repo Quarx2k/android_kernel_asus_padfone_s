@@ -42,6 +42,7 @@
 #include "../board-dt.h"
 #include "../clock.h"
 #include "../platsmp.h"
+#include <linux/ProximityBasic.h>
 
 #ifdef CONFIG_PSTORE_RAM
 #include <linux/pstore_ram.h>
@@ -97,6 +98,67 @@ void __init msm_8974_reserve(void)
 	of_scan_flat_dt(dt_scan_for_memory_reserve, NULL);
 }
 
+static proximity_resource a91_proximity_resources[] = {
+    {
+        .index = 0,
+        .type = PROXIMITY_FILE_SOURCE,
+        .algo_type = PROXIMITY_BODYSAR_NOTIFY_ALGO_TYPE,
+        .initEventState = PROXIMITY_EVNET_FAR,
+        .name = "proximity_test1",
+    },
+    {
+        .index = 1,
+        .type = PROXIMITY_FILE_SOURCE,
+        .algo_type = PROXIMITY_BODYSAR_NOTIFY_ALGO_TYPE,
+        .initEventState = PROXIMITY_EVNET_FAR,
+        .name = "proximity_test2",
+    },    
+    {
+        .index = 2,
+        .type = PROXIMITY_CAP1106_SOURCE,
+        .algo_type = PROXIMITY_BODYSAR_NOTIFY_ALGO_TYPE,
+        .initEventState = PROXIMITY_EVNET_FAR,
+        .name = "cap_test",
+    },
+};
+static proximity_platform_data  a91_proximity_data = {
+    .resource        = a91_proximity_resources,
+    .nResource       = ARRAY_SIZE(a91_proximity_resources),
+};
+ 
+static struct platform_device a91_proximity_device = {
+    .name = "proximity-core-sensor",
+    .id = 0,
+    .dev            = {
+        .platform_data  = &a91_proximity_data,
+    },
+};     
+ 
+static struct platform_device *msm_a91_proximity_devices[] = {
+        &a91_proximity_device,
+};
+// ASUS_BSP --- Victor_Fu "proximity driver"
+ 
+ 
+// ASUS_BSP +++ Peter_Lu "Lightsensor"
+static struct platform_device cm36283_device = {
+        .name = "cm36283",
+        .id = 0,
+};
+ 
+static struct platform_device cm3628_device = {
+        .name = "cm3628",
+        .id = 0,
+};
+ 
+static struct platform_device *msm_a90_sensor_devices[] = {
+        &cm36283_device,
+};
+ 
+static struct platform_device *msm_a91_sensor_devices[] = {
+        &cm3628_device,
+};
+
 /*
  * Used to satisfy dependencies for devices that need to be
  * run early or in a particular order. Most likely your device doesn't fall
@@ -113,6 +175,15 @@ void __init msm8974_add_drivers(void)
 	krait_power_init();
 	tsens_tm_init_driver();
 	msm_thermal_device_init();
+        platform_add_devices(msm_a91_proximity_devices, ARRAY_SIZE(msm_a91_proximity_devices));
+        if (g_ASUS_hwID == A90_EVB0)  {
+                printk("Add_CM36283_sensor +++\n");
+                platform_add_devices(msm_a90_sensor_devices, ARRAY_SIZE(msm_a90_sensor_devices));
+        } else if (g_ASUS_hwID >= A91_SR1 && g_ASUS_hwID < A91_SR5) {
+                printk("Add_CM3628_sensor +++\n");
+                platform_add_devices(msm_a91_sensor_devices, ARRAY_SIZE(msm_a91_sensor_devices));
+        }
+
 #ifdef CONFIG_PSTORE_RAM
 	add_persistent_device();
 #endif
@@ -167,12 +238,6 @@ static void __init msm8974_map_io(void)
 	msm_map_8974_io();
 }
 
-//++ASUS_BSP : add for miniporting
-#include <linux/init.h>
-#include <linux/ioport.h>
-#include <mach/board.h>
-#include <mach/gpio.h>
-#include <mach/gpiomux.h>
 extern int __init device_gpio_init(void);
 void __init device_gpiomux_init(void)
 {

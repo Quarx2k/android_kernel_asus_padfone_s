@@ -9,3 +9,4 @@ obj-y				+= cm3628/
 obj-y				+= al3010/
 obj-y				+= proximity/
 obj-n                          	+= cap1106/
+obj-$(CONFIG_SENSORS_SSC)	+= sensors_ssc.o
