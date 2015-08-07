@@ -403,7 +403,7 @@ static struct msm_cam_clk_info cam_8610_clk_info[] = {
 
 static struct msm_cam_clk_info cam_8974_clk_info[] = {
 //ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"  
-	//[SENSOR_CAM_MCLK] = {"cam_src_clk", 19200000},
+	//[zSENSOR_CAM_MCLK] = {"cam_src_clk", 19200000},
 	[SENSOR_CAM_MCLK] = {"core_clk", 12000000},
 //ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"  
 	[SENSOR_CAM_CLK] = {"cam_clk", 0},
