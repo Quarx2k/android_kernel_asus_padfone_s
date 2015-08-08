@@ -1644,6 +1644,7 @@ void sensor_set_streamoff_main_camera(void)
 //ASUS_BSP--- YM Performance, to speedup preview, config MODE1 in stream off
                   g_bSensorState_StreamOn = false;  //YM: Stream is turned off
                   led_pmic_flash_enable(false, false); // disable pmic led flash
+                  led_pmic_torch_enable(false, false); // disable pmic led flash
            } else {
                   pr_info("%s: CFG_SET_STOP_STREAM SKIP (0x7121=0)...\n",__func__);
 	    }
