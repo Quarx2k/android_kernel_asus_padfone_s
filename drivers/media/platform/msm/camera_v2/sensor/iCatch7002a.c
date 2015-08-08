@@ -93,7 +93,7 @@ static unsigned int g_div = 100;
 //static int g_initialized_1280_960=0;
 //static int g_initialized_1080p=0;
 #endif
-static int exif_debug=0; //Asus jason_yeh add exif_debug message
+
 #define ISP_TORCH_INT_GPIO 19
 #define ISP_INT_GPIO 25
 
@@ -112,7 +112,7 @@ static int iCatch_is_updating = 0;
 static bool g_enable_roi_debug = false;
 extern struct msm_sensor_ctrl_t mt9m114_s_ctrl;
 extern struct msm_sensor_ctrl_t ov2720asus_s_ctrl;
-//struct msm_sensor_ctrl_t ov2720asus_s_ctrl;
+
 static int dbg_i7002a_page_index = 2047;
 static bool g_afmode=0; //0: Auto AF, 1:Full search AF
 static int g_flash_mode = 0;	// ASUS_BSP jim3_lin "LED mode for EXIF"
@@ -176,9 +176,6 @@ cam_area_t g_AF_ROI;
 cam_area_t g_AE_ROI;
 cam_focus_mode_type g_AF_MODE;
 struct exif_cfg g_JpegExif; 
-
-int AF_timecount=0;//ASUS BSP ryan_kuo+++ use for cancel AF if AF take too much time 
-
 
 /*********************** boot from host ************************/
 //ASUS_BSP+++ jim3_lin "Add for ATD CameraTest"
@@ -2466,12 +2463,6 @@ int sensor_set_mode_second_camera(int res)
                 sensor_write_reg(ov2720asus_s_ctrl.sensor_i2c_client->client, 0x7106, 0x04);  //1280x720
                 sensor_write_reg(ov2720asus_s_ctrl.sensor_i2c_client->client, 0x7120, 0x00);  //preview mode
                 break;            
-            case MSM_SENSOR_RES_FULL:       //MODE_4 - BF Preview
-                pr_info("%s: MODE_4 - BF Preview \n",__func__);
-                setCaptureVideoMode(1);
-                sensor_write_reg(ov2720asus_s_ctrl.sensor_i2c_client->client, 0x7106, 0x1A);  // 800x600
-                sensor_write_reg(ov2720asus_s_ctrl.sensor_i2c_client->client, 0x7120, 0x00);  //preview mode
-                break;
             default:
                 pr_err("%s: not support resolution res %d\n",__func__, res);
         	  return -EINVAL;                          
@@ -3690,7 +3681,8 @@ static struct proc_dir_entry *iCatch_proc_file;
 #define	ICATCH_FIRMWARE_VERSION_PROC_FILE	"driver/isp_fw_version"
 static struct proc_dir_entry *iCatch_fw_version_proc_file;
 
-static ssize_t iCatch_fw_version_proc_read(struct file *file, char __user *page, size_t count, loff_t *eof)
+static ssize_t iCatch_fw_version_proc_read(char *page, char **start, off_t off, int count,
+            	int *eof, void *data)
 {
 	int len=0;
 
@@ -3717,13 +3709,15 @@ static ssize_t iCatch_fw_version_proc_read(struct file *file, char __user *page,
 	return len;
 }
 
-static ssize_t iCatch_fw_version_proc_write(struct file *file, const char __user *buff, size_t len, loff_t *offp)
+static ssize_t iCatch_fw_version_proc_write(struct file *filp, const char __user *buff,
+	            unsigned long len, void *data)
 {
 	pr_info("%s\n",__func__);
 	return len;
 }
 
-static ssize_t iCatch_proc_read(struct file *file, char __user *page, size_t count, loff_t *eof)
+static ssize_t iCatch_proc_read(char *page, char **start, off_t off, int count, 
+            	int *eof, void *data)
 {
 	int len=0;
 
@@ -3875,7 +3869,8 @@ int cp(const char *to, const char *from)
     return -1;
 }
 
-static ssize_t iCatch_proc_write(struct file *file, const char __user *buff, size_t len, loff_t *offp)
+static ssize_t iCatch_proc_write(struct file *filp, const char __user *buff, 
+	            unsigned long len, void *data)
 {
 	static char messages[256]="";
        //static char cmd[256]="";
@@ -3952,25 +3947,21 @@ static ssize_t iCatch_proc_write(struct file *file, const char __user *buff, siz
 	return len;
 }
 
-struct file_operations iCatch_fops = {
-	.write = iCatch_proc_write,
-	.read = iCatch_proc_read,
-};
-
-struct file_operations iCatch_fw_fops = {
-	.write = iCatch_fw_version_proc_write,
-	.read = iCatch_fw_version_proc_read,
-};
-
 void create_iCatch_proc_file(void)
 {
-    iCatch_proc_file = proc_create(ICATCH_PROC_FILE, 0666, NULL, &iCatch_fops);
-    if (!iCatch_proc_file) {
+    iCatch_proc_file = create_proc_entry(ICATCH_PROC_FILE, 0666, NULL);
+    if (iCatch_proc_file) {
+		iCatch_proc_file->read_proc = iCatch_proc_read;
+		iCatch_proc_file->write_proc = iCatch_proc_write;
+    } else{
         pr_err("proc file create failed!\n");
     }
 
-    iCatch_fw_version_proc_file = proc_create(ICATCH_FIRMWARE_VERSION_PROC_FILE, 0666, NULL, &iCatch_fw_fops);
-    if (!iCatch_fw_version_proc_file) {
+    iCatch_fw_version_proc_file = create_proc_entry(ICATCH_FIRMWARE_VERSION_PROC_FILE, 0666, NULL);
+    if (iCatch_fw_version_proc_file) {
+		iCatch_fw_version_proc_file->read_proc = iCatch_fw_version_proc_read;
+		iCatch_fw_version_proc_file->write_proc = iCatch_fw_version_proc_write;
+    } else{
         pr_err("proc file iCatch fw version create failed!\n");
     }
 
@@ -4168,10 +4159,7 @@ void iCatch_get_exif(struct exif_cfg *exif)
 #endif
 	
             if((g_cur_res != MSM_SENSOR_RES_QTR)||frontcam_capture_status){
-		exif_debug++;
-		if(exif_debug%100==0)
-        	  pr_info("[EXIF] ISO(%d), ET(%d/%d), FLASH(%d), EDGE(%d), Yaverage(%d), Scene_info(%d)\n", exif->iso, exif->exp_time_num, exif->exp_time_denom, exif->flash_mode,exif->edge,exif->Yaverage,exif->scene_info);
-		  exif_debug=1;
+        	    pr_info("[EXIF] ISO(%d), ET(%d/%d), FLASH(%d), EDGE(%d), Yaverage(%d), Scene_info(%d)\n", exif->iso, exif->exp_time_num, exif->exp_time_denom, exif->flash_mode,exif->edge,exif->Yaverage,exif->scene_info);
             }
 	     frontcam_capture_status =false;		
             memcpy(&g_JpegExif, exif, sizeof(struct exif_cfg));
@@ -4805,37 +4793,27 @@ uint16_t iCatch_get_AF_result(struct msm_sensor_ctrl_t *s_ctrl)
 	u16 afresult,afdone;
        enum sensor_af_t status;
 	
-//	pr_info("%s +++\n",__func__);
+	pr_info("%s +++\n",__func__);
        g_isAFDone = false;
        
 	if(!caf_mode){
 		//Read AF result
 		sensor_read_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x72a0, &afdone);
 		sensor_read_reg(mt9m114_s_ctrl.sensor_i2c_client->client, 0x72a1, &afresult);
-//              pr_info("afdone(%d), afresult(%d)\n",afdone,afresult);
+              pr_info("afdone(%d), afresult(%d)\n",afdone,afresult);
               if(afdone == 0x00){  //AF idle
                     if(afresult == 0x00){
                         status = SENSOR_AF_FOCUSSED;   //AF success
-			     							pr_info("%s  AF success\n",__func__);
                     }else{
                         status = SENSOR_AF_NOT_FOCUSSED;   //AF fail
-			     							pr_info("%s  AF fail\n",__func__);
-				  }
-				  AF_timecount = 0; //after afdone reset AF_timecount  ASUS BSP Ryan_Kuo
-				  printk("%s(%d) AF done. \n", __func__, __LINE__);
+			}
               }else{    //AF busy
                     if(true == g_isAFCancel){
                         status = SENSOR_AF_CANCEL;
                     }else{
-                    	AF_timecount++;//ASUS BSP Ryan_kuo+++
-                      status = SENSOR_AF_SCANNING;
-					if (AF_timecount >39){//ASUS BSP Ryan_kuo+++
-						status = SENSOR_AF_NOT_FOCUSSED;
-						AF_timecount = 0; //after AF timeout reset AF_timecount  ASUS_BSP  Bryant_Yu
-						printk("%s(%d) AF timeout \n", __func__, __LINE__);
-					}
-				}
+                        status = SENSOR_AF_SCANNING;
 			}
+		}
 	}
 	else{
 		status = SENSOR_AF_NOT_FOCUSSED;
@@ -4852,7 +4830,7 @@ uint16_t iCatch_get_AF_result(struct msm_sensor_ctrl_t *s_ctrl)
             }              
        }
        
-	//pr_info("%s status(%d)---\n",__func__,status);
+	pr_info("%s status(%d)---\n",__func__,status);
 	return status;
 }
 //ASUS_BSP --- LiJen "[A68][13M][NA][Others]add 13M camera TAF support
@@ -5264,7 +5242,6 @@ void iCatch_release_sensor(void)
 	if(retry<10)
 		pr_info("%s : [PJ] DIT process AF done success and retry = %d. \n",__func__,retry);
 //ASUS_BSP --- PJ "[A91][Camera][NA][Others] wait DIT process AF release"	    
-	g_isAFDone = true;//ASUS BSP Evan : fix sometimes release icath sensor faiL;
 }
 
 

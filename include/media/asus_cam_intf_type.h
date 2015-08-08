@@ -39,7 +39,6 @@ typedef enum {
     CAM_INTF_PARM_SATURATION,
     CAM_INTF_PARM_BRIGHTNESS,
     CAM_INTF_PARM_ISO,
-    CAM_INTF_PARM_EXPOSURE_TIME,
     CAM_INTF_PARM_ZOOM, /* 20 */
     CAM_INTF_PARM_ROLLOFF,
     CAM_INTF_PARM_MODE,             /* camera mode */
@@ -48,7 +47,6 @@ typedef enum {
     CAM_INTF_PARM_AEC_ROI,
     CAM_INTF_PARM_AF_ROI,
     CAM_INTF_PARM_FOCUS_MODE,
-    CAM_INTF_PARM_MANUAL_FOCUS_POS,
     CAM_INTF_PARM_SCE_FACTOR,
     CAM_INTF_PARM_FD,
     CAM_INTF_PARM_MCE, /* 30 */
@@ -66,7 +64,6 @@ typedef enum {
     CAM_INTF_PARM_HDR_NEED_1X, /* if HDR needs 1x output */ /* 40 */
     CAM_INTF_PARM_LOCK_CAF,
     CAM_INTF_PARM_VIDEO_HDR,
-    CAM_INTF_PARM_SENSOR_HDR,
     CAM_INTF_PARM_ROTATION,
     CAM_INTF_PARM_SCALE,
     CAM_INTF_PARM_VT, /* indicating if it's a Video Call Apllication */
@@ -81,9 +78,6 @@ typedef enum {
     CAM_INTF_PARM_SET_VFE_COMMAND,
     CAM_INTF_PARM_SET_PP_COMMAND,
     CAM_INTF_PARM_TINTLESS,
-    CAM_INTF_PARM_CDS_MODE,
-    CAM_INTF_PARM_WB_MANUAL, //J66
-    CAM_INTF_PARM_LONGSHOT_ENABLE,
 
     /* stream based parameters */
     CAM_INTF_PARM_DO_REPROCESS,
@@ -91,9 +85,7 @@ typedef enum {
     CAM_INTF_PARM_STREAM_FLIP,
     CAM_INTF_PARM_GET_OUTPUT_CROP,
 
-    CAM_INTF_PARM_AF_MOBICAT_CMD,
     CAM_INTF_PARM_EZTUNE_CMD,
-    CAM_INTF_PARM_INT_EVT,
 
     /* specific to HAL3 */
     /* Whether the metadata maps to a valid frame number */
@@ -231,15 +223,10 @@ typedef enum {
     CAM_INTF_META_ASD_HDR_SCENE_DATA,
     CAM_INTF_META_PRIVATE_DATA,
     CAM_INTF_PARM_STATS_DEBUG_MASK,
-    CAM_INTF_PARM_ISP_DEBUG_MASK,
-    CAM_INTF_PARM_ALGO_OPTIMIZATIONS_MASK,
-    CAM_INTF_PARM_SENSOR_DEBUG_MASK,
     /* Indicates streams ID of all the requested buffers */
     CAM_INTF_META_STREAM_ID,
     CAM_INTF_PARM_FOCUS_BRACKETING,
-    CAM_INTF_PARM_MULTI_TOUCH_FOCUS_BRACKETING,
     CAM_INTF_PARM_FLASH_BRACKETING,
-    CAM_INTF_PARM_GET_IMG_PROP,
     
     ASUS_CAM_INTF_PARM_SET_SENSOR_OP_MODE,   //ASUS_BSP Stimber "Implement all sensor modes"
     ASUS_CAM_INTF_PARM_SET_SENSOR_VAL,      //ASUS_BSP jim3_lin "Pass G sensor data to ISP"
@@ -273,7 +260,6 @@ typedef enum {
     CAM_FOCUS_MODE_EDOF,
     CAM_FOCUS_MODE_CONTINOUS_VIDEO,
     CAM_FOCUS_MODE_CONTINOUS_PICTURE,
-    CAM_FOCUS_MODE_MANUAL,
     CAM_FOCUS_MODE_MAX
 } cam_focus_mode_type;
 //ASUS_BSP --- LiJen "Modify for asus yuv sensor param types"
@@ -289,7 +275,6 @@ typedef enum {
     CAM_ISO_MODE_400,
     CAM_ISO_MODE_800,
     CAM_ISO_MODE_1600,
-    CAM_ISO_MODE_3200,
     CAM_ISO_MODE_MAX
 } cam_iso_mode_type;
 
@@ -303,7 +288,6 @@ typedef enum {
     CAM_WB_MODE_CLOUDY_DAYLIGHT,
     CAM_WB_MODE_TWILIGHT,
     CAM_WB_MODE_SHADE,
-    CAM_WB_MODE_MANUAL, //J66
     CAM_WB_MODE_OFF,
     CAM_WB_MODE_MAX
 } cam_wb_mode_type;
@@ -348,19 +332,9 @@ typedef enum {
     CAM_SCENE_MODE_THEATRE,
     CAM_SCENE_MODE_ACTION,
     CAM_SCENE_MODE_AR,
-    /* DIT_ADD +++++ J66 */
-    CAM_SCENE_MODE_HILIGHT,//ASUS_BSP Zhengwei_Cai "Add HiLight Best Shot interface"
-    CAM_SCENE_MODE_HILIGHT_SNAPSHOT, /* 20 */	//add by sam for hi-light mode capture
-    CAM_SCENE_MODE_NIGHT_SNAPSHOT,	//add by sam for night mode capture
-    CAM_SCENE_MODE_HDR_SNAPSHOT,	//add by sam for hdr mode capture
-    /* DIT_ADD ----- J66 */
     CAM_SCENE_MODE_FACE_PRIORITY,
     CAM_SCENE_MODE_BARCODE,
     CAM_SCENE_MODE_HDR,
-    /* DIT_ADD +++++ J66*/
-    CAM_SCENE_MODE_VIDEO,
-    CAM_SCENE_MODE_VIDEO_EIS,
-    /* DIT_ADD ----- J66*/
     CAM_SCENE_MODE_MAX
 } cam_scene_mode_type;
 

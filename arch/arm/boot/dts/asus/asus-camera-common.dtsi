@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -71,13 +71,7 @@
 		compatible = "qcom,actuator";
 		qcom,cci-master = <0>;
 	};
-	qcom,camera@0 {
-	};
-	qcom,camera@1 {
-	};
-	qcom,camera@2 {
-	};
-//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+
 	qcom,camera@3c {
 		compatible = "qcom,mt9m114";
 		reg = <0x3c>;
@@ -136,15 +130,13 @@
 		qcom,sensor-mode = <1>;
 		qcom,cci-master = <0>;
 	};
-//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
-//ASUS_BSP+++ CR_0000 Randy_Change@asus.com.tw [2013/6/10] Modify Begin
 	qcom,camera@6a {
 		compatible = "qcom,ov2720asus";
 		reg = <0x6a>;
 		qcom,slave-id = <0x78 0x72c6 0x00>;
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
-		qcom,mount-angle = <270>;
+		qcom,mount-angle = <90>;
 		qcom,sensor-name = "ov2720asus";
 		qcom,vdd-cx-supply = <&pm8841_s2>;
 		qcom,vdd-cx-name = "qcom,vdd-cx";
@@ -189,5 +181,4 @@
 		qcom,sensor-mode = <1>;
 		qcom,cci-master = <0>;
 	};
-//ASUS_BSP--- CR_0000 Randy_Change@asus.com.tw [2013/6/10] Modify End
 };
