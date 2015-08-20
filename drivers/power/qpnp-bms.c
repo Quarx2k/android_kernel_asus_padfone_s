@@ -3601,7 +3601,11 @@ static int set_battery_data(struct qpnp_bms_chip *chip)
 	} else if (chip->batt_type == BATT_OEM) {
 		batt_data = &oem_batt_data;
 	} else if (chip->batt_type == BATT_QRD_4V35_2000MAH) {
+#ifndef CONFIG_ASUS_PF500KL
 		batt_data = &QRD_4v35_2000mAh_data;
+#else
+		batt_data = &ASUS_A91_2215mAh_data;
+#endif
 	} else if (chip->batt_type == BATT_QRD_4V2_1300MAH) {
 		batt_data = &qrd_4v2_1300mah_data;
 	} else {

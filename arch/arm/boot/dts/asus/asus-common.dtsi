@@ -252,6 +252,40 @@
 			qcom,support-reset = <0>;
 		};
 	};
+
+	qcom,coincell@2800 {
+		qcom,rset-ohms = <800>;
+		qcom,vset-millivolts = <3200>;
+		qcom,charge-enable = <1>;
+	};
+
+	qcom,bms {
+		status = "ok";
+		qcom,low-voltage-threshold = <3520000>;
+		qcom,use-external-rsense;
+		qcom,batt-type = <4>;
+		qcom,max-voltage-uv = <4350000>;
+
+	};
+
+	qcom,charger {
+		qcom,vddmax-mv = <4350>;
+		qcom,vddsafe-mv = <4350>;
+		qcom,vinmin-mv = <4400>;
+		qcom,ibatmax-ma = <1100>;
+		qcom,ibatterm-ma = <120>;
+		qcom,ibatsafe-ma = <1100>;
+		qcom,thermal-mitigation = <2000 900 900 200>;
+		qcom,cool-bat-mv = <4350>;
+		qcom,ibatmax-warm-ma = <1100>;
+		qcom,warm-bat-mv = <4100>;
+		qcom,ibatmax-cool-ma = <400>;
+		qcom,tchg-mins = <512>;
+		qcom,cool-bat-decidegc = <100>;
+		qcom,warm-bat-decidegc = <450>;
+		qcom,vbatdet-delta-mv = <100>;
+		qcom,maxinput-dc-ma = <300>;
+	};
 };
 
 &usb_otg {
