@@ -2931,7 +2931,7 @@ static int taiko_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 		taiko->spkr_pa_widget_on = true;
 		snd_soc_update_bits(codec, TAIKO_A_SPKR_DRV_EN, 0x80, 0x80);
 		//Bruno++
-		ApplyA68SPKGain();
+		//ApplyA68SPKGain();
 		//Bruno++
 		break;
 	case SND_SOC_DAPM_POST_PMD:
@@ -2939,7 +2939,7 @@ static int taiko_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 		snd_soc_update_bits(codec, TAIKO_A_SPKR_DRV_EN, 0x80, 0x00);
 		break;
 	}
-	ApplyHeadsetGain(); // ASUS_BSP Paul +++
+	//ApplyHeadsetGain(); // ASUS_BSP Paul +++
 	return 0;
 }
 
@@ -8436,12 +8436,12 @@ void Dump_wcd9320_reg(void) {
 }
 EXPORT_SYMBOL_GPL(Dump_wcd9320_reg);
 
-static void amp_delay_work(struct work_struct *work)
+static void __attribute__((unused)) amp_delay_work(struct work_struct *work)
 {
     ApplyA68SPKGain();
 }
 
-void ApplyA68SPKGain(void)
+void __attribute__((unused)) ApplyA68SPKGain(void)
 {
     u32 spkdrvgain, rx7_vol, lineout1, lineout2;
     spkdrvgain = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_SPKR_DRV_GAIN);
@@ -8501,7 +8501,7 @@ void ApplyA68SPKGain(void)
 }
 EXPORT_SYMBOL_GPL(ApplyA68SPKGain);
 
-void ApplyHeadsetGain(void)
+void __attribute__((unused)) ApplyHeadsetGain(void)
 {
 	u32 rx1_vol, rx2_vol;
 	rx1_vol = wcd9xxx_reg_read(&g_wcd9xxx->core_res, TAIKO_A_CDC_RX1_VOL_CTL_B2_CTL);
