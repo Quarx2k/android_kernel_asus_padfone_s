@@ -40,7 +40,7 @@
 			compatible = "qcom,mt9m114";
 			reg = <0x3c>;
 			cam_vdig-supply = <&pm8941_lvs2>;
-			cam_vana-supply = <&pm8941_l22>;
+			cam_vana-supply = <&pm8941_l17>;
 			cam_vio-supply = <&pm8941_l23>;
 			cam_vaf-supply = <&pm8941_l17>;				
 		};
@@ -50,7 +50,7 @@
 			compatible = "qcom,ov2720asus";
 			reg = <0x6a>;
 			cam_vdig-supply = <&pm8941_lvs2>;
-			cam_vana-supply = <&pm8941_l22>;
+			cam_vana-supply = <&pm8941_l17>;
 			cam_vio-supply = <&pm8941_l23>;
 			cam_vaf-supply = <&pm8941_l17>;				
 		};
@@ -83,7 +83,7 @@
 		qcom,vdd-cx-supply = <&pm8841_s2>;
 		qcom,vdd-cx-name = "qcom,vdd-cx";
 		cam_vdig-supply = <&pm8941_lvs2>;
-		cam_vana-supply = <&pm8941_l22>;
+		cam_vana-supply = <&pm8941_l17>;
 		cam_vio-supply = <&pm8941_l23>;
 		cam_vaf-supply = <&pm8941_l17>;
 		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana", "cam_vaf";
@@ -141,7 +141,7 @@
 		qcom,vdd-cx-supply = <&pm8841_s2>;
 		qcom,vdd-cx-name = "qcom,vdd-cx";
 		cam_vdig-supply = <&pm8941_lvs2>;
-		cam_vana-supply = <&pm8941_l22>;
+		cam_vana-supply = <&pm8941_l17>;
 		cam_vio-supply = <&pm8941_l23>;
 		cam_vaf-supply = <&pm8941_l17>;
 		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana", "cam_vaf";
