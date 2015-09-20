@@ -137,6 +137,7 @@ extern struct bms_battery_data QRD_4v35_2000mAh_data;
 extern struct bms_battery_data  qrd_4v2_1300mah_data;
 #ifdef CONFIG_ASUS_PF500KL
 extern struct bms_battery_data ASUS_A91_2215mAh_data;
+extern struct bms_battery_data ASUS_A86_2320mAh_data;
 #endif
 int interpolate_fcc(struct single_row_lut *fcc_temp_lut, int batt_temp);
 int interpolate_scalingfactor(struct sf_lut *sf_lut, int row_entry, int pc);
