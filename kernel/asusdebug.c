@@ -1132,8 +1132,8 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
                 get_last_shutdown_log();
                 printk("[ASDF] get_last_shutdown_log: last_shutdown_log_addr=0x%08x, value=0x%08x\n", (unsigned int)last_shutdown_log_addr, *last_shutdown_log_addr);
 #ifdef CONFIG_MSM_RTB
-                if ( (*last_shutdown_log_addr)==(unsigned int)PRINTK_BUFFER_MAGIC )
-					save_rtb_log();
+               // if ( (*last_shutdown_log_addr)==(unsigned int)PRINTK_BUFFER_MAGIC )
+					//save_rtb_log();
 #endif
 
                 if ((*last_shutdown_log_addr) == (ulong)PRINTK_BUFFER_MAGIC) {

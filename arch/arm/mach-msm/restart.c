@@ -153,7 +153,7 @@ static void enable_emergency_dload_mode(void)
 	printk(KERN_ERR "dload mode is not enabled on target\n");
 }
 
-#ifndef CONFIG_MACH_OPPO
+#ifndef CONFIG_ASUS_PF500KL
 static bool get_dload_mode(void)
 {
 	return false;
@@ -274,7 +274,7 @@ static void msm_restart_prepare(const char *cmd)
 	pm8xxx_reset_pwr_off(1);
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
-#ifdef CONFIG_MACH_OPPO
+#ifdef CONFIG_ASUS_PF500KL
 	qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
 #else
 	if (get_dload_mode() || (cmd != NULL && cmd[0] != '\0'))
