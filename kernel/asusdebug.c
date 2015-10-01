@@ -1138,8 +1138,8 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
 
                 if ((*last_shutdown_log_addr) == (ulong)PRINTK_BUFFER_MAGIC) {
                     printk("[ASDF] after saving asdf log, then reboot\n");
-                    sys_sync();
-                    kernel_restart(NULL);
+                   // sys_sync();
+                   // kernel_restart(NULL);
                 }
 
 				(*last_shutdown_log_addr)=(unsigned int)PRINTK_BUFFER_MAGIC;
@@ -1148,7 +1148,7 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
             g_saving_rtb_log = 0;
 #endif
 	}
-    else if(strncmp(messages, "get_last_kmsg", 7) == 0)
+    else if(strncmp(messages, "qtest", strlen("qtest")) == 0)
     {
         printk("[Quarx2k] Save LastKmsg!\n");
 	save_last_shutdown_log("OOLOLO");
@@ -1257,7 +1257,7 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
             if(!asus_asdf_set)
             {
                 asus_asdf_set = 1;
-				save_phone_hang_log();
+		save_phone_hang_log();
                 get_last_shutdown_log();
                 printk("[ASDF] get_last_shutdown_log: last_shutdown_log_addr=0x%08x, value=0x%08x\n", (unsigned int)last_shutdown_log_addr, *last_shutdown_log_addr);
 #ifdef CONFIG_MSM_RTB
