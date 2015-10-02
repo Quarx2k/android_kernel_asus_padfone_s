@@ -48,14 +48,10 @@
 #include <linux/pstore_ram.h>
 #include <linux/memblock.h>
 
-#define PERSISTENT_RAM_SIZE SZ_1M
-#define RAM_CONSOLE_SIZE (256 * SZ_1K)
-#define RAM_CONSOLE_BASE (SZ_1G + SZ_256M)
-
 static struct ramoops_platform_data ramoops_data = {
-	.console_size = RAM_CONSOLE_SIZE,
-	.mem_address  = RAM_CONSOLE_BASE,
-	.mem_size     = PERSISTENT_RAM_SIZE,
+	.console_size = 0x00040000,
+	.mem_address  = 0x1FF00000,
+	.mem_size     = 0x00040000,
 };
 
 static struct platform_device ramoops_dev = {
@@ -64,16 +60,6 @@ static struct platform_device ramoops_dev = {
 		.platform_data = &ramoops_data,
 	}
 };
-
-static void __init add_persist_ram_device(void)
-{
-	int ret = memblock_reserve(RAM_CONSOLE_BASE, PERSISTENT_RAM_SIZE);
-
-	if (ret)
-		pr_err("%s: failed to initialize persistent ram\n", __func__);
-	else
-		pr_info("%s:initialize persistent ram ok\n", __func__);
-}
 
 static void __init add_persistent_device(void)
 {
@@ -92,9 +78,6 @@ static void __init add_persistent_device(void)
 
 void __init msm_8974_reserve(void)
 {
-#ifdef CONFIG_PSTORE_RAM
-	add_persist_ram_device();
-#endif
 	of_scan_flat_dt(dt_scan_for_memory_reserve, NULL);
 }
 

@@ -33,7 +33,7 @@ struct persistent_ram_buffer {
 	uint8_t     data[0];
 };
 
-#define PERSISTENT_RAM_SIG (0x43474244) /* DBGC */
+#define PERSISTENT_RAM_SIG (0xFEEDBEEF) /* DBGC */
 
 static inline size_t buffer_size(struct persistent_ram_zone *prz)
 {
@@ -416,14 +416,14 @@ static int persistent_ram_post_init(struct persistent_ram_zone *prz, u32 sig,
 				" size %zu, start %zu\n",
 			       buffer_size(prz), buffer_start(prz));
 		else {
-			pr_debug("persistent_ram: found existing buffer,"
+			pr_info("persistent_ram: found existing buffer,"
 				" size %zu, start %zu\n",
 			       buffer_size(prz), buffer_start(prz));
 			persistent_ram_save_old(prz);
 			return 0;
 		}
 	} else {
-		pr_debug("persistent_ram: no valid data in buffer"
+		pr_info("persistent_ram: no valid data in buffer"
 			" (sig = 0x%08x)\n", prz->buffer->sig);
 	}
 
