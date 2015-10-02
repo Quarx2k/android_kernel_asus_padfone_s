@@ -32,7 +32,7 @@ struct persistent_ram_buffer {
 	uint8_t     data[0];
 };
 
-#define PERSISTENT_RAM_SIG (0x43474244) /* DBGC */
+#define PERSISTENT_RAM_SIG (0xFEEDBEEF) /* DBGC */
 
 static __devinitdata LIST_HEAD(persistent_ram_list);
 

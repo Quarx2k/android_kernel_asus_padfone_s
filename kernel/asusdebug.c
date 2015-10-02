@@ -1118,7 +1118,7 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
 #ifdef CONFIG_MSM_RTB
 			extern int g_saving_rtb_log;
 #endif
-			unsigned int *last_shutdown_log_addr;
+		unsigned int *last_shutdown_log_addr;
 
             first = 1;
 
@@ -1128,7 +1128,7 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
             if(!asus_asdf_set)
             {
                 asus_asdf_set = 1;
-				save_phone_hang_log();
+		save_phone_hang_log();
                 get_last_shutdown_log();
                 printk("[ASDF] get_last_shutdown_log: last_shutdown_log_addr=0x%08x, value=0x%08x\n", (unsigned int)last_shutdown_log_addr, *last_shutdown_log_addr);
 #ifdef CONFIG_MSM_RTB
