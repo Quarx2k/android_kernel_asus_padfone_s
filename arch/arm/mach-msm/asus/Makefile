@@ -1,2 +1,2 @@
 
-obj-y += asus_gpio_pinmux.o board-asus-8974.o board-asus-gpiomux.o
+obj-y += asus_gpio_pinmux.o board-asus-8974.o
