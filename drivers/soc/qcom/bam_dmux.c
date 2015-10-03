@@ -187,7 +187,7 @@ static void *a2_phys_base;
 static uint32_t a2_phys_size;
 static int a2_bam_irq;
 static struct sps_bam_props a2_props;
-static unsigned long a2_device_handle;
+static u32 a2_device_handle;
 static struct sps_pipe *bam_tx_pipe;
 static struct sps_pipe *bam_rx_pipe;
 static struct sps_connect tx_connection;
@@ -229,6 +229,7 @@ static struct srcu_struct bam_dmux_srcu;
 
 /* A2 power collaspe */
 #define UL_TIMEOUT_DELAY 1000	/* in ms */
+#define ENABLE_DISCONNECT_ACK	0x1
 #define SHUTDOWN_TIMEOUT_MS	500
 #define UL_WAKEUP_TIMEOUT_MS	2000
 static void toggle_apps_ack(void);
@@ -263,11 +264,12 @@ static struct completion dfab_unvote_completion;
 static DEFINE_SPINLOCK(wakelock_reference_lock);
 static int wakelock_reference_count;
 static int a2_pc_disabled_wakelock_skipped;
+static int disconnect_ack = 1;
 static LIST_HEAD(bam_other_notify_funcs);
 static DEFINE_MUTEX(smsm_cb_lock);
 static DEFINE_MUTEX(delayed_ul_vote_lock);
 static int need_delayed_ul_vote;
-static int in_ssr;
+static int power_management_only_mode;
 static int ssr_skipped_disconnect;
 static struct completion shutdown_completion;
 
@@ -330,7 +332,7 @@ static void *bam_ipc_log_txt;
 do { \
 	if (bam_ipc_log_txt) { \
 		ipc_log_string(bam_ipc_log_txt, \
-		"<DMUX> %c%c%c%c %c%c%c%c%d " fmt, \
+		"<DMUX> %c%c%c%c %c%c%c%c%d%c " fmt, \
 		a2_pc_disabled ? 'D' : 'd', \
 		in_global_reset ? 'R' : 'r', \
 		bam_dmux_power_state ? 'P' : 'p', \
@@ -340,6 +342,7 @@ do { \
 		wait_for_ack ? 'W' : 'w', \
 		ul_wakeup_ack_completion.done ? 'A' : 'a', \
 		atomic_read(&ul_ondemand_vote), \
+		disconnect_ack ? 'D' : 'd', \
 		args); \
 	} \
 } while (0)
@@ -583,6 +586,11 @@ static void handle_bam_mux_cmd(struct work_struct *work)
 		BAM_DMUX_LOG("%s: opening cid %d PC enabled\n", __func__,
 				rx_hdr->ch_id);
 		handle_bam_mux_cmd_open(rx_hdr);
+		if (!(rx_hdr->reserved & ENABLE_DISCONNECT_ACK)) {
+			BAM_DMUX_LOG("%s: deactivating disconnect ack\n",
+								__func__);
+			disconnect_ack = 0;
+		}
 		dev_kfree_skb_any(rx_skb);
 		break;
 	case BAM_MUX_HDR_CMD_OPEN_NO_A2_PC:
@@ -1762,40 +1770,45 @@ static void reconnect_to_bam(void)
 {
 	int i;
 
-	in_global_reset = 0;
-	in_ssr = 0;
-	vote_dfab();
-
-	if (ssr_skipped_disconnect) {
-		/* delayed to here to prevent bus stall */
-		bam_ops->sps_disconnect_ptr(bam_tx_pipe);
-		bam_ops->sps_disconnect_ptr(bam_rx_pipe);
-		__memzero(rx_desc_mem_buf.base, rx_desc_mem_buf.size);
-		__memzero(tx_desc_mem_buf.base, tx_desc_mem_buf.size);
+	if (in_global_reset) {
+		BAM_DMUX_LOG("%s: skipping due to SSR\n", __func__);
+		return;
 	}
-	ssr_skipped_disconnect = 0;
-	i = bam_ops->sps_device_reset_ptr(a2_device_handle);
-	if (i)
-		pr_err("%s: device reset failed rc = %d\n", __func__,
-								i);
-	i = bam_ops->sps_connect_ptr(bam_tx_pipe, &tx_connection);
-	if (i)
-		pr_err("%s: tx connection failed rc = %d\n", __func__,
-								i);
-	i = bam_ops->sps_connect_ptr(bam_rx_pipe, &rx_connection);
-	if (i)
-		pr_err("%s: rx connection failed rc = %d\n", __func__,
-								i);
-	i = bam_ops->sps_register_event_ptr(bam_tx_pipe,
-			&tx_register_event);
-	if (i)
-		pr_err("%s: tx event reg failed rc = %d\n", __func__,
-								i);
-	i = bam_ops->sps_register_event_ptr(bam_rx_pipe,
-			&rx_register_event);
-	if (i)
-		pr_err("%s: rx event reg failed rc = %d\n", __func__,
+
+	vote_dfab();
+	if (!power_management_only_mode) {
+		if (ssr_skipped_disconnect) {
+			/* delayed to here to prevent bus stall */
+			bam_ops->sps_disconnect_ptr(bam_tx_pipe);
+			bam_ops->sps_disconnect_ptr(bam_rx_pipe);
+			__memzero(rx_desc_mem_buf.base, rx_desc_mem_buf.size);
+			__memzero(tx_desc_mem_buf.base, tx_desc_mem_buf.size);
+		}
+		ssr_skipped_disconnect = 0;
+		i = bam_ops->sps_device_reset_ptr(a2_device_handle);
+		if (i)
+			pr_err("%s: device reset failed rc = %d\n", __func__,
 									i);
+		i = bam_ops->sps_connect_ptr(bam_tx_pipe, &tx_connection);
+		if (i)
+			pr_err("%s: tx connection failed rc = %d\n", __func__,
+									i);
+		i = bam_ops->sps_connect_ptr(bam_rx_pipe, &rx_connection);
+		if (i)
+			pr_err("%s: rx connection failed rc = %d\n", __func__,
+									i);
+		i = bam_ops->sps_register_event_ptr(bam_tx_pipe,
+				&tx_register_event);
+		if (i)
+			pr_err("%s: tx event reg failed rc = %d\n", __func__,
+									i);
+		i = bam_ops->sps_register_event_ptr(bam_rx_pipe,
+				&rx_register_event);
+		if (i)
+			pr_err("%s: rx event reg failed rc = %d\n", __func__,
+									i);
+	}
+
 	bam_connection_is_active = 1;
 
 	if (polling_mode)
@@ -1803,7 +1816,8 @@ static void reconnect_to_bam(void)
 
 	toggle_apps_ack();
 	complete_all(&bam_connection_completion);
-	queue_rx();
+	if (!power_management_only_mode)
+		queue_rx();
 }
 
 static void disconnect_to_bam(void)
@@ -1839,18 +1853,20 @@ static void disconnect_to_bam(void)
 	/* tear down BAM connection */
 	INIT_COMPLETION(bam_connection_completion);
 
-	/* in_ssr documentation/assumptions found in restart_notifier_cb */
-	if (likely(!in_ssr)) {
-		BAM_DMUX_LOG("%s: disconnect tx\n", __func__);
-		bam_ops->sps_disconnect_ptr(bam_tx_pipe);
-		BAM_DMUX_LOG("%s: disconnect rx\n", __func__);
-		bam_ops->sps_disconnect_ptr(bam_rx_pipe);
-		__memzero(rx_desc_mem_buf.base, rx_desc_mem_buf.size);
-		__memzero(tx_desc_mem_buf.base, tx_desc_mem_buf.size);
-		BAM_DMUX_LOG("%s: device reset\n", __func__);
-		sps_device_reset(a2_device_handle);
-	} else {
-		ssr_skipped_disconnect = 1;
+	/* documentation/assumptions found in restart_notifier_cb */
+	if (!power_management_only_mode) {
+		if (likely(!in_global_reset)) {
+			BAM_DMUX_LOG("%s: disconnect tx\n", __func__);
+			bam_ops->sps_disconnect_ptr(bam_tx_pipe);
+			BAM_DMUX_LOG("%s: disconnect rx\n", __func__);
+			bam_ops->sps_disconnect_ptr(bam_rx_pipe);
+			__memzero(rx_desc_mem_buf.base, rx_desc_mem_buf.size);
+			__memzero(tx_desc_mem_buf.base, tx_desc_mem_buf.size);
+			BAM_DMUX_LOG("%s: device reset\n", __func__);
+			sps_device_reset(a2_device_handle);
+		} else {
+			ssr_skipped_disconnect = 1;
+		}
 	}
 	unvote_dfab();
 
@@ -1866,7 +1882,10 @@ static void disconnect_to_bam(void)
 	}
 	bam_rx_pool_len = 0;
 	mutex_unlock(&bam_rx_pool_mutexlock);
-	toggle_apps_ack();
+
+	if (disconnect_ack)
+		toggle_apps_ack();
+
 	verify_tx_queue_is_empty(__func__);
 }
 
@@ -1974,12 +1993,13 @@ static int restart_notifier_cb(struct notifier_block *this,
 	if (code == SUBSYS_BEFORE_SHUTDOWN) {
 		BAM_DMUX_LOG("%s: begin\n", __func__);
 		in_global_reset = 1;
-		in_ssr = 1;
-		/* wait till all bam_dmux writes completes */
+		/* sync to ensure the driver sees SSR */
 		synchronize_srcu(&bam_dmux_srcu);
 		BAM_DMUX_LOG("%s: ssr signaling complete\n", __func__);
 		flush_workqueue(bam_mux_rx_workqueue);
 	}
+	if (code == SUBSYS_BEFORE_POWERUP)
+		in_global_reset = 0;
 	if (code != SUBSYS_AFTER_SHUTDOWN)
 		return NOTIFY_DONE;
 
@@ -1998,6 +2018,7 @@ static int restart_notifier_cb(struct notifier_block *this,
 	ul_powerdown_finish();
 	a2_pc_disabled = 0;
 	a2_pc_disabled_wakelock_skipped = 0;
+	disconnect_ack = 1;
 
 	/* Cleanup Channel States */
 	mutex_lock(&bam_pdev_mutexlock);
@@ -2049,6 +2070,7 @@ static int bam_init(void)
 	void *a2_virt_addr;
 	int skip_iounmap = 0;
 
+	in_global_reset = 0;
 	vote_dfab();
 	/* init BAM */
 	a2_virt_addr = ioremap_nocache((unsigned long)(a2_phys_base),
@@ -2067,7 +2089,7 @@ static int bam_init(void)
 	a2_props.summing_threshold = A2_SUMMING_THRESHOLD;
 	a2_props.constrained_logging = true;
 	a2_props.logging_number = 1;
-	if (satellite_mode)
+	if (cpu_is_msm9615() || satellite_mode)
 		a2_props.manage = SPS_BAM_MGR_DEVICE_REMOTE;
 	/* need to free on tear down */
 	ret = bam_ops->sps_register_bam_device_ptr(&a2_props, &h);
@@ -2218,6 +2240,70 @@ ioremap_failed:
 	return ret;
 }
 
+static int bam_init_fallback(void)
+{
+	unsigned long h;
+	int ret;
+	void *a2_virt_addr;
+
+	/* init BAM */
+	a2_virt_addr = ioremap_nocache((unsigned long)(a2_phys_base),
+							a2_phys_size);
+	if (!a2_virt_addr) {
+		pr_err("%s: ioremap failed\n", __func__);
+		ret = -ENOMEM;
+		goto ioremap_failed;
+	}
+	a2_props.phys_addr = (u32)(a2_phys_base);
+	a2_props.virt_addr = a2_virt_addr;
+	a2_props.virt_size = a2_phys_size;
+	a2_props.irq = a2_bam_irq;
+	a2_props.options = SPS_BAM_OPT_IRQ_WAKEUP;
+	a2_props.num_pipes = A2_NUM_PIPES;
+	a2_props.summing_threshold = A2_SUMMING_THRESHOLD;
+	if (cpu_is_msm9615() || satellite_mode)
+		a2_props.manage = SPS_BAM_MGR_DEVICE_REMOTE;
+	ret = bam_ops->sps_register_bam_device_ptr(&a2_props, &h);
+	if (ret < 0) {
+		pr_err("%s: register bam error %d\n", __func__, ret);
+		goto register_bam_failed;
+	}
+	a2_device_handle = h;
+
+	mutex_lock(&delayed_ul_vote_lock);
+	bam_mux_initialized = 1;
+	if (need_delayed_ul_vote) {
+		need_delayed_ul_vote = 0;
+		msm_bam_dmux_kickoff_ul_wakeup();
+	}
+	mutex_unlock(&delayed_ul_vote_lock);
+	toggle_apps_ack();
+
+	power_management_only_mode = 1;
+	bam_connection_is_active = 1;
+	complete_all(&bam_connection_completion);
+
+	return 0;
+
+register_bam_failed:
+	iounmap(a2_virt_addr);
+ioremap_failed:
+	return ret;
+}
+
+static void msm9615_bam_init(void)
+{
+	int ret = 0;
+
+	ret = bam_init();
+	if (ret) {
+		ret = bam_init_fallback();
+		if (ret)
+			pr_err("%s: bam init fallback failed: %d",
+					__func__, ret);
+	}
+}
+
 static void toggle_apps_ack(void)
 {
 	static unsigned int clear_bit; /* 0 = set the bit, else clear bit */
@@ -2239,7 +2325,9 @@ static void toggle_apps_ack(void)
 static void bam_dmux_smsm_cb(void *priv, uint32_t old_state, uint32_t new_state)
 {
 	static int last_processed_state;
+	int rcu_id;
 
+	rcu_id = srcu_read_lock(&bam_dmux_srcu);
 	mutex_lock(&smsm_cb_lock);
 	bam_dmux_power_state = new_state & SMSM_A2_POWER_CONTROL ? 1 : 0;
 	DBG_INC_A2_POWER_CONTROL_IN_CNT();
@@ -2248,6 +2336,7 @@ static void bam_dmux_smsm_cb(void *priv, uint32_t old_state, uint32_t new_state)
 	if (last_processed_state == (new_state & SMSM_A2_POWER_CONTROL)) {
 		BAM_DMUX_LOG("%s: already processed this state\n", __func__);
 		mutex_unlock(&smsm_cb_lock);
+		srcu_read_unlock(&bam_dmux_srcu, rcu_id);
 		return;
 	}
 
@@ -2265,22 +2354,29 @@ static void bam_dmux_smsm_cb(void *priv, uint32_t old_state, uint32_t new_state)
 	} else if (new_state & SMSM_A2_POWER_CONTROL) {
 		BAM_DMUX_LOG("%s: init\n", __func__);
 		grab_wakelock();
-		bam_init();
+		if (cpu_is_msm9615())
+			msm9615_bam_init();
+		else
+			bam_init();
 	} else {
 		BAM_DMUX_LOG("%s: bad state change\n", __func__);
 		pr_err("%s: unsupported state change\n", __func__);
 	}
 	mutex_unlock(&smsm_cb_lock);
-
+	srcu_read_unlock(&bam_dmux_srcu, rcu_id);
 }
 
 static void bam_dmux_smsm_ack_cb(void *priv, uint32_t old_state,
 						uint32_t new_state)
 {
+	int rcu_id;
+
+	rcu_id = srcu_read_lock(&bam_dmux_srcu);
 	DBG_INC_ACK_IN_CNT();
 	BAM_DMUX_LOG("%s: 0x%08x -> 0x%08x\n", __func__, old_state,
 			new_state);
 	complete_all(&ul_wakeup_ack_completion);
+	srcu_read_unlock(&bam_dmux_srcu, rcu_id);
 }
 
 /**
@@ -2309,6 +2405,9 @@ void msm_bam_dmux_deinit(void)
 {
 	restart_notifier_cb(NULL, SUBSYS_BEFORE_SHUTDOWN, NULL);
 	restart_notifier_cb(NULL, SUBSYS_AFTER_SHUTDOWN, NULL);
+	restart_notifier_cb(NULL, SUBSYS_BEFORE_POWERUP, NULL);
+	restart_notifier_cb(NULL, SUBSYS_AFTER_POWERUP, NULL);
+	in_global_reset = 0;
 }
 EXPORT_SYMBOL(msm_bam_dmux_deinit);
 
