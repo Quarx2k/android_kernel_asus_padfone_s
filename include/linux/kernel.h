@@ -27,6 +27,16 @@
 // +++ ASUS_BSP : add for miniporting
 enum DEVICE_HWID
 {
+	//A86
+	A86_EVB = 0x50,
+	A86_SR1 = 0x51,
+	A86_SR2 = 0x52,
+	A86_SR3 = 0x53,
+	A86_SR4 = 0x54,
+	A86_ER1 = 0x55,
+	A86_PR = 0x56,
+	A86_MP = 0x57,
+
 	//A90 ????
 	A90_EVB0 = 0x0,
 	A90_EVB = 0x1,
@@ -71,6 +81,22 @@ static inline bool isPadfoneS(void) {
 		g_ASUS_hwID == PF500KL_PR ||
 		g_ASUS_hwID == PF500KL_MP ||
 		g_ASUS_hwID == PF500KL_MP2)
+	{
+		return true;
+	} else {
+		return false;
+	}
+}
+
+static inline bool isA86(void) {
+	if (g_ASUS_hwID == A86_EVB ||
+		g_ASUS_hwID == A86_SR1 ||	
+		g_ASUS_hwID == A86_SR2 ||
+		g_ASUS_hwID == A86_SR3 ||
+		g_ASUS_hwID == A86_SR4 ||
+		g_ASUS_hwID == A86_ER1 ||
+		g_ASUS_hwID == A86_PR  ||
+		g_ASUS_hwID == A86_MP)
 	{
 		return true;
 	} else {

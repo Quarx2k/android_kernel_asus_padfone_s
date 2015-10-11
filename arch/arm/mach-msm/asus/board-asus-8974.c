@@ -323,7 +323,8 @@ static void __init asus_config_ramconsole(void)
 #include <mach/board.h>
 #include <mach/gpio.h>
 #include <mach/gpiomux.h>
-extern int __init device_gpio_init(void);
+extern int __init device_gpio_init_pf500kl(void);
+extern int __init device_gpio_init_a86(void);
 void __init device_gpiomux_init(void)
 {
 	int rc;
@@ -334,7 +335,12 @@ void __init device_gpiomux_init(void)
 		return;
 	}
 
-	device_gpio_init();
+	if (!isA86()) {
+		device_gpio_init_pf500kl();
+	} else {
+		device_gpio_init_a86();
+	}
+
 
 }
 //--ASUS_BSP : add for miniporting

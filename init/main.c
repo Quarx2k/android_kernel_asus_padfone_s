@@ -308,6 +308,54 @@ EXPORT_SYMBOL(g_ASUS_hwID);
 		strcat(hwid_info,str);
 		printk("Kernel HW ID = PF500KL_MP2\n");
 	}
+	else if ( strcmp("A86_EVB", str) == 0 )
+	{
+		g_ASUS_hwID = A86_EVB;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A86_EVB\n");
+		printk("Kernel HW ID = %d\n",g_ASUS_hwID);
+	}
+	else if ( strcmp("A86_SR1", str) == 0 )
+	{
+		g_ASUS_hwID = A86_SR1;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A86_SR1\n");
+	}
+	else if ( strcmp("A86_SR2", str) == 0 )
+	{
+		g_ASUS_hwID = A86_SR2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A86_SR2\n");
+	}
+	else if ( strcmp("A86_SR3", str) == 0 )
+	{
+		g_ASUS_hwID = A86_SR3;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A86_SR3\n");
+	}
+	else if ( strcmp("A86_SR4", str) == 0 )
+	{
+		g_ASUS_hwID = A86_SR4;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A86_SR4\n");
+	}
+	else if ( strcmp("A86_ER1", str) == 0 )
+	{
+		g_ASUS_hwID = A86_ER1;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A86_ER1\n");
+	}
+	else if ( strcmp("A86_PR", str) == 0 )
+	{
+		g_ASUS_hwID = A86_PR;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A86_PR\n");
+	}
+	else if ( strcmp("A86_MP", str) == 0 )
+	{
+		g_ASUS_hwID = A86_MP;
+		printk("Kernel HW ID = A86_MP\n");
+	}
  	else
  	{
  		g_ASUS_hwID = A91_ER1;
