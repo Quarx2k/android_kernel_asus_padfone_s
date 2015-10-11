@@ -132,8 +132,8 @@ static ssize_t led_brightness_store(struct device *dev,
 	newValue = state;
 	if (newValue != 0) {
 		newValue = (newValue*53/3) - 300; // Wtf formula :D
-		if (newValue < 170) {
-			newValue = 170;
+		if (newValue < 160) {
+			newValue = 160;
 		}
 	}
 	state = newValue;
