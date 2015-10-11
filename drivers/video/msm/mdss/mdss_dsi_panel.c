@@ -634,13 +634,29 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		break;
 #ifndef ASUS_PF500KL_PROJECT
 	case BL_DCS_CMD:
-       		asus_set_bl_brightness(ctrl_pdata, bl_level);
+		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
+			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
+			break;
+		}
+		/*
+		 * DCS commands to update backlight are usually sent at
+		 * the same time to both the controllers. However, if
+		 * sync_wait is enabled, we need to ensure that the
+		 * dcs commands are first sent to the non-trigger
+		 * controller so that when the commands are triggered,
+		 * both controllers receive it at the same time.
+		 */
+		sctrl = mdss_dsi_get_other_ctrl(ctrl_pdata);
+		if (mdss_dsi_sync_wait_trigger(ctrl_pdata)) {
+			if (sctrl)
+				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
+			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
+		} else {
+			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
+			if (sctrl)
+				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
+		}
 		break;
-	default:
-		pr_err("%s: Unknown bl_ctrl configuration\n",
-			__func__);
-		break;
-	}
 #else 
 	case BL_DCS_CMD:
 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
@@ -666,12 +682,13 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 				asus_set_bl_brightness(sctrl, bl_level);
 		}
 		break;
+#endif
 	default:
 		pr_err("%s: Unknown bl_ctrl configuration\n",
 			__func__);
 		break;
 	}
-#endif
+
 #ifdef CONFIG_MACH_OPPO
 	lm3630_bank_a_update_status(bl_level);
 #endif
@@ -682,7 +699,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
 #ifdef ASUS_PF500KL_PROJECT
-	int indx = 2;
+	int indx = 0;
 #endif		
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -712,17 +729,11 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	} else {
 	         memcpy(ctrl->on_cmds.cmds[4].payload,a86_bl_init_val,sizeof(a86_bl_init_val));
 	}
+	himax_ts_resume();
 #endif
 	if (ctrl->on_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
-#ifdef ASUS_PF500KL_PROJECT
-#ifdef CONFIG_LEDS_QPNP
-	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
-		qpnp_wled_ctrl(1);
-	}
-	himax_ts_resume();
-#endif
-#endif
+
 	mdss_livedisplay_update(ctrl, MODE_UPDATE_ALL);
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
