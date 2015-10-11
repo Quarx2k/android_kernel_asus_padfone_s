@@ -89,6 +89,12 @@ endif
 	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a91-er1.dtb
 	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a90-evb0.dtb
 	dtb-$(CONFIG_ARCH_MSM8974) += msm8974pro-ab-pm8941-a90-evb.dtb
+
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974-v2.0-1-a86-er1.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974-v2.0-1-a86-sr2.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974-v2.0-1-a86-sr3.dtb
+	dtb-$(CONFIG_ARCH_MSM8974) += msm8974-v2.0-1-a86-sr4.dtb
+
 	endif
 
 # APQ8084
