@@ -17,6 +17,24 @@
 
 / {
 	qcom,msm-id = <218 0x10000>;
+
+	mtp_batterydata: qcom,battery-data {
+		qcom,rpull-up-kohm = <100>;
+		qcom,vref-batt-therm = <1800000>;
+
+		/include/ "../batterydata-palladium.dtsi"
+		/include/ "../batterydata-mtp-3000mah.dtsi"
+	};
+};
+
+&mtp_batterydata {
+	qcom,mtp-3000mah {
+		qcom,max-voltage-uv = <4350000>;
+	};
+
+	qcom,palladium-batterydata {
+		qcom,max-voltage-uv = <4350000>;
+	};
 };
 
 &soc {
@@ -45,6 +63,8 @@
 		reg-names = "qup_phys_addr";
 		interrupts = <0 104 0>;
 		interrupt-names = "qup_err_intr";
+		qcom,active-only;
+		qcom,clk-ctl-xfer;
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
 		qcom,master-id = <84>;
@@ -64,6 +84,7 @@
 		interrupt-names = "qup_err_intr";
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
+		qcom,master-id = <86>;
 	};
 //--- ASUS BSP
 
@@ -99,9 +120,9 @@
 		interrupt-names = "qup_err_intr";
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
-		qcom,master-id = <86>;
 		qcom,scl-gpio = <&msmgpio 7 0>;
 		qcom,sda-gpio = <&msmgpio 6 0>;
+		qcom,master-id = <86>;
 	};
 //--- ASUS BSP
 	
@@ -118,6 +139,7 @@
 		interrupt-names = "qup_err_intr";
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
+		qcom,master-id = <86>;
 	};
 //--- ASUS BSP
 
@@ -132,8 +154,11 @@
 		reg-names = "qup_phys_addr";
 		interrupts = <0 98 0>;
 		interrupt-names = "qup_err_intr";
+		qcom,active-only;
+		qcom,clk-ctl-xfer;
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
+		qcom,master-id = <86>;
 	};
 //--- ASUS BSP
 
@@ -152,6 +177,7 @@
 		qcom,i2c-src-freq = <19200000>;
 		qcom,scl-gpio = <&msmgpio 29 0>;
 		qcom,sda-gpio = <&msmgpio 30 0>;
+		qcom,master-id = <86>;
 	};
 //--- ASUS BSP
 
@@ -274,6 +300,7 @@
 	};
 
 };
+
 &pm8941_lsid1 {
 	qcom,vibrator@c000 {
 		compatible = "qcom,qpnp-vibrator";
@@ -284,6 +311,51 @@
             	qcom,vib-vtg-level-mV = <3000>;
 	};
 
+};
+
+&pm8941_bms {
+	qcom,enable-fcc-learning;
+	qcom,min-fcc-learning-soc = <20>;
+	qcom,min-fcc-ocv-pc = <30>;
+	qcom,min-fcc-learning-samples = <5>;
+	qcom,fcc-resolution = <10>;
+	status = "ok";
+	qcom,battery-data = <&mtp_batterydata>;
+};
+
+&pm8941_chg {
+	status = "ok";
+	qcom,battery-data = <&mtp_batterydata>;
+	qcom,cool-bat-decidegc;
+	qcom,warm-bat-decidegc;
+
+	qcom,chgr@1000 {
+		status = "ok";
+	};
+
+	qcom,buck@1100 {
+		status = "ok";
+	};
+
+	qcom,bat-if@1200 {
+		status = "ok";
+	};
+
+	qcom,usb-chgpth@1300 {
+		status = "ok";
+	};
+
+	qcom,dc-chgpth@1400 {
+		status = "ok";
+	};
+
+	qcom,boost@1500 {
+		status = "ok";
+	};
+
+	qcom,chg-misc@1600 {
+		status = "ok";
+	};
 };
 
 &pm8941_lsid0 {
@@ -304,32 +376,27 @@
 	};
 
 	qcom,bms {
-		status = "ok";
 		qcom,low-voltage-threshold = <3520000>;
-		qcom,use-external-rsense;
-		qcom,batt-type = <4>;
-		qcom,max-voltage-uv = <4350000>;
-
 	};
 
 	qcom,charger {
-		qcom,vddmax-mv = <4350>;
+		qcom,vddmax-mv = <4352>;
 		qcom,vddsafe-mv = <4350>;
 		qcom,vinmin-mv = <4400>;
-		qcom,ibatmax-ma = <1100>;
-		qcom,ibatterm-ma = <120>;
-		qcom,ibatsafe-ma = <1100>;
+		qcom,ibatmax-ma = <2000>;
+		qcom,ibatterm-ma = <150>;
+		qcom,ibatsafe-ma = <2000>;
 		qcom,thermal-mitigation = <2000 900 900 200>;
-		qcom,cool-bat-mv = <4350>;
-		qcom,ibatmax-warm-ma = <1100>;
+		qcom,cool-bat-mv = <4200>;
+		qcom,ibatmax-warm-ma = <900>;
 		qcom,warm-bat-mv = <4100>;
-		qcom,ibatmax-cool-ma = <400>;
-		qcom,tchg-mins = <512>;
-		qcom,cool-bat-decidegc = <100>;
-		qcom,warm-bat-decidegc = <450>;
-		qcom,vbatdet-delta-mv = <100>;
-		qcom,maxinput-dc-ma = <300>;
+		qcom,ibatmax-cool-ma = <900>;
 	};
+
+	qcom,pm8941_rtc {
+		qcom,qpnp-rtc-alarm-pwrup = <1>;
+	};
+
 };
 
 &usb_otg {
