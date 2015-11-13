@@ -73,18 +73,18 @@ EXPORT_SYMBOL_GPL(AX_MicroP_IsACUSBIn);
 *    return: 0 for 'no charging', 1 for 'charging', 2 for 'charged full', <0 value means something error
 */
 
-int AX_MicroP_get_ChargingStatus(int target){
+const char * AX_MicroP_get_ChargingStatus(int target){
 	int regval=0;
        int ret=0;
        int16_t avg_current=0;       
        if(AX_MicroP_IsP01Connected()==0){
             printk("%s: P01 removed\r\n",__FUNCTION__);
-            return -1;
+            return "Unknown";
        }
 
        if(isFirmwareUpdating()){
             printk("%s: P01 is updating, retry later\r\n",__FUNCTION__);
-            return -2;
+            return "Unknown";
        }
 
 
@@ -98,11 +98,11 @@ int AX_MicroP_get_ChargingStatus(int target){
                 ret=uP_nuvoton_read_reg(MICROP_CHARGING_STATUS,&regval);  
 
                                 
-                if(ret <= 0 || regval==255)
-                            regval=P01_CHARGING_ERR;
-                else if(regval==0)
-                            regval=P01_CHARGING_NO;
-                else if(regval==1){
+		if(ret <= 0 || regval==255)
+			regval=P01_CHARGING_ERR;
+		else if(regval==0)
+			regval=P01_CHARGING_NO;
+		else if(regval==1){
 //Eason: Pad plug usb show icon & cap can increase+++
 #if 0
                             if(AX_MicroP_get_USBDetectStatus(Batt_P01)==P01_CABLE_CHARGER)
@@ -121,8 +121,13 @@ int AX_MicroP_get_ChargingStatus(int target){
        else{
                 printk(KERN_ERR "%s: known target %d\r\n", __FUNCTION__, target);
        }
-       
-	return regval;
+
+	if (regval == 1 )
+		return "Charging";
+	else if (regval == 2)
+		return "Full";
+	else
+		return "Unknown";
 }
 
 EXPORT_SYMBOL_GPL(AX_MicroP_get_ChargingStatus);
@@ -583,7 +588,6 @@ int AX_MicroP_getOPState(void){
 }
 
 EXPORT_SYMBOL_GPL(AX_MicroP_getOPState);
-
 
 /*
 *  return value: please refer to microp spec

@@ -51,7 +51,7 @@ unsigned int g_firmwareSize = 16*1024;
 extern int PadFone_IN_OUT(int isin); 
 static int is_first_bootup = 1;
 extern enum DEVICE_HWID g_ASUS_hwID;
-
+struct kobject *microp_kobj;
 
 //static unsigned long jiffies_hp_plugIn=0 ; 
 
@@ -1979,6 +1979,45 @@ static int microp_resume( struct device *dev )
 	return 0;
 }
 
+static ssize_t battery_capacity(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	size_t count = 0;
+
+	count += sprintf(buf, "%d\n", AX_MicroP_readBattCapacity(0));
+
+	return count;
+}
+
+static ssize_t battery_charging_status(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	size_t count = 0;
+
+	count += sprintf(buf, "%s\n", AX_MicroP_get_ChargingStatus(1));
+
+	return count;
+}
+
+static ssize_t dock_status(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	size_t count = 0;
+
+	count += sprintf(buf, "%d\n", AX_MicroP_IsP01Connected());
+
+	return count;
+}
+
+static DEVICE_ATTR(battery_capacity, (S_IWUSR|S_IRUGO),
+	battery_capacity, NULL);
+
+static DEVICE_ATTR(battery_charging_status, (S_IWUSR|S_IRUGO),
+	battery_charging_status, NULL);
+
+static DEVICE_ATTR(dock_status, (S_IWUSR|S_IRUGO),
+	dock_status, NULL);
+
 
 static int microP_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
@@ -2124,6 +2163,24 @@ static int microP_probe(struct i2c_client *client,
 	i2c_add_test_case(info->i2c_client, "MicroP",ARRAY_AND_SIZE(gMicroPTestCaseInfo));
 #endif
 
+
+// /sys/microp props for healthd;
+
+	microp_kobj = kobject_create_and_add("microp", NULL) ;
+	if (microp_kobj == NULL) {
+		pr_warn("%s: microp_kobj create_and_add failed\n", __func__);
+	}
+
+	if (sysfs_create_file(microp_kobj, &dev_attr_battery_capacity.attr)) {
+		pr_warn("%s: sysfs_create_file failed for battery capacity\n", __func__);
+	}
+
+	if (sysfs_create_file(microp_kobj, &dev_attr_battery_charging_status.attr)) {
+		pr_warn("%s: sysfs_create_file failed for battery charging status\n", __func__);
+	}
+	if (sysfs_create_file(microp_kobj, &dev_attr_dock_status.attr)) {
+		pr_warn("%s: sysfs_create_file failed for battery charging status\n", __func__);
+	}
 	pr_info("microP: addr= %x, pin=%d\r\n", g_slave_addr,  g_microp_irq_gpio);
 	pr_info("microP: %s ---\n", __FUNCTION__);
 	return 0;

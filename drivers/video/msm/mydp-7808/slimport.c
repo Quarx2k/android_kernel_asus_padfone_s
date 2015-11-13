@@ -1057,15 +1057,19 @@ extern void MyDP_notify_vibrator_padInsert(void);
 static void slimport_cable_plug_proc(struct anx7808_data *anx7808)
 {
 	int ret = 0;
-///	printk("+++++++++++++slimport_cable_plug_proc+++++++++++++++++++\n");
+
 #ifdef CONFIG_ASUS_HDMI
 	bool needWait=false;
+	printk("+++++++++++++slimport_cable_plug_proc+++++++++++++++++++\n");
+	printk("g_Pad_Bootup: %d\n: g_Android_Boot_Complete: %d\n", g_Pad_Bootup, g_Android_Boot_Complete);
 
     //Mickey+++, wait for boot complete if we don't boot in pad
     if (!g_Pad_Bootup && !g_Android_Boot_Complete) {
-        needWait=wait_for_android_boot_complete();
+	printk("Start wait_for_android_boot_complete");
+        needWait = wait_for_android_boot_complete();
+	printk("End wait_for_android_boot_complete");
         ASUS_DEV_WARN("Didn't boot up from PAD and android boot completed\n");
-	}
+    }
 	//Mickey---
 #endif
 
@@ -1505,20 +1509,27 @@ static void slimport_main_proc(struct anx7808_data *anx7808)
 	mutex_lock(&anx7808->lock);
 
 	if (!sp_tx_pd_mode) {
+		//ASUS_DEV_INFO("%s: S!sp_tx_pd_mode \n", __func__);
 		sp_tx_int_irq_handler();
 		hdmi_rx_int_irq_handler();
 	}
 
-	if (sp_tx_system_state == STATE_CABLE_PLUG)
+	if (sp_tx_system_state == STATE_CABLE_PLUG) {
+		ASUS_DEV_INFO("%s: STATE_CABLE_PLUG \n", __func__);
 		slimport_cable_plug_proc(anx7808);
+	}
 
-	if (sp_tx_system_state == STATE_PARSE_EDID)
+	if (sp_tx_system_state == STATE_PARSE_EDID) {
+		ASUS_DEV_INFO("%s: STATE_PARSE_EDID \n", __func__);
 		slimport_edid_proc();
+	}
 //ANX +++: (ver0.4)
 	if (sp_tx_system_state == STATE_CONFIG_HDMI) {
+		ASUS_DEV_INFO("%s: STATE_CONFIG_HDMI \n", __func__);
  		if(sp_tx_asus_pad) 
 		{
 			int try_count= 20;
+			ASUS_DEV_INFO("%s: sp_tx_asus_pad \n", __func__);
 			hdmi_asus_rx_initialization(); //ASUS BSP wei +++
 			while (try_count) {
 				if (!sp_tx_config_hdmi_input())
@@ -1567,6 +1578,7 @@ static void slimport_main_proc(struct anx7808_data *anx7808)
 			sp_tx_config_hdmi_input();
 	}
 	if (sp_tx_system_state == STATE_LINK_TRAINING) {
+		ASUS_DEV_INFO("%s: STATE_LINK_TRAINING \n", __func__);
 		if(!sp_tx_asus_pad) {
 			if (!sp_tx_lt_pre_config())
 				sp_tx_hw_link_training();
@@ -1581,10 +1593,12 @@ static void slimport_main_proc(struct anx7808_data *anx7808)
 		}
 	}
 //ANX ---: (ver0.4)
-	if (sp_tx_system_state == STATE_CONFIG_OUTPUT)
+	if (sp_tx_system_state == STATE_CONFIG_OUTPUT) {
+		ASUS_DEV_INFO("%s: STATE_CONFIG_OUTPUT \n", __func__);
 		slimport_config_output();
-
+	}
 	if (sp_tx_system_state == STATE_HDCP_AUTH) {
+		ASUS_DEV_INFO("%s: SSTATE_HDCP_AUTH \n", __func__);
 		if (hdcp_enable && 
 			((sp_tx_rx_type == RX_HDMI) ||
 			( sp_tx_rx_type ==RX_DP) || ( sp_tx_rx_type ==RX_VGA)) ) {
