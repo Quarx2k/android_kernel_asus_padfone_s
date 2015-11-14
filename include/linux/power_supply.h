@@ -166,6 +166,7 @@ enum power_supply_type {
 	POWER_SUPPLY_TYPE_USB_ACA,	/* Accessory Charger Adapters */
 	POWER_SUPPLY_TYPE_BMS,		/* Battery Monitor System */
 	POWER_SUPPLY_TYPE_WIRELESS,     /* Wireless Charger */
+	POWER_SUPPLY_TYPE_DOCK_BATTERY, /* Dock battery */
 };
 
 union power_supply_propval {

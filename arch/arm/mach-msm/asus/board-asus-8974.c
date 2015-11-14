@@ -69,28 +69,14 @@ void __init msm_8974_reserve(void)
 	of_scan_flat_dt(dt_scan_for_memory_reserve, NULL);
 }
 
-#ifdef CONFIG_BATTERY_ASUS
-static struct resource a86_asus_bat_resources[] = {
-	{
-		.name = "bat_low_gpio",
-		.start = 46,
-		.end = 46,
-		.flags = IORESOURCE_IO,
-	},
-};
 static struct platform_device a86_asus_bat_device = {
 	.name = "asus_bat",
 	.id = 0,
-	.num_resources = ARRAY_SIZE(a86_asus_bat_resources),
-	.resource = a86_asus_bat_resources,	
 };	
 
-//ASUS BSP Eason_Chang : A86 porting ---
-//ASUS BSP Hank_Chen : A86 1032 porting+++
 static struct platform_device *msm_a86_bat_devices[] = {
 	&a86_asus_bat_device,
 };
-#endif  //CONFIG_BATTERY_ASUS 
 
 //ASUS BSP Hank_Chen : A86 1032 porting---
 
@@ -230,11 +216,8 @@ void __init msm8974_add_drivers(void)
 	// ASUS_BSP +++ Victor_Fu "proximity driver"
 	platform_add_devices(msm_a91_proximity_devices, ARRAY_SIZE(msm_a91_proximity_devices));
 	// ASUS_BSP --- Victor_Fu "proximity driver"
-#ifdef CONFIG_BATTERY_ASUS
-	//ASUS BSP Hank_Chen : A86 1032 porting+++
 	platform_add_devices(msm_a86_bat_devices, ARRAY_SIZE(msm_a86_bat_devices));
-	//ASUS BSP Hank_Chen : A86 1032 porting---
-#endif
+
 	// ASUS_BSP +++ Peter_Lu "cm3628 & cm36283 Lightsensor"
 	if ( g_ASUS_hwID == A90_EVB0 )	{
 		printk("Add_CM36283_sensor +++\n");

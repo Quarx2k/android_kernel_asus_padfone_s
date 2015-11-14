@@ -66,6 +66,76 @@ EXPORT_SYMBOL_GPL(AX_MicroP_IsACUSBIn);
 
 
 /*
+*   @AX_MicroP_get_AvgCurrent
+*  input: target
+*           0: p01 battery
+*           1: dock battery
+*    return: average mA
+*/
+
+int AX_MicroP_get_AvgCurrent(int target) {
+	int16_t avg_current = 0;
+
+	if (AX_MicroP_IsP01Connected() == 0) {
+		printk("%s: P01 removed\r\n",__FUNCTION__);
+		return 0;
+	}
+
+	if (target==Batt_P01) {
+		uP_nuvoton_read_reg(MICROP_GAUGE_AVG_CURRENT, &avg_current); 
+	}
+	
+	return avg_current;
+}
+
+
+/*
+*   @AX_MicroP_get_BattTemp
+*  input: target
+*           0: p01 battery
+*           1: dock battery
+*    return: average mA
+*/
+
+int AX_MicroP_get_BattTemp(int target) {
+	int16_t temp_current = 0;
+
+	if (AX_MicroP_IsP01Connected() == 0) {
+		printk("%s: P01 removed\r\n",__FUNCTION__);
+		return 0;
+	}
+
+	if (target==Batt_P01) {
+		uP_nuvoton_read_reg(MICROP_GAUGE_TMP, &temp_current); 
+	}
+	
+	return temp_current;
+}
+
+/*
+*   @AX_MicroP_get_BattVolatge
+*  input: target
+*           0: p01 battery
+*           1: dock battery
+*    return: current batteyr voltage
+*/
+
+int AX_MicroP_get_BattVoltage(int target) {
+	int16_t current_voltage = 0;
+
+	if (AX_MicroP_IsP01Connected() == 0) {
+		printk("%s: P01 removed\r\n",__FUNCTION__);
+		return 0;
+	}
+
+	if (target==Batt_P01) {
+		uP_nuvoton_read_reg(MICROP_GAUGE_VOLTAGE, &current_voltage); 
+	}
+	
+	return current_voltage;
+}
+
+/*
 *   @AX_MicroP_get_ChargingStatus
 *  input: target
 *           0: p01 battery

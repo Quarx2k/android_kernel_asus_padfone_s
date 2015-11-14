@@ -124,6 +124,25 @@ int AX_MicroP_Is_ECBattPowerBad(void);
 */
 int AX_MicroP_Is_ECExtPowerCableIn(void);
 
+/*
+*   @AX_MicroP_get_BattTemp
+*  input: target
+*           0: p01 battery
+*           1: dock battery
+*    return: current batt temp;
+*/
+
+int AX_MicroP_get_BattTemp(int target);
+
+/*
+*   @AX_MicroP_get_AvgCurrent
+*  input: target
+*           0: p01 battery
+*           1: dock battery
+*    return: average mA
+*/
+
+int AX_MicroP_get_AvgCurrent(int target);
 
 /*
 *   @AX_MicroP_get_ChargingStatus
@@ -136,8 +155,15 @@ int AX_MicroP_Is_ECExtPowerCableIn(void);
 
 int AX_MicroP_get_ChargingStatus(int target);
 
+/*
+*   @AX_MicroP_get_BattVolatge
+*  input: target
+*           0: p01 battery
+*           1: dock battery
+*    return: current batteyr voltage
+*/
 
-
+int AX_MicroP_get_BattVoltage(int target);
 
 /*
 *   @AX_MicroP_get_USBDetectStatus
@@ -149,9 +175,6 @@ int AX_MicroP_get_ChargingStatus(int target);
 */ 
 
 int AX_MicroP_get_USBDetectStatus(int target);
-
-
-
 
 /*
 *  GPIO direct control
