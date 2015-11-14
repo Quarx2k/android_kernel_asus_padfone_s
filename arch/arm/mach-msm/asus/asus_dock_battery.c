@@ -27,8 +27,48 @@
 #include <linux/i2c.h>
 #include <linux/power_supply.h>
 #include <linux/platform_device.h>
+#include <linux/gpio.h>
 
 struct kobject *microp_kobj;
+
+static int asus_bat_microp_event_handler (
+	struct notifier_block *this,
+	unsigned long event,
+	void *ptr);
+
+static int asus_bat_pad_get_property(
+	struct power_supply *psy,
+	enum power_supply_property psp,
+	union power_supply_propval *val);
+
+static struct notifier_block asus_bat_microp_notifier = {
+        .notifier_call = asus_bat_microp_event_handler,
+};
+
+static enum power_supply_property pad_bat_properties[] = {
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CURRENT_AVG,
+	POWER_SUPPLY_PROP_HEALTH
+};
+
+static char *pm_power_supplied_to[] = {
+	"dock_battery",
+};
+
+static struct power_supply pad_bat_psy = {
+	.name		= "dock_battery",
+	.type		= POWER_SUPPLY_TYPE_DOCK_BATTERY,
+	.supplied_to = pm_power_supplied_to,
+	.num_supplicants = ARRAY_SIZE(pm_power_supplied_to),
+	.properties	= pad_bat_properties,
+	.num_properties	= ARRAY_SIZE(pad_bat_properties),
+	.get_property	= asus_bat_pad_get_property,
+};
+
 
 static int asus_bat_report_pad_status(void) {
 	int result, value = 0;
@@ -63,7 +103,7 @@ static void set_microp_vbus(int level)
 
 }
 
-static int asus_bat_microp_event_handler(
+static int asus_bat_microp_event_handler (
 	struct notifier_block *this,
 	unsigned long event,
 	void *ptr)
@@ -128,11 +168,12 @@ static int asus_bat_microp_event_handler(
 //	mutex_unlock(&asus_bat->microp_evt_lock);
 
 //	asus_bat_update_all_bat();
+	power_supply_changed(&pad_bat_psy);
 
 	return NOTIFY_DONE;
 }
 
-static int asus_bat_pad_get_property(
+static int asus_bat_pad_get_property (
 	struct power_supply *psy,
 	enum power_supply_property psp,
 	union power_supply_propval *val)
@@ -203,8 +244,6 @@ static int asus_bat_pad_get_property(
 			val->intval = POWER_SUPPLY_HEALTH_UNKNOWN;
 		}
 		break;
-
-
 	default:
 		printk("[BAT] %s(), unknown psp:%d \n", __FUNCTION__, (int)psp);
 		return -EINVAL;
@@ -212,38 +251,11 @@ static int asus_bat_pad_get_property(
 	return 0;
 }
 
-static struct notifier_block asus_bat_microp_notifier = {
-        .notifier_call = asus_bat_microp_event_handler,
-};
-
-static enum power_supply_property pad_bat_properties[] = {
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_STATUS,
-	POWER_SUPPLY_PROP_CAPACITY,
-	POWER_SUPPLY_PROP_TEMP,
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_CURRENT_AVG,
-	POWER_SUPPLY_PROP_HEALTH
-};
-
-static char *pm_power_supplied_to[] = {
-	"dock_battery",
-};
-
-static struct power_supply pad_bat_psy = {
-	.name		= "dock_battery",
-	.type		= POWER_SUPPLY_TYPE_DOCK_BATTERY,
-	.supplied_to = pm_power_supplied_to,
-	.num_supplicants = ARRAY_SIZE(pm_power_supplied_to),
-	.properties	= pad_bat_properties,
-	.num_properties	= ARRAY_SIZE(pad_bat_properties),
-	.get_property	= asus_bat_pad_get_property,
-};
-
 static int asus_bat_probe(struct platform_device *pdev) 
 {
 
 	int err = 0;
+
 // /sys/microp props for healthd;
 	printk("Start probe Asus Bat\n");
 
@@ -264,9 +276,11 @@ static int asus_bat_probe(struct platform_device *pdev)
 		printk(KERN_ERR "power_supply_register pad_bat_psy failed, err = %d\n", err);
 		return -1;
 	}
+
 	register_microp_notifier(&asus_bat_microp_notifier);
 	notify_register_microp_notifier(&asus_bat_microp_notifier, "asus_bat");
 	printk("End probe Asus Bat\n");
+
 	return 0;
 }
 static int asus_bat_remove(struct platform_device *pdev)
