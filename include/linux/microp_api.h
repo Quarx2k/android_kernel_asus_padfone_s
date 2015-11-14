@@ -131,10 +131,10 @@ int AX_MicroP_Is_ECExtPowerCableIn(void);
 *           0: p01 battery
 *           1: dock battery
 *
-* return: -1: charge error, 0: no charge (Discharging), 1: charging normal (Charging), 2: charging full (Full), < 0: other error
+* return: -1: charge error, 0: no charge, 1: charging normal, 2: charging full, < 0: other error
 */
 
-const char * AX_MicroP_get_ChargingStatus(int target);
+int AX_MicroP_get_ChargingStatus(int target);
 
 
 
