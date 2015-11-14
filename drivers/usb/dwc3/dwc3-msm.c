@@ -52,6 +52,11 @@
 #include "gadget.h"
 #include "debug.h"
 
+#include <linux/microp_notify.h>
+#include <linux/microp_pin_def.h>
+#include <linux/microp_api.h>
+#include <linux/microp_notifier_controller.h>
+
 static struct dwc3_msm *context;
 
 /* ADC threshold values */
@@ -2872,6 +2877,32 @@ unreg_chrdev:
 }
 
 #ifdef CONFIG_SLIMPORT_ANX7808
+static void asus_dwc3_set_id_state(int online);
+
+static int asus_bat_microp_event_handler (
+	struct notifier_block *this,
+	unsigned long event,
+	void *ptr)
+{
+	struct dwc3_msm *mdwc = context;
+	switch (event) {
+	case P01_ADD:
+		printk("%s() Pad attached! Enable usb! \r\n", __FUNCTION__);
+		break;
+	case P01_REMOVE: // means P01 removed
+		printk("%s() Pad deattached! Disable usb! \r\n", __FUNCTION__);
+		asus_dwc3_set_id_state(false);
+		pm_stay_awake(mdwc->dev);
+		break;
+	default:
+		//mutex_unlock(&asus_bat->microp_evt_lock);
+		//printk("[BAT] %s(), not listened evt: %lu \n", __FUNCTION__, event);
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static void asus_dwc3_set_id_state(int online)
 {
 	if (online) {
@@ -2882,6 +2913,10 @@ static void asus_dwc3_set_id_state(int online)
 		asus_dwc3_mode_switch(DWC3_USB_PERIPHERAL);
 	}
 }
+
+static struct notifier_block asus_bat_microp_notifier = {
+        .notifier_call = asus_bat_microp_event_handler,
+};
 #endif
 
 static int __devinit dwc3_msm_probe(struct platform_device *pdev)
@@ -3339,6 +3374,8 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	}
 #ifdef CONFIG_SLIMPORT_ANX7808
 	dp_registerCarkitInOutNotificaition(&asus_dwc3_set_id_state);
+	register_microp_notifier(&asus_bat_microp_notifier);
+	notify_register_microp_notifier(&asus_bat_microp_notifier, "usb_detect");
 #endif
 	device_init_wakeup(mdwc->dev, 1);
 	pm_stay_awake(mdwc->dev);
