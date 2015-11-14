@@ -129,38 +129,22 @@ static int asus_bat_microp_event_handler (
 	switch (event) {
 	case P01_ADD:
 		printk("[BAT] %s() +++, P01_ADD \r\n", __FUNCTION__);
-		//asus_bat_set_pad_bat_present(true);
-		//ASUS_BSP  +++ Eason_Chang "add P01 charge"
-		//asus_chg_set_chg_mode(ASUS_CHG_SRC_PAD_BAT);//do in AXC_BatteryServiec.c Balance mode
-		//ASUS_BSP  --- Eason_Chang "add P01 charge"
+		set_microp_vbus(1);  //Disable vbus when pad  in;
 		break;	
 	case P01_REMOVE: // means P01 removed
 		printk("[BAT] %s() +++, P01_REMOVE \r\n", __FUNCTION__);
-		//asus_bat_set_pad_bat_present(false);
-		//ASUS_BSP  +++ Eason_Chang "add P01 charge"
-		//asus_chg_set_chg_mode(ASUS_CHG_SRC_PAD_NONE);//Hank: remove unnecessary setcharger 
-		//ASUS_BSP  --- Eason_Chang "add P01 charge"
+		set_microp_vbus(0);  //Disable vbus when pad out;
 		break;
 	case P01_BATTERY_POWER_BAD: // P01 battery low
 		printk("[BAT] %s() +++, P01_BATTERY_POWER_BAD \r\n", __FUNCTION__);
 		break;
-/* 	case P01_BATTERY_TO_CHARGING:
-		printk(DBGMSK_BAT_INFO "[BAT] %s() +++, P01_BATTERY_TO_CHARGING \r\n", __FUNCTION__);
-		break;
-	case P01_BATTERY_TO_NON_CHARGING:
-		printk(DBGMSK_BAT_INFO "[BAT] %s() +++, P01_BATTERY_TO_NON_CHARGING \r\n", __FUNCTION__);
-		break;
-*/	
 	case P01_AC_USB_IN:
 		printk("[BAT] %s() +++, P01_AC_USB_IN \r\n", __FUNCTION__);
 		isCableIn = true;
-		set_microp_vbus(1);  //Enable vbus when cable in;
-		//msleep(1500);
 		break;
 	case P01_AC_USB_OUT:
 		printk("[BAT] %s() +++, P01_AC_USB_OUT \r\n", __FUNCTION__);
 		isCableIn = false;
-		set_microp_vbus(0);  //Disable vbus when cable out;
 		break;
 	case DOCK_INIT_READY:
 		printk("[BAT] %s() +++, DOCK_INIT_READY \r\n", __FUNCTION__);
@@ -231,7 +215,7 @@ static int asus_bat_pad_get_property (
 			pr_debug("[BAT] %s(), pad present \r\n", __FUNCTION__);
 			val->intval = 1;
 		} else {
-			printk("[BAT] %s(), pad not present \r\n", __FUNCTION__);
+			//printk("[BAT] %s(), pad not present \r\n", __FUNCTION__);
 			val->intval = 0;
 		}
 		break;
@@ -239,7 +223,7 @@ static int asus_bat_pad_get_property (
 		if (pad_present) {
 			val->intval = AX_MicroP_readBattCapacity(0);
 		} else {
-			printk("[BAT] pad not present, cannot get cap\n");
+			//printk("[BAT] pad not present, cannot get cap\n");
 			val->intval = -1;
 		}
 		break;
@@ -247,7 +231,7 @@ static int asus_bat_pad_get_property (
 		if (pad_present) {
 			val->intval = AX_MicroP_get_BattVoltage(0);
 		} else {
-			printk("[BAT] pad not present, cannot get voltage\n");
+			//printk("[BAT] pad not present, cannot get voltage\n");
 			val->intval = -1;
 		}
 		break;
@@ -255,7 +239,7 @@ static int asus_bat_pad_get_property (
 		if (pad_present) {
 			val->intval = AX_MicroP_get_BattTemp(0);
 		} else {
-			printk("[BAT] pad not present, cannot get teme\n");
+			//printk("[BAT] pad not present, cannot get teme\n");
 			val->intval = -1;
 		}
 		break;
@@ -263,7 +247,7 @@ static int asus_bat_pad_get_property (
 		if (pad_present) {
 			val->intval = asus_bat_report_pad_status();
 		} else {
-			printk("[BAT] pad not present, status unknown\n");
+			//printk("[BAT] pad not present, status unknown\n");
 			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
 		}
 		break;
@@ -271,7 +255,7 @@ static int asus_bat_pad_get_property (
 		if (pad_present) {
 			val->intval = AX_MicroP_get_AvgCurrent(1);
 		} else {
-			printk("[BAT] pad not present, status unknown\n");
+			//printk("[BAT] pad not present, status unknown\n");
 			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
 		}
 		break;
@@ -279,12 +263,12 @@ static int asus_bat_pad_get_property (
 		if (pad_present) {
 			val->intval = POWER_SUPPLY_HEALTH_GOOD;
 		} else {
-			printk("[BAT] pad not present, status unknown\n");
+			//printk("[BAT] pad not present, status unknown\n");
 			val->intval = POWER_SUPPLY_HEALTH_UNKNOWN;
 		}
 		break;
 	default:
-		printk("[BAT] %s(), unknown psp:%d \n", __FUNCTION__, (int)psp);
+		//printk("[BAT] %s(), unknown psp:%d \n", __FUNCTION__, (int)psp);
 		return -EINVAL;
 	}
 	return 0;
