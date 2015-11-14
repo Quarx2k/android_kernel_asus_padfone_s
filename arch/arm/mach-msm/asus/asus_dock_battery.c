@@ -29,7 +29,17 @@
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
 
+#undef NEED_MANUAL_UPDATE
+
+#ifdef NEED_MANUAL_UPDATE
+#define SAMPLING_RATE_MS 500
+static unsigned long sampling_rate;
+static struct workqueue_struct *wq;
+static struct delayed_work update_battery;
+#endif
+
 struct kobject *microp_kobj;
+static bool isCableIn = false;
 
 static int asus_bat_microp_event_handler (
 	struct notifier_block *this,
@@ -68,20 +78,28 @@ static struct power_supply pad_bat_psy = {
 	.num_properties	= ARRAY_SIZE(pad_bat_properties),
 	.get_property	= asus_bat_pad_get_property,
 };
-
+#ifdef NEED_MANUAL_UPDATE
+static void __ref asus_batt_update(struct work_struct *work) {
+	if (AX_MicroP_IsP01Connected() {
+		power_supply_changed(&pad_bat_psy);
+	}
+	/* Make a dedicated work_queue for CPU0 */
+	queue_delayed_work_on(0, wq, &update_battery, sampling_rate);
+}
+#endif
 
 static int asus_bat_report_pad_status(void) {
-	int result, value = 0;
+	int value = 0;
 	int capacity = 0;
-
-	result = AX_MicroP_get_ChargingStatus(0);
+	//int result = 0;
+	//result = AX_MicroP_get_ChargingStatus(0);
 	capacity = AX_MicroP_readBattCapacity(0);
 
-	if (result == 0)
+	if (!isCableIn)
 		value = POWER_SUPPLY_STATUS_DISCHARGING;
-	else if (result == 1)
+	else if (isCableIn)
 		value = POWER_SUPPLY_STATUS_CHARGING;
-	else if (result == 2 || capacity == 100)
+	else if (capacity == 100)
 		value = POWER_SUPPLY_STATUS_FULL;
 	else
 		value = POWER_SUPPLY_STATUS_UNKNOWN;
@@ -135,11 +153,13 @@ static int asus_bat_microp_event_handler (
 */	
 	case P01_AC_USB_IN:
 		printk("[BAT] %s() +++, P01_AC_USB_IN \r\n", __FUNCTION__);
+		isCableIn = true;
 		set_microp_vbus(1);  //Enable vbus when cable in;
 		//msleep(1500);
 		break;
 	case P01_AC_USB_OUT:
 		printk("[BAT] %s() +++, P01_AC_USB_OUT \r\n", __FUNCTION__);
+		isCableIn = false;
 		set_microp_vbus(0);  //Disable vbus when cable out;
 		break;
 	case DOCK_INIT_READY:
@@ -171,6 +191,25 @@ static int asus_bat_microp_event_handler (
 	power_supply_changed(&pad_bat_psy);
 
 	return NOTIFY_DONE;
+}
+
+static int asus_battery_suspend(struct device *dev)
+{
+#ifdef NEED_MANUAL_UPDATE
+	pr_info("Battery work has suspended\n");
+   	flush_workqueue(wq);
+	cancel_delayed_work_sync(&update_battery);
+#endif
+	return 0;
+}
+
+static int asus_battery_resume(struct device *dev)
+{
+#ifdef NEED_MANUAL_UPDATE
+	pr_info("Battery work has resumed \n");
+	queue_delayed_work_on(0, wq, &update_battery, 1);
+#endif
+	return 0;
 }
 
 static int asus_bat_pad_get_property (
@@ -279,6 +318,17 @@ static int asus_bat_probe(struct platform_device *pdev)
 
 	register_microp_notifier(&asus_bat_microp_notifier);
 	notify_register_microp_notifier(&asus_bat_microp_notifier, "asus_bat");
+
+#ifdef NEED_MANUAL_UPDATE
+	sampling_rate = msecs_to_jiffies(SAMPLING_RATE_MS);
+	wq = create_singlethread_workqueue("battery_update_workqueue");
+
+	if (!wq)
+		return -ENOMEM;
+
+	INIT_DELAYED_WORK(&update_battery, asus_batt_update);
+	queue_delayed_work_on(0, wq, &update_battery, sampling_rate);
+#endif
 	printk("End probe Asus Bat\n");
 
 	return 0;
@@ -288,13 +338,18 @@ static int asus_bat_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct dev_pm_ops asusbat_pm_ops = {
+    .suspend = asus_battery_suspend,
+    .resume = asus_battery_resume,
+};
+
 static struct platform_driver asus_bat_driver = {
 	.probe	= asus_bat_probe,
 	.remove	= asus_bat_remove,
 	.driver	= {
 		.name	= "asus_bat",
 		.owner	= THIS_MODULE,
-		//.pm	= &asusbat_pm_ops,
+		.pm	= &asusbat_pm_ops,
 	},
 };
 
