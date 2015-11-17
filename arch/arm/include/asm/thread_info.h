@@ -77,9 +77,6 @@ struct thread_info {
 #endif
 	struct restart_block	restart_block;
 	struct arm_restart_block	arm_restart_block;
-    struct mutex* pWaitingMutex;//ASUS_BSP + [thomas]Add for slow log
-    struct completion *pWaitingCompletion;//ASUS_BSP + [thomas]Add for slow log
-    struct rt_mutex* pWaitingRTMutex;//ASUS_BSP + [thomas]Add for slow log
 };
 
 #define INIT_THREAD_INFO(tsk)						\

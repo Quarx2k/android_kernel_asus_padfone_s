@@ -29,17 +29,6 @@ enum logk_event_type {
 	LOGK_L2CPWRITE = 8,
 };
 
-struct msm_rtb_state {
-	struct msm_rtb_layout *rtb;
-	phys_addr_t phys;
-	int nentries;
-	int size;
-	int enabled;
-	int initialized;
-	uint32_t filter;
-	int step_size;
-};
-
 #define LOGTYPE_NOPC 0x80
 
 struct msm_rtb_platform_data {

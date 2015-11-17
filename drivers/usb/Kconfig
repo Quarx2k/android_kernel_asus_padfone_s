@@ -184,10 +184,4 @@ source "drivers/usb/gadget/Kconfig"
 
 source "drivers/usb/otg/Kconfig"
 
-# ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-config ASUS_CARKIT
-        bool "ASUS CARKIT support"
-        default n
-# ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-
 endif # USB_SUPPORT

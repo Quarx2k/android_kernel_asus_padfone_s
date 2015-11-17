@@ -1,4 +1,3 @@
-
 /*
  *  drivers/cpufreq/cpufreq_stats.c
  *

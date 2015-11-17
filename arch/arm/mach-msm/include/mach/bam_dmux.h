@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -40,7 +40,6 @@ enum {
 	BAM_DMUX_DATA_REV_RMNET_6,
 	BAM_DMUX_DATA_REV_RMNET_7,
 	BAM_DMUX_DATA_REV_RMNET_8,
-	BAM_DMUX_USB_DPL,
 	BAM_DMUX_NUM_CHANNELS
 };
 
@@ -50,7 +49,6 @@ enum {
 	BAM_DMUX_WRITE_DONE, /* data is struct sk_buff */
 	BAM_DMUX_UL_CONNECTED, /* data is null */
 	BAM_DMUX_UL_DISCONNECTED, /*data is null */
-	BAM_DMUX_TRANSMIT_SIZE, /* data is maximum negotiated transmit MTU */
 };
 
 /*

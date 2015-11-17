@@ -117,9 +117,3 @@ config THERMAL_QPNP_ADC_TM
 	  Disabling the thermal zone device via the mode file results in disabling
 	  the sensor. Also able to set threshold temperature for both hot and cold
 	  and update when a threshold is reached.
-
-config THERMAL_AERO
-	tristate "Aero Thermal Monitor"
-	depends on THERMAL_MONITOR
-	default n
-

@@ -144,4 +144,4 @@ obj-$(CONFIG_MOBICORE_SUPPORT)  += gud/
 obj-$(CONFIG_CORESIGHT)		+= coresight/
 
 obj-$(CONFIG_BIF)		+= bif/
-obj-y				+= sensors/
+obj-$(CONFIG_SENSORS)		+= sensors/

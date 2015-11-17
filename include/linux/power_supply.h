@@ -13,7 +13,6 @@
 #ifndef __LINUX_POWER_SUPPLY_H__
 #define __LINUX_POWER_SUPPLY_H__
 
-#include <linux/wakelock.h>
 #include <linux/workqueue.h>
 #include <linux/leds.h>
 
@@ -45,6 +44,9 @@ enum {
 	POWER_SUPPLY_CHARGE_TYPE_NONE,
 	POWER_SUPPLY_CHARGE_TYPE_TRICKLE,
 	POWER_SUPPLY_CHARGE_TYPE_FAST,
+#ifdef CONFIG_MACH_OPPO
+	POWER_SUPPLY_CHARGE_TYPE_TERMINATE,
+#endif
 };
 
 enum {
@@ -138,6 +140,15 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_SCOPE,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 	POWER_SUPPLY_PROP_RESISTANCE,
+#ifdef CONFIG_MACH_OPPO
+	POWER_SUPPLY_PROP_AUTHENTICATE,
+	POWER_SUPPLY_PROP_CHARGE_TIMEOUT,
+	POWER_SUPPLY_PROP_FASTCHARGER,
+#endif
+	/* Local extensions */
+	POWER_SUPPLY_PROP_USB_HC,
+	POWER_SUPPLY_PROP_USB_OTG,
+	POWER_SUPPLY_PROP_CHARGE_ENABLED,
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
@@ -150,11 +161,11 @@ enum power_supply_type {
 	POWER_SUPPLY_TYPE_UPS,
 	POWER_SUPPLY_TYPE_MAINS,
 	POWER_SUPPLY_TYPE_USB,		/* Standard Downstream Port */
- 	POWER_SUPPLY_TYPE_USB_DCP,	/* Dedicated Charging Port */
- 	POWER_SUPPLY_TYPE_USB_CDP,	/* Charging Downstream Port */
- 	POWER_SUPPLY_TYPE_USB_ACA,	/* Accessory Charger Adapters */
-	POWER_SUPPLY_TYPE_WIRELESS,	/* Wireless Charger */
- 	POWER_SUPPLY_TYPE_BMS,		/* Battery Monitor System */
+	POWER_SUPPLY_TYPE_USB_DCP,	/* Dedicated Charging Port */
+	POWER_SUPPLY_TYPE_USB_CDP,	/* Charging Downstream Port */
+	POWER_SUPPLY_TYPE_USB_ACA,	/* Accessory Charger Adapters */
+	POWER_SUPPLY_TYPE_BMS,		/* Battery Monitor System */
+	POWER_SUPPLY_TYPE_WIRELESS,     /* Wireless Charger */
 };
 
 union power_supply_propval {
@@ -190,7 +201,6 @@ struct power_supply {
 	struct work_struct changed_work;
 	spinlock_t changed_lock;
 	bool changed;
-	struct wake_lock work_wake_lock;
 
 #ifdef CONFIG_LEDS_TRIGGERS
 	struct led_trigger *charging_full_trig;
@@ -231,7 +241,6 @@ extern void power_supply_changed(struct power_supply *psy);
 extern int power_supply_am_i_supplied(struct power_supply *psy);
 extern int power_supply_set_battery_charged(struct power_supply *psy);
 extern int power_supply_set_current_limit(struct power_supply *psy, int limit);
-extern int power_supply_set_voltage_limit(struct power_supply *psy, int limit);
 extern int power_supply_set_online(struct power_supply *psy, bool enable);
 extern int power_supply_set_health_state(struct power_supply *psy, int health);
 extern int power_supply_set_present(struct power_supply *psy, bool enable);
@@ -251,9 +260,6 @@ static inline void power_supply_changed(struct power_supply *psy) { }
 static inline int power_supply_am_i_supplied(struct power_supply *psy)
 							{ return -ENOSYS; }
 static inline int power_supply_set_battery_charged(struct power_supply *psy)
-							{ return -ENOSYS; }
-static inline int power_supply_set_voltage_limit(struct power_supply *psy,
-							int limit)
 							{ return -ENOSYS; }
 static inline int power_supply_set_current_limit(struct power_supply *psy,
 							int limit)

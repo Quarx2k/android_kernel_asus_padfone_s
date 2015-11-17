@@ -25,7 +25,6 @@
 struct completion {
 	unsigned int done;
 	wait_queue_head_t wait;
-	char name[32];
 };
 
 #define COMPLETION_INITIALIZER(work) \
