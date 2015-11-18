@@ -27,6 +27,7 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/qpnp/power-on.h>
 #include <linux/of_batterydata.h>
+#include <linux/wakelock.h>
 
 /* BMS Register Offsets */
 #define REVISION1			0x0
@@ -3604,8 +3605,8 @@ static int set_battery_data(struct qpnp_bms_chip *chip)
 #ifndef CONFIG_ASUS_PF500KL
 		batt_data = &QRD_4v35_2000mAh_data;
 #else
-		printk("Set Battery data 2320\n");
-		batt_data = &ASUS_A86_2320mAh_data;
+		printk("Set Battery data 2215\n");
+		batt_data = &ASUS_A91_2215mAh_data;
 #endif
 	} else if (chip->batt_type == BATT_QRD_4V2_1300MAH) {
 		batt_data = &qrd_4v2_1300mah_data;
@@ -4252,8 +4253,6 @@ static int __devinit qpnp_bms_probe(struct spmi_device *spmi)
 	wakeup_source_init(&chip->soc_wake_source.source, "qpnp_soc_wake");
 	wake_lock_init(&chip->low_voltage_wake_lock, WAKE_LOCK_SUSPEND,
 			"qpnp_low_voltage_lock");
-	wake_lock_init(&chip->cv_wake_lock, WAKE_LOCK_SUSPEND,
-			"qpnp_cv_lock");
 	INIT_DELAYED_WORK(&chip->calculate_soc_delayed_work,
 			calculate_soc_work);
 	INIT_WORK(&chip->recalc_work, recalculate_work);
