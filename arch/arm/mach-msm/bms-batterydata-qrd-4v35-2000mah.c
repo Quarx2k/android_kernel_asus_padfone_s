@@ -118,6 +118,7 @@ struct bms_battery_data QRD_4v35_2000mAh_data = {
 
 
 //Eason add A86 Bat data+++
+#if 0
 static struct single_row_lut A86_fcc_temp = {
 	.x		= {-20, 0, 25, 40, 60},
 	.y		= {2410, 2419, 2424, 2425, 2419},
@@ -217,7 +218,7 @@ struct bms_battery_data ASUS_A86_2320mAh_data = {
 	.rbatt_sf_lut			= &A86_rbatt_sf,
 	.default_rbatt_mohm	= 177
 };
-
+#endif
 //Eason add A86 Bat data---
 
 //Eason add A91 Bat data+++

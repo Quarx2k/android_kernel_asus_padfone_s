@@ -3604,8 +3604,7 @@ static int set_battery_data(struct qpnp_bms_chip *chip)
 #ifndef CONFIG_ASUS_PF500KL
 		batt_data = &QRD_4v35_2000mAh_data;
 #else
-		printk("Set Battery data 2320\n");
-		batt_data = &ASUS_A86_2320mAh_data;
+		batt_data = &ASUS_A91_2215mAh_data;
 #endif
 	} else if (chip->batt_type == BATT_QRD_4V2_1300MAH) {
 		batt_data = &qrd_4v2_1300mah_data;
