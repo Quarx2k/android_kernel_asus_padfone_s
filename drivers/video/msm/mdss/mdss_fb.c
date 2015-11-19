@@ -70,6 +70,10 @@
 #define BLANK_FLAG_LP	FB_BLANK_NORMAL
 #define BLANK_FLAG_ULP	FB_BLANK_VSYNC_SUSPEND
 
+#ifdef CONFIG_ASUS_CAMERA_STS
+extern bool get_camera_status(void);
+#endif
+
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
 
@@ -3190,6 +3194,10 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	struct msm_sync_pt_data *sync_pt_data = NULL;
 	unsigned int dsi_mode = 0;
 
+	#ifdef CONFIG_ASUS_CAMERA_STS
+	bool asus_camera_status = false;
+	#endif
+
 	if (!info || !info->par)
 		return -EINVAL;
 
@@ -3264,6 +3272,16 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 		ret = mdss_fb_lpm_enable(mfd, dsi_mode);
 		break;
+
+#ifdef CONFIG_ASUS_CAMERA_STS
+	case MSMFB_CAMERA_STS:
+		asus_camera_status = get_camera_status();
+		printk("[Display] Get Camera status(%d)\n", asus_camera_status);
+		ret = copy_to_user(argp, &asus_camera_status, sizeof(asus_camera_status));
+		if (ret)
+			printk("GET Camera state failed (%d)\n", ret);
+        break;
+#endif
 
 	default:
 		if (mfd->mdp.ioctl_handler)

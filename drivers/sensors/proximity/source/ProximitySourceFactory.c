@@ -31,7 +31,6 @@ ProximitySource* getProximitySource(
             }
             break;
 
-#ifdef CONFIG_SENSORS_CAP1106
         case PROXIMITY_CAP1106_SOURCE:
             {
                     BasicSource *fileSource = create_BasicSource( \
@@ -50,8 +49,8 @@ ProximitySource* getProximitySource(
 
                     return &fileSource->parent;
             }
+
             break;                
-#endif
 
         default :
             goto create_err;
