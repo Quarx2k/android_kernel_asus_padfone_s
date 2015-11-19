@@ -79,6 +79,12 @@
 #define MSMFB_WRITEBACK_SET_MIRRORING_HINT _IOW(MSMFB_IOCTL_MAGIC, 167, \
 						unsigned int)
 #define MSMFB_ASYNC_BLIT              _IOW(MSMFB_IOCTL_MAGIC, 168, unsigned int)
+
+//ASUS_BSP: Louis +++
+#define MSMFB_PADFONE_STATE    _IOR(MSMFB_IOCTL_MAGIC, 174, int)
+#define MSMFB_CAMERA_STS       _IOR(MSMFB_IOCTL_MAGIC, 175, bool)
+//ASUS_BSP: Louis ---
+
 #define MSMFB_OVERLAY_PREPARE		_IOWR(MSMFB_IOCTL_MAGIC, 169, \
 						struct mdp_overlay_list)
 #define MSMFB_LPM_ENABLE       _IOWR(MSMFB_IOCTL_MAGIC, 170, unsigned int)

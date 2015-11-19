@@ -266,25 +266,25 @@ static int proximity_als_turn_on(int bOn)
 	int err = 0;
 	int status = 0; // 0x1: light sensor is ok, 0x2: proximity is ok, 0x3: both are ok, 0x0: both failed
 
-	printk("[cm3628] proximity and light sensor test, turn_on:%d\n", bOn);
+	printk(DBGMSK_PRX_G5"[cm3628] proximity and light sensor test, turn_on:%d\n", bOn);
 
 	err = cm3628_turn_onoff_als(bOn);
 	if(err < 0)
-		printk("[cm3628] (%s): turn %s light sensor error!\n" ,__FUNCTION__, bOn ? "on" : "off");
+		printk(DBGMSK_PRX_G0"[cm3628] (%s): turn %s light sensor error!\n" ,__FUNCTION__, bOn ? "on" : "off");
 	else	{
-		printk("[cm3628] (%s): light sensor %s OK!\n" ,__FUNCTION__, bOn ? "on" : "off");
+		printk(DBGMSK_PRX_G5"[cm3628] (%s): light sensor %s OK!\n" ,__FUNCTION__, bOn ? "on" : "off");
 		status |= 0x1;  //als ok
 	}
 
 	err = cm3628_turn_onoff_proxm(bOn);
 	if(err < 0)
-		printk("[cm3628] (%s): turn %s proximity sensor error!\n",__FUNCTION__, bOn ? "on" : "off");
+		printk(DBGMSK_PRX_G0"[cm3628] (%s): turn %s proximity sensor error!\n",__FUNCTION__, bOn ? "on" : "off");
 	else {
-		printk("[cm3628] (%s): proximity sensor %s OK!\n",__FUNCTION__, bOn ? "on" : "off");
+		printk(DBGMSK_PRX_G5"[cm3628] (%s): proximity sensor %s OK!\n",__FUNCTION__, bOn ? "on" : "off");
 		status |= 0x02; //ps OK
 	}
 
-	printk("[cm3628]turn %s, status:0x%x (bitwise)\n", bOn ? "on" : "off", status);
+	printk(DBGMSK_PRX_G5"[cm3628]turn %s, status:0x%x (bitwise)\n", bOn ? "on" : "off", status);
 
 	return status;
 }
@@ -295,11 +295,11 @@ static int atd_read_P_L_sensor_adc(int *adc)
 	//int lux = 0;
 	int idx = 0;
 
-	printk("[cm3628][atd]readadc: trying to turn on lsensor\n");
+	printk(DBGMSK_PRX_G5"[cm3628][atd]readadc: trying to turn on lsensor\n");
 	status = proximity_als_turn_on(1);
 
 	if(0 == status) {
-		printk("[cm3628][atd]readadc: lsensor is not on\n");
+		printk(DBGMSK_PRX_G2"[cm3628][atd]readadc: lsensor is not on\n");
 		return status;
 	}
 
@@ -313,7 +313,7 @@ static int atd_read_P_L_sensor_adc(int *adc)
 
 	//lux = (u32)((*adc) * g_cm3628_light_gain_calibration / 100  + g_cm3628_light_shift_calibration); 
 
-	printk("[cm3628][atd]readadc steps=%d \n", *adc);//lux=%d\n", *adc, lux);
+	printk(DBGMSK_PRX_G5"[cm3628][atd]readadc steps=%d \n", *adc);//lux=%d\n", *adc, lux);
 	proximity_als_turn_on(0);
 
 	return status;
@@ -324,7 +324,7 @@ static int atd_write_status_and_adc_2(int *als_sts, int *als_adc, int *ps_sts)
 	int adc = 0;
 	int status = 0; // 0x1: light sensor is ok, 0x2: proximity is ok, 0x3: both are ok, 0x0: both failed
 
-	printk("[cm3628][atd]writests_2: started\n");
+	printk(DBGMSK_PRX_G5"[cm3628][atd]writests_2: started\n");
 	status = atd_read_P_L_sensor_adc(&adc);
 
 	if(status & 0x01)	{
@@ -343,7 +343,7 @@ static int atd_write_status_and_adc_2(int *als_sts, int *als_adc, int *ps_sts)
 		*ps_sts = 0;
 	}
 
-	printk("[cm3628][atd]writests_2: get adc, als_sts:%d, als_adc:%d, ps_sts:%d\n", 
+	printk(DBGMSK_PRX_G5"[cm3628][atd]writests_2: get adc, als_sts:%d, als_adc:%d, ps_sts:%d\n", 
 		*als_sts, *als_adc, *ps_sts);
 
 	return status;
@@ -390,11 +390,11 @@ static bool read_lightsensor_calibrationvalue()
 	int ori_val = 0, readlen =0;
 	mm_segment_t old_fs;
 	
-	printk("[cm3628] ++read_lsensor_calvalue open\n");
+	printk(DBGMSK_PRX_G5"[cm3628] ++read_lsensor_calvalue open\n");
 
 	fp = filp_open(LSENSOR_CALIBRATION_ASUS_NV_FILE, O_RDONLY, S_IRWXU|S_IRWXG|S_IRWXO);
 	if(IS_ERR_OR_NULL(fp)) {
-		printk("[cm3628] read_lsensor_calvalue open (%s) fail\n", LSENSOR_CALIBRATION_ASUS_NV_FILE);
+		printk(DBGMSK_PRX_G5"[cm3628] read_lsensor_calvalue open (%s) fail\n", LSENSOR_CALIBRATION_ASUS_NV_FILE);
 		return false;
 	}
 
@@ -406,10 +406,10 @@ static bool read_lightsensor_calibrationvalue()
 		readlen = fp->f_op->read(fp, readstr, 16, &pos_lsts);
 		readstr[readlen] = '\0';
 
-		printk("[cm3628] strlen:%s(%d)\n", readstr, strlen(readstr));
+		printk(DBGMSK_PRX_G5"[cm3628] strlen:%s(%d)\n", readstr, strlen(readstr));
 	}
 	else
-		printk("[cm3628] read_lsensor_calvalue, f_op=NULL or op->read=NULL\n");
+		printk(DBGMSK_PRX_G0"[cm3628] read_lsensor_calvalue, f_op=NULL or op->read=NULL\n");
 
 	set_fs(old_fs);
 	filp_close(fp, NULL);
@@ -423,7 +423,7 @@ static bool read_lightsensor_calibrationvalue()
 				g_cm3628_light_gain_calibration/a_als_calibration_accuracy,
 				g_cm3628_light_gain_calibration%a_als_calibration_accuracy);
 
-	printk("[cm3628] --read_lsensor_calvalue open\n");
+	printk(DBGMSK_PRX_G5"[cm3628] --read_lsensor_calvalue open\n");
 	return true;
 }
 
@@ -435,11 +435,11 @@ static bool read_lightsensor_shiftvalue()
     int ori_val = 0, readlen =0;
     mm_segment_t old_fs;
 
-    printk("[cm3628] ++read_lsensor_shift open\n");
+    printk(DBGMSK_PRX_G5"[cm3628] ++read_lsensor_shift open\n");
 
     fp = filp_open(LSENSOR_CALIBRATION_SHIFT_ASUS_NV_FILE, O_RDONLY, S_IRWXU|S_IRWXG|S_IRWXO);
     if(IS_ERR_OR_NULL(fp)) {
-        printk("[cm3628] read_lsensor_shift open (%s) fail\n", LSENSOR_CALIBRATION_SHIFT_ASUS_NV_FILE);
+        printk(DBGMSK_PRX_G5"[cm3628] read_lsensor_shift open (%s) fail\n", LSENSOR_CALIBRATION_SHIFT_ASUS_NV_FILE);
         return false;
     }
 
@@ -451,10 +451,10 @@ static bool read_lightsensor_shiftvalue()
         readlen = fp->f_op->read(fp, readstr, 16, &pos_lsts);
         readstr[readlen] = '\0';
 
-        printk("[cm3628] strlen:%s(%d)\n", readstr, strlen(readstr));
+        printk(DBGMSK_PRX_G5"[cm3628] strlen:%s(%d)\n", readstr, strlen(readstr));
     }
     else {
-        printk("[cm3628] read_lsensor_shift, f_op=NULL or op->read=NULL\n");
+        printk(DBGMSK_PRX_G0"[cm3628] read_lsensor_shift, f_op=NULL or op->read=NULL\n");
     }
 
     set_fs(old_fs);
@@ -467,7 +467,7 @@ static bool read_lightsensor_shiftvalue()
 
     printk("[cm3628] read_lsensor_shift: Ori: %d, Cal: %d\n", ori_val, g_cm3628_light_shift_calibration);
 
-    printk("[cm3628] --read_lsensor_calvalue open\n");
+    printk(DBGMSK_PRX_G5"[cm3628] --read_lsensor_calvalue open\n");
     return true;
 }
 
@@ -490,13 +490,13 @@ static void write_lightsensor_shiftvalue_work(struct work_struct *work)
 
 	fp = filp_open(LSENSOR_CALIBRATION_SHIFT_ASUS_NV_FILE, O_RDWR|O_CREAT|O_TRUNC, S_IRWXU|S_IRWXG|S_IRWXO);
 	if(IS_ERR_OR_NULL(fp)) {
-		printk("[cm3628] write_lsensor_shift open (%s) fail\n", LSENSOR_CALIBRATION_SHIFT_ASUS_NV_FILE);
+		printk(DBGMSK_PRX_G0"[cm3628] write_lsensor_shift open (%s) fail\n", LSENSOR_CALIBRATION_SHIFT_ASUS_NV_FILE);
 		return;
 	}
 
 	sprintf(writestr, "%d", this->calvalue);
 
-	printk("[cm3628] write_lsensor_shift = %d[%s(%d)]\n", 
+	printk(DBGMSK_PRX_G5"[cm3628] write_lsensor_shift = %d[%s(%d)]\n", 
 		this->calvalue, writestr, strlen(writestr));
 
 	if(fp->f_op != NULL && fp->f_op->write != NULL){
@@ -505,7 +505,7 @@ static void write_lightsensor_shiftvalue_work(struct work_struct *work)
 		fp->f_op->write(fp, writestr, strlen(writestr), &pos_lsts);
 	}
 	else
-		printk("[cm3628] write_lsensor_shift fail\n");
+		printk(DBGMSK_PRX_G0"[cm3628] write_lsensor_shift fail\n");
 
 	set_fs(old_fs);
 	filp_close(fp, NULL);
@@ -518,7 +518,7 @@ static int cm3628_show_calibration_200(struct device *dev, struct device_attribu
 {
 	read_lightsensor_calibrationvalue();
 	
-	printk("[cm3628] Show_gait_calibration: %d.%d \n", 
+	printk(DBGMSK_PRX_G5"[cm3628] Show_gait_calibration: %d.%d \n", 
 					g_cm3628_light_gain_calibration/a_als_calibration_accuracy,
 					g_cm3628_light_gain_calibration%a_als_calibration_accuracy );
 
@@ -551,7 +551,7 @@ static int cm3628_show_calibration_1000(struct device *dev, struct device_attrib
 {	
 	read_lightsensor_shiftvalue();
 
-	printk("[cm3628] Show_shift_calibration: %d\n", g_cm3628_light_shift_calibration );
+	printk(DBGMSK_PRX_G5"[cm3628] Show_shift_calibration: %d\n", g_cm3628_light_shift_calibration );
 	
 	return sprintf(buf, "%d\n", g_cm3628_light_shift_calibration );
 }
@@ -615,13 +615,13 @@ static void write_lightsensor_calibrationvalue_work(struct work_struct *work)
 
 	fp = filp_open(LSENSOR_CALIBRATION_ASUS_NV_FILE, O_RDWR|O_CREAT|O_TRUNC, S_IRWXU|S_IRWXG|S_IRWXO);
 	if(IS_ERR_OR_NULL(fp)) {
-		printk("[cm3628] write_lsensor_calvalue open (%s) fail\n", LSENSOR_CALIBRATION_ASUS_NV_FILE);
+		printk(DBGMSK_PRX_G0"[cm3628] write_lsensor_calvalue open (%s) fail\n", LSENSOR_CALIBRATION_ASUS_NV_FILE);
 		return;
 	}
 
 	sprintf(writestr, "%d", this->calvalue);
 
-	printk("[cm3628] write_lsensor_calvalue = %d[%s(%d)]\n", 
+	printk(DBGMSK_PRX_G5"[cm3628] write_lsensor_calvalue = %d[%s(%d)]\n", 
 		this->calvalue, writestr, strlen(writestr));
 
 	if(fp->f_op != NULL && fp->f_op->write != NULL){
@@ -630,7 +630,7 @@ static void write_lightsensor_calibrationvalue_work(struct work_struct *work)
 		fp->f_op->write(fp, writestr, strlen(writestr), &pos_lsts);
 	}
 	else
-		printk("[cm3628] write_lsensor_calvalue fail\n");
+		printk(DBGMSK_PRX_G0"[cm3628] write_lsensor_calvalue fail\n");
 
 	set_fs(old_fs);
 	filp_close(fp, NULL);
@@ -647,11 +647,11 @@ static bool read_prox_hi_calibrationvalue()
 	int ori_val = 0, readlen =0;
 	mm_segment_t old_fs;
 	
-	printk("[cm3628] ++read_psensor_hi_calvalue open\n");
+	printk(DBGMSK_PRX_G3"[cm3628] ++read_psensor_hi_calvalue open\n");
 
 	fp = filp_open(PSENSOR_CALIBRATION_HI_ASUS_NV_FILE, O_RDONLY, S_IRWXU|S_IRWXG|S_IRWXO);
 	if(IS_ERR_OR_NULL(fp)) {
-		printk("[cm3628] read_psensor_hi_calvalue open (%s) fail\n", PSENSOR_CALIBRATION_HI_ASUS_NV_FILE);
+		printk(DBGMSK_PRX_G3"[cm3628] read_psensor_hi_calvalue open (%s) fail\n", PSENSOR_CALIBRATION_HI_ASUS_NV_FILE);
 		return false;
 	}
 
@@ -663,10 +663,10 @@ static bool read_prox_hi_calibrationvalue()
 		readlen = fp->f_op->read(fp, readstr, 6, &pos_lsts);
 		readstr[readlen] = '\0';
 
-		printk("[cm3628] strlen:%s(%d)\n", readstr, strlen(readstr));
+		printk(DBGMSK_PRX_G3"[cm3628] strlen:%s(%d)\n", readstr, strlen(readstr));
 	}
 	else
-		printk("[cm3628] read_psensor_hi_calvalue, f_op=NULL or op->read=NULL\n");
+		printk(DBGMSK_PRX_G0"[cm3628] read_psensor_hi_calvalue, f_op=NULL or op->read=NULL\n");
 
 	set_fs(old_fs);
 	filp_close(fp, NULL);
@@ -689,12 +689,12 @@ static bool read_prox_lo_calibrationvalue()
 	int ori_val = 0, readlen =0;
 	mm_segment_t old_fs;
 
-	printk("[cm3628] ++read_psensor_low_calvalue open\n");
+	printk(DBGMSK_PRX_G3"[cm3628] ++read_psensor_low_calvalue open\n");
 
 	fp = filp_open(PSENSOR_CALIBRATION_LO_ASUS_NV_FILE, O_RDONLY, S_IRWXU|S_IRWXG|S_IRWXO);
 	//fp = filp_open(pFile, O_RDONLY, S_IRWXU|S_IRWXG|S_IRWXO);
 	if(IS_ERR_OR_NULL(fp)) {
-		printk("[cm3628] read_psensor_low_calvalue open (%s) fail\n", PSENSOR_CALIBRATION_LO_ASUS_NV_FILE);
+		printk(DBGMSK_PRX_G3"[cm3628] read_psensor_low_calvalue open (%s) fail\n", PSENSOR_CALIBRATION_LO_ASUS_NV_FILE);
 		return false;
 	}
 
@@ -706,10 +706,10 @@ static bool read_prox_lo_calibrationvalue()
 		readlen = fp->f_op->read(fp, readstr, 6, &pos_lsts);
 		readstr[readlen] = '\0';
 
-		printk("[cm3628] strlen:%s(%d)\n", readstr, strlen(readstr));
+		printk(DBGMSK_PRX_G3"[cm3628] strlen:%s(%d)\n", readstr, strlen(readstr));
 	}
 	else
-		printk("[cm3628] read_psensor_low_calvalue, f_op=NULL or op->read=NULL\n");
+		printk(DBGMSK_PRX_G0"[cm3628] read_psensor_low_calvalue, f_op=NULL or op->read=NULL\n");
 
 	set_fs(old_fs);
 	filp_close(fp, NULL);
@@ -741,13 +741,13 @@ static void write_prox_hi_calibrationvalue_work(struct work_struct *work)
 
 	fp = filp_open(PSENSOR_CALIBRATION_HI_ASUS_NV_FILE, O_RDWR|O_CREAT|O_TRUNC, S_IRWXU|S_IRWXG|S_IRWXO);
 	if(IS_ERR_OR_NULL(fp)) {
-		printk("[cm3628] write_psensor_hi_calvalue open (%s) fail\n", PSENSOR_CALIBRATION_HI_ASUS_NV_FILE);
+		printk(DBGMSK_PRX_G0"[cm3628] write_psensor_hi_calvalue open (%s) fail\n", PSENSOR_CALIBRATION_HI_ASUS_NV_FILE);
 		return;
 	}
 
 	sprintf(writestr, "%d", this->calvalue);
 
-	printk("[cm3628] write_psensor_hi_calvalue = %d[%s(%d)]\n", 
+	printk(DBGMSK_PRX_G3"[cm3628] write_psensor_hi_calvalue = %d[%s(%d)]\n", 
 		this->calvalue, writestr, strlen(writestr));
 
 	if(fp->f_op != NULL && fp->f_op->write != NULL){
@@ -756,7 +756,7 @@ static void write_prox_hi_calibrationvalue_work(struct work_struct *work)
 		fp->f_op->write(fp, writestr, strlen(writestr), &pos_lsts);
 	}
 	else
-		printk("[cm3628] write_psensor_hi_calvalue fail\n");
+		printk(DBGMSK_PRX_G0"[cm3628] write_psensor_hi_calvalue fail\n");
 
 	set_fs(old_fs);
 	filp_close(fp, NULL);
@@ -767,7 +767,7 @@ static void write_prox_hi_calibrationvalue_work(struct work_struct *work)
 static int cm3628_show_calibration_prox_hi(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	read_prox_hi_calibrationvalue();
-	printk("[cm3628] Show_prox_hi_calibration: %d\n", g_cm3628_data_ps->g_ps_threshold_hi);
+	printk(DBGMSK_PRX_G2"[cm3628] Show_prox_hi_calibration: %d\n", g_cm3628_data_ps->g_ps_threshold_hi);
 	return sprintf(buf, "%d\n", g_cm3628_data_ps->g_ps_threshold_hi);
 }
 
@@ -813,13 +813,13 @@ static void write_prox_lo_calibrationvalue_work(struct work_struct *work)
 
 	fp = filp_open(PSENSOR_CALIBRATION_LO_ASUS_NV_FILE, O_RDWR|O_CREAT|O_TRUNC, S_IRWXU|S_IRWXG|S_IRWXO);
 	if(IS_ERR_OR_NULL(fp)) {
-		printk("[cm3628] write_psensor_low_calvalue open (%s) fail\n", PSENSOR_CALIBRATION_LO_ASUS_NV_FILE);
+		printk(DBGMSK_PRX_G0"[cm3628] write_psensor_low_calvalue open (%s) fail\n", PSENSOR_CALIBRATION_LO_ASUS_NV_FILE);
 		return;
 	}
 
 	sprintf(writestr, "%d", this->calvalue);
 
-	printk("[cm3628] write_psensor_low_calvalue = %d[%s(%d)]\n", 
+	printk(DBGMSK_PRX_G3"[cm3628] write_psensor_low_calvalue = %d[%s(%d)]\n", 
 		this->calvalue, writestr, strlen(writestr));
 
 	if(fp->f_op != NULL && fp->f_op->write != NULL){
@@ -828,7 +828,7 @@ static void write_prox_lo_calibrationvalue_work(struct work_struct *work)
 		fp->f_op->write(fp, writestr, strlen(writestr), &pos_lsts);
 	}
 	else
-		printk("[cm3628] write_psensor_low_calvalue fail\n");
+		printk(DBGMSK_PRX_G0"[cm3628] write_psensor_low_calvalue fail\n");
 
 	set_fs(old_fs);
 	filp_close(fp, NULL);
@@ -841,7 +841,7 @@ static int cm3628_show_calibration_prox_lo(struct device *dev, struct device_att
 {	
 	read_prox_lo_calibrationvalue();
 
-	printk("[cm3628] Show_prox_lo_calibration: %d\n", g_cm3628_data_ps->g_ps_threshold_lo);
+	printk(DBGMSK_PRX_G2"[cm3628] Show_prox_lo_calibration: %d\n", g_cm3628_data_ps->g_ps_threshold_lo);
 	
 	return sprintf(buf, "%d\n", g_cm3628_data_ps->g_ps_threshold_lo);
 }
@@ -968,60 +968,60 @@ static int cm3628_proxmdev_get_property(struct proximity_class_dev *sdev, enum p
 	switch( property ) 
 	{
 		case SENSORS_PROP_HI_THRESHOLD:
-			printk("[cm3628][ps] SENSORS_PROP_HI_THRESHOLD. (%d)\n", g_cm3628_data_ps->g_ps_threshold_hi);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] SENSORS_PROP_HI_THRESHOLD. (%d)\n", g_cm3628_data_ps->g_ps_threshold_hi);
 			val->intval = g_cm3628_data_ps->g_ps_threshold_hi;
 			break;
 
 		case SENSORS_PROP_LO_THRESHOLD:
-			printk("[cm3628][ps] SENSORS_PROP_LO_THRESHOLD. (%d)\n", g_cm3628_data_ps->g_ps_threshold_lo);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] SENSORS_PROP_LO_THRESHOLD. (%d)\n", g_cm3628_data_ps->g_ps_threshold_lo);
 			val->intval = g_cm3628_data_ps->g_ps_threshold_lo;
 			break;
 
 		case SENSORS_PROP_INTERVAL:
-			printk("[cm3628][ps] SENSORS_PROP_INTERVAL.\n");
+			printk(DBGMSK_PRX_G4"[cm3628][ps] SENSORS_PROP_INTERVAL.\n");
 			val->intval = g_interval;
 			break;
 
 		case SENSORS_PROP_MAXRANGE:
-			printk("[cm3628][ps] SENSORS_PROP_MAXRANGE.\n");
+			printk(DBGMSK_PRX_G4"[cm3628][ps] SENSORS_PROP_MAXRANGE.\n");
 			val->intval = 1; //keep it 1.0 for OMS.
 			break;
 
 		case SENSORS_PROP_RESOLUTION:
-			printk("[cm3628][ps] SENSORS_PROP_RESOLUTION.\n");
+			printk(DBGMSK_PRX_G4"[cm3628][ps] SENSORS_PROP_RESOLUTION.\n");
 			val->intval = 1;
 			break;
 
 		case SENSORS_PROP_VERSION:
-			printk("[cm3628][ps] SENSORS_PROP_VERSION.\n");
+			printk(DBGMSK_PRX_G4"[cm3628][ps] SENSORS_PROP_VERSION.\n");
 			sprintf(val->strval, "Ver 0");
 			break;
 
 		case SENSORS_PROP_CURRENT:
-			printk("[cm3628][ps] SENSORS_PROP_CURRENT.\n");
+			printk(DBGMSK_PRX_G4"[cm3628][ps] SENSORS_PROP_CURRENT.\n");
 			val->intval = 30;
 			break;
 
 		case SENSORS_PROP_SWITCH:
-			printk("[cm3628][ps] get switch = %d.\n", g_cm3628_data_ps->Device_ps_switch_on);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] get switch = %d.\n", g_cm3628_data_ps->Device_ps_switch_on);
 			val->intval = g_cm3628_data_ps->Device_ps_switch_on;
 			break;
 
 		case SENSORS_PROP_VENDOR:
-			printk("[cm3628][ps] SENSORS_PROP_VENDOR.\n");
+			printk(DBGMSK_PRX_G4"[cm3628][ps] SENSORS_PROP_VENDOR.\n");
 			sprintf(val->strval, "CAPELLA");
 			break;
 
 		/* Add for debug only */
 		case SENSORS_PROP_DBG:
-			printk("[cm3628][ps] dbg = %d.\n", g_proxm_dbg);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] dbg = %d.\n", g_proxm_dbg);
 			val->intval = g_proxm_dbg;
-			//printk("[cm36283][ps] ps_IT(%d), ps_PERS(%d), ps_INT(%d), ps_MS(%d)\n",ps_IT, ps_PERS, ps_INT ,ps_MS);
+			//printk(DBGMSK_PRX_G4"[cm36283][ps] ps_IT(%d), ps_PERS(%d), ps_INT(%d), ps_MS(%d)\n",ps_IT, ps_PERS, ps_INT ,ps_MS);
 			break;
 
 		case SENSORS_PROP_ADC:
 			val->intval = 	get_ps_adc_from_cm3628( false );
-			printk("[cm3628][ps] get adc property: %d\n", val->intval);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] get adc property: %d\n", val->intval);
 			break;
 
 		case SENSORS_PROP_ATD_STATUS:
@@ -1030,12 +1030,12 @@ static int cm3628_proxmdev_get_property(struct proximity_class_dev *sdev, enum p
 
 			atd_write_status_and_adc_2(&als_sts, &als_adc, &ps_sts);
 			val->intval = ps_sts;
-			printk("[cm3628][ps] get atd status: %d\n", val->intval);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] get atd status: %d\n", val->intval);
 			break;
 		}
 
 		default:
-			printk("[cm3628][ps] default.\n");
+			printk(DBGMSK_PRX_G0"[cm3628][ps] default.\n");
 			return -EINVAL;
 	}
 	return 0;
@@ -1051,17 +1051,17 @@ static int cm3628_proxmdev_put_property(struct proximity_class_dev *sdev, enum p
 	switch (property) 
 	{
 		case SENSORS_PROP_SWITCH:
-			printk("[cm3628][ps] put SENSORS_PROP_SWITCH (%d,%d).\n",
+			printk(DBGMSK_PRX_G4"[cm3628][ps] put SENSORS_PROP_SWITCH (%d,%d).\n",
 								(val->intval), g_cm3628_data_ps->Device_ps_switch_on);
 			if(bFirst) {
 				if (err < 0) 
-					printk("[cm3628][ps] switch init error\n");
+					printk(DBGMSK_PRX_G0"[cm3628][ps] switch init error\n");
 				else {
-					printk("[cm3628][ps] put switch 1st read calvalue\n");
+					printk(DBGMSK_PRX_G4"[cm3628][ps] put switch 1st read calvalue\n");
 					openfilp = read_prox_hi_calibrationvalue();
 
 					if (openfilp == false ) {
-						printk("[cm3628][ps] Fail to open file. Get old calvalue : %d\n", 
+						printk(DBGMSK_PRX_G0"[cm3628][ps] Fail to open file. Get old calvalue : %d\n", 
 									g_cm3628_data_ps->g_ps_threshold_hi);
 						g_cm3628_data_ps->g_ps_threshold_hi = DEFAULT_PS_THRESHOLD_hi;
 					}
@@ -1085,7 +1085,7 @@ static int cm3628_proxmdev_put_property(struct proximity_class_dev *sdev, enum p
 
 						g_cm3628_data_ps->Device_ps_switch_on = 1;
 						g_cm3628_data_ps->pad_proxm_switch_on = 0;
-						printk("[cm3628][ps] proximity on.\n");
+						printk(DBGMSK_PRX_G4"[cm3628][ps] proximity on.\n");
 					}
 				}else	{	//turn off PS if val->intval==0 or other
 					g_cm3628_data_ps->HAL_ps_switch_on = 0;
@@ -1093,7 +1093,7 @@ static int cm3628_proxmdev_put_property(struct proximity_class_dev *sdev, enum p
 
 					// disable PS or directly Power off cm3628
 					cm3628_turn_onoff_proxm(0);
-					printk("[cm3628][ps] proximity off.\n");
+					printk(DBGMSK_PRX_G4"[cm3628][ps] proximity off.\n");
 				}
 			}
 			else if (g_bIsP01Attached)	{
@@ -1104,34 +1104,34 @@ static int cm3628_proxmdev_put_property(struct proximity_class_dev *sdev, enum p
 			break;
 
 		case SENSORS_PROP_HI_THRESHOLD:
-			printk("[cm3628][ps] config high THRESHOLD (%d).\n", val->intval);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] config high THRESHOLD (%d).\n", val->intval);
 			if(val->intval>=0 && val->intval<=255) {
 				if(g_cm3628_data_ps->g_ps_threshold_hi != val->intval) {
 					g_cm3628_data_ps->g_ps_threshold_hi = val->intval;
 				}
 			}
 			else
-				printk("[cm3628][ps] ERROR!!! OUT OF THRESHOLD (0~255)!!! \n");
+				printk(DBGMSK_PRX_G0"[cm3628][ps] ERROR!!! OUT OF THRESHOLD (0~255)!!! \n");
 			break;
 
 		case SENSORS_PROP_LO_THRESHOLD:
-			printk("[cm3628][ps] config low THRESHOLD (%d).\n", val->intval);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] config low THRESHOLD (%d).\n", val->intval);
 			if(val->intval>=0 && val->intval<=255) {
 				if(g_cm3628_data_ps->g_ps_threshold_lo != val->intval) {
 					g_cm3628_data_ps->g_ps_threshold_lo = val->intval;
 				}
 			}
 			else
-				printk("[cm3628][ps] ERROR!!! OUT OF THRESHOLD (0~255)!!! \n");
+				printk(DBGMSK_PRX_G0"[cm3628][ps] ERROR!!! OUT OF THRESHOLD (0~255)!!! \n");
 			break;
 
 		case SENSORS_PROP_INTERVAL:
 			if(1) {
-				printk("[cm3628][ps] set interval (0x%x)\n", val->intval);
+				printk(DBGMSK_PRX_G4"[cm3628][ps] set interval (0x%x)\n", val->intval);
 				//interval = val->intval;
 			}
 			else {
-				printk("[cm3628][ps] config IT_PS (0x%x)\n", val->intval);
+				printk(DBGMSK_PRX_G4"[cm3628][ps] config IT_PS (0x%x)\n", val->intval);
 #if 0
 				if( (val->intval>=0) && (val->intval<=3) ) {
 					gpio_set_value(g_proxm_pwr_pin, 0);
@@ -1156,11 +1156,11 @@ static int cm3628_proxmdev_put_property(struct proximity_class_dev *sdev, enum p
 			f ( g_proxm_dbg == 0 )
 				cancel_delayed_work(&Proximity_test_work);
 #endif
-			printk("[cm3628][ps] dbg = %d.\n", g_proxm_dbg);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] dbg = %d.\n", g_proxm_dbg);
 			break;
 
 		default:
-			printk("[cm3628][ps] put default.\n");
+			printk(DBGMSK_PRX_G0"[cm3628][ps] put default.\n");
 			return -EINVAL;
 	}
 	return 0;
@@ -1212,7 +1212,7 @@ static int cm3628_turn_onoff_proxm(bool bOn)
 			printk("[cm3628][ps] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_PS_CONF2, err);
 			return -1;
 		}else
-			printk("[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_CONF2, data_16);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_CONF2, data_16);
 
 
 		/* Enable PS & interrupt */
@@ -1359,13 +1359,13 @@ static void cm3628_software_reset(void)		//hardware reset sensor in case of sens
 
 static irqreturn_t cm3628_als_proxm_interrupt_handler(int irq, void *dev_id)
 {	
-	printk("[cm3628][isr] interrupt handler ++\n");
+	printk(DBGMSK_PRX_G2"[cm3628][isr] interrupt handler ++\n");
 
 	queue_delayed_work(cm3628_workqueue, &cm3628_ISR_work, 0);
 	if (g_cm3628_data_ps->proxm_detect_object_state == 1)	
 		wake_lock_timeout(&proximity_wake_lock, 1 * HZ);
 
-	printk("[cm3628][isr] interrupt handler --\n");
+	printk(DBGMSK_PRX_G2"[cm3628][isr] interrupt handler --\n");
 
 	return IRQ_HANDLED;
 }
@@ -1409,8 +1409,8 @@ static void cm3628_Proximity_work(struct work_struct *work)
 	int adc = 0;
 	adc = get_ps_adc_from_cm3628( false );
 
-	printk("/----------------------------------------------------\n");
-	printk("[cm3628][ps] PS_data = %d\n",adc);
+	printk(DBGMSK_PRX_G4"/----------------------------------------------------\n");
+	printk(DBGMSK_PRX_G4"[cm3628][ps] PS_data = %d\n",adc);
 	
 	if( adc >= g_cm3628_data_ps->g_ps_threshold_hi) {  //panel off
 		input_report_abs(g_cm3628_data_ps->input_dev, ABS_DISTANCE, 0);
@@ -1427,9 +1427,9 @@ static void cm3628_Proximity_work(struct work_struct *work)
 
 #ifndef INPUT_EVENT_MODE
 	atomic_inc(&cm3628_proxm_update);
-	printk("[cm3628][ps] proxm_interrupt_handler, state_change\n");
-	printk("[cm3628][ps] proxm_interrupt_handler fire(%d)\n",atomic_read(&cm3628_proxm_update));
-	printk("/----------------------------------------------------\n");
+	printk(DBGMSK_PRX_G4"[cm3628][ps] proxm_interrupt_handler, state_change\n");
+	printk(DBGMSK_PRX_G4"[cm3628][ps] proxm_interrupt_handler fire(%d)\n",atomic_read(&cm3628_proxm_update));
+	printk(DBGMSK_PRX_G4"/----------------------------------------------------\n");
 #endif
 }
 
@@ -1460,7 +1460,7 @@ static void cm3628_light_work(struct work_struct *work)
 	
 	get_calibrated_lux_from_cm3628_adc(g_cm3628_data_as->light_adc);
 
-	printk("[cm3628][als] Setting threshold: adc=%d, g_als_threshold_hi=%d, g_als_threshold_lo=%d\n",
+	printk(DBGMSK_PRX_G3"[cm3628][als] Setting threshold: adc=%d, g_als_threshold_hi=%d, g_als_threshold_lo=%d\n",
 		g_cm3628_data_as->light_adc, g_cm3628_data_as->g_als_threshold_hi, g_cm3628_data_as->g_als_threshold_lo);
 	
 	als_lux_report_event( g_cm3628_data_as->light_lux );
@@ -1543,10 +1543,10 @@ atomic_t cm3628_ambient_update;
 static int ambientDev_open(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	printk("[cm3628][als] ambientdl_dev_open \n");
+	printk(DBGMSK_PRX_G3"[cm3628][als] ambientdl_dev_open \n");
 
 	if (file->f_flags & O_NONBLOCK)
-		printk("[cm3628][als] ambientdl_dev_open (O_NONBLOCK)\n");
+		printk(DBGMSK_PRX_G2"[cm3628][als] ambientdl_dev_open (O_NONBLOCK)\n");
 
 	atomic_set(&cm3628_ambient_update, 0); //initialize atomic.
 
@@ -1572,75 +1572,75 @@ struct proximity_class_dev cm3628_ambientDev = {
 
 static int cm3628_ambientDev_get_property(struct proximity_class_dev *sdev, enum proximity_property property, union proximity_propval *val)
 {
-	printk("[cm3628][als] ambientdl_get_property +.\n");
+	printk(DBGMSK_PRX_G3"[cm3628][als] ambientdl_get_property +.\n");
 
 	switch( property )
 	{
 		case SENSORS_PROP_HI_THRESHOLD:
-			printk("[cm3628][als] SENSORS_PROP_HI_THRESHOLD. (%d)\n", g_cm3628_data_as->g_als_threshold_hi);
+			printk(DBGMSK_PRX_G3"[cm3628][als] SENSORS_PROP_HI_THRESHOLD. (%d)\n", g_cm3628_data_as->g_als_threshold_hi);
 			val->intval = g_cm3628_data_as->g_als_threshold_hi;
 			break;
 
 		case SENSORS_PROP_LO_THRESHOLD:
-			printk("[cm3628][als] SENSORS_PROP_LO_THRESHOLD. (%d)\n", g_cm3628_data_as->g_als_threshold_lo);
+			printk(DBGMSK_PRX_G3"[cm3628][als] SENSORS_PROP_LO_THRESHOLD. (%d)\n", g_cm3628_data_as->g_als_threshold_lo);
 			val->intval = g_cm3628_data_as->g_als_threshold_lo;
 			break;
 
 		case SENSORS_PROP_INTERVAL:
-			printk("[cm3628][als] config GAIN_ALS by using \"echo XXX > /sys/class/sensors/sensor4/interval\" XXX is only 0~3. \n");
-			printk("[cm3628][als] SENSORS_PROP_INTERVAL.\n");
+			printk(DBGMSK_PRX_G3"[cm3628][als] config GAIN_ALS by using \"echo XXX > /sys/class/sensors/sensor4/interval\" XXX is only 0~3. \n");
+			printk(DBGMSK_PRX_G3"[cm3628][als] SENSORS_PROP_INTERVAL.\n");
 			val->intval = g_interval;
 			break;
 
 		case SENSORS_PROP_MAXRANGE:
-			printk("[cm3628][als] SENSORS_PROP_MAXRANGE.\n");
+			printk(DBGMSK_PRX_G3"[cm3628][als] SENSORS_PROP_MAXRANGE.\n");
 			val->intval = 128;  
 			break;
 
 		case SENSORS_PROP_RESOLUTION:
-			printk("[cm3628][als] SENSORS_PROP_RESOLUTION.\n");
+			printk(DBGMSK_PRX_G3"[cm3628][als] SENSORS_PROP_RESOLUTION.\n");
 			val->intval = 1;
 			break;
 
 		case SENSORS_PROP_VERSION:
-			printk("[cm3628][als] SENSORS_PROP_VERSION.\n");
+			printk(DBGMSK_PRX_G3"[cm3628][als] SENSORS_PROP_VERSION.\n");
 			val->intval = 1;
 			break;
 
 		case SENSORS_PROP_CURRENT:
-			printk("[cm3628][als] SENSORS_PROP_CURRENT.\n");
+			printk(DBGMSK_PRX_G3"[cm3628][als] SENSORS_PROP_CURRENT.\n");
 			val->intval = 30;
 			break;
 
 		case SENSORS_PROP_SWITCH:
-			printk("[cm3628][als] get switch = %d.\n", g_HAL_als_switch_on);
+			printk(DBGMSK_PRX_G3"[cm3628][als] get switch = %d.\n", g_HAL_als_switch_on);
 			val->intval = g_HAL_als_switch_on;
 			break;
 
 		case SENSORS_PROP_VENDOR:
-			printk("[cm3628][als] SENSORS_PROP_VENDOR.\n");
+			printk(DBGMSK_PRX_G3"[cm3628][als] SENSORS_PROP_VENDOR.\n");
 			sprintf(val->strval, "CAPELLA");
 			break;
 
 		/* Add for debug only */
 		case SENSORS_PROP_DBG:
 			val->intval = g_ambient_dbg;
-			printk("[cm3628][als] dbg = %d.\n", g_ambient_dbg);
+			printk(DBGMSK_PRX_G3"[cm3628][als] dbg = %d.\n", g_ambient_dbg);
 			break;
 
 		case SENSORS_PROP_ADC:
 			val->intval = get_als_adc_from_cm3628( false );
-			printk("[cm3628][als] get adc property: %d\n", val->intval);
+			printk(DBGMSK_PRX_G3"[cm3628][als] get adc property: %d\n", val->intval);
 			break;
 #if 0
 		case SENSORS_PROP_K_ADC:
 			val->intval = get_adc_calibrated_lux_from_cm3628(get_als_adc_from_cm3628( false ));
-			printk("[cm3628][als] get k_adc property: %d\n", val->intval);
+			printk(DBGMSK_PRX_G3"[cm3628][als] get k_adc property: %d\n", val->intval);
 			break;
 
 		case SENSORS_PROP_LUX:
 			val->intval = g_lux_light;
-			printk("[cm3628][als] get lux property: %d\n", val->intval);
+			printk(DBGMSK_PRX_G3"[cm3628][als] get lux property: %d\n", val->intval);
 			break;
 #endif
 
@@ -1650,7 +1650,7 @@ static int cm3628_ambientDev_get_property(struct proximity_class_dev *sdev, enum
 
 			atd_write_status_and_adc_2(&als_sts, &als_adc, &ps_sts);
 			val->intval = als_sts;
-			printk("[cm3628][als] get atd status: %d\n", val->intval);
+			printk(DBGMSK_PRX_G3"[cm3628][als] get atd status: %d\n", val->intval);
 			break;
 		}
 
@@ -1660,17 +1660,17 @@ static int cm3628_ambientDev_get_property(struct proximity_class_dev *sdev, enum
 			atd_write_status_and_adc_2(&als_sts, &als_adc, &ps_sts);
 
 			val->intval = als_adc;
-			printk("[cm3628][als] get atd adc: %d\n", val->intval);
+			printk(DBGMSK_PRX_G3"[cm3628][als] get atd adc: %d\n", val->intval);
 			break;
 		}
 
 		default:
-			printk("[cm3628][als] default\n");
+			printk(DBGMSK_PRX_G0"[cm3628][als] default\n");
 
 		return -EINVAL;
 
 	}
-	printk( "[cm3628]: ambientdl_get_property -.\n");
+	printk( DBGMSK_PRX_G3"[cm3628]: ambientdl_get_property -.\n");
 
 	return 0;
 }
@@ -1683,17 +1683,17 @@ static int cm3628_ambientDev_put_property(struct proximity_class_dev *sdev, enum
 	switch (property) 
 	{
 		case SENSORS_PROP_SWITCH:
-			printk("[cm3628][als] put SENSORS_PROP_SWITCH (%d,%d).\n",
+			printk(DBGMSK_PRX_G3"[cm3628][als] put SENSORS_PROP_SWITCH (%d,%d).\n",
 				(val->intval), g_HAL_als_switch_on);
 
 			//read calibration value
 			if(bFirst) {
-				printk("[cm3628][als] put switch 1st read calvalue\n");
+				printk(DBGMSK_PRX_G3"[cm3628][als] put switch 1st read calvalue\n");
 				openfilp = read_lightsensor_calibrationvalue();
 
 				/*Surpport old calibration value*/
 				if ( g_cm3628_light_gain_calibration <= 0 || openfilp == false )
-					printk("[cm3628][als] Get old calvalue or fail\n" );
+					printk(DBGMSK_PRX_G3"[cm3628][als] Get old calvalue or fail\n" );
 				else
 					read_lightsensor_shiftvalue();
 				printk("[cm3628] Set calibration and shift: %d.%d , %d\n",
@@ -1713,12 +1713,12 @@ static int cm3628_ambientDev_put_property(struct proximity_class_dev *sdev, enum
 			}
 
 			if( g_bIsP01Attached )	{
-				printk("[cm3628][als] sensor switch, turn on/off al3010: %d\n", g_HAL_als_switch_on);
+				printk(DBGMSK_PRX_G3"[cm3628][als] sensor switch, turn on/off al3010: %d\n", g_HAL_als_switch_on);
 				als_lux_report_event(0);
 				set_als_power_state_of_P01(g_HAL_als_switch_on);
 			}
 			else	 {
-				printk("[cm3628][als] sensor switch, turn on/off cm3628: %d\n", g_HAL_als_switch_on);
+				printk(DBGMSK_PRX_G3"[cm3628][als] sensor switch, turn on/off cm3628: %d\n", g_HAL_als_switch_on);
 				cm3628_turn_onoff_als(g_HAL_als_switch_on);
 			}
 			break;
@@ -1730,7 +1730,7 @@ static int cm3628_ambientDev_put_property(struct proximity_class_dev *sdev, enum
 			break;
 
 		case SENSORS_PROP_INTERVAL:
-			printk("[cm3628][als] put SENSORS_PROP_INTERVAL. %d\n", val->intval);
+			printk(DBGMSK_PRX_G3"[cm3628][als] put SENSORS_PROP_INTERVAL. %d\n", val->intval);
 			if(val->intval < 100)
 				g_interval = 100;
 			else
@@ -1751,18 +1751,18 @@ static int cm3628_ambientDev_put_property(struct proximity_class_dev *sdev, enum
 			if ( g_ambient_dbg == 0 )
 				cancel_delayed_work(&cm3628_als_test_work);
 #endif
-			printk("[cm3628][als] dbg = %d.\n", g_ambient_dbg);
+			printk(DBGMSK_PRX_G3"[cm3628][als] dbg = %d.\n", g_ambient_dbg);
 			break;
 
 		case SENSORS_PROP_CALIBRATION:
 			g_cm3628_light_gain_calibration = val->intval;
-			printk("[cm3628][als] Gain calibration val = %d.%d\n", 
+			printk(DBGMSK_PRX_G3"[cm3628][als] Gain calibration val = %d.%d\n", 
 							g_cm3628_light_gain_calibration/a_als_calibration_accuracy,
 							g_cm3628_light_gain_calibration%a_als_calibration_accuracy);
 			break;
 
 		default:
-			printk("[cm3628][als] put default.\n");
+			printk(DBGMSK_PRX_G0"[cm3628][als] put default.\n");
 			return -EINVAL;
 	}
 	return 0;
@@ -1774,15 +1774,15 @@ static int cm3628_turn_onoff_als(bool bOn)
 	uint16_t data_16 = 0;
 	int err = 0;
 
-	printk("[cm3628][als]++Turn onoff ambient sensor\n");
+	printk(DBGMSK_PRX_G3"[cm3628][als]++Turn onoff ambient sensor\n");
 
 	if (g_cm3628_data_as->Device_als_switch_on != bOn || g_cm3628_reset==1) {
 		if ( bOn == 1 )	{
-			printk("[cm3628][als] turn on light sensor ++.\n");
+			printk(DBGMSK_PRX_G3"[cm3628][als] turn on light sensor ++.\n");
 
 			/* Clear ara INT*/
 			err = cm3628_ara_read_reg( cm3628_ara_client );
-			printk("[cm3628][als] Clean ARA, data=0x%x\n", data_8);		
+			printk(DBGMSK_PRX_G3"[cm3628][als] Clean ARA, data=0x%x\n", data_8);		
 
 			/* Set 0x01 ALS CONF2 */
 			data_16 = ( ALS_RESET<<6 | ALS_AV<<4 | ALS_HS<<3 | ALS_THD );
@@ -1791,7 +1791,7 @@ static int cm3628_turn_onoff_als(bool bOn)
 				printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_CONF2, err);
 				return -1;
 			}else
-				printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF2, data_16);
+				printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF2, data_16);
 
 			/* Set 0x02,0x03 ALS High threshold */
 			err = i2c_smbus_write_byte_data(cm3628_als_conf_client, CM3628_ALS_WH_M, 0x00 );
@@ -1799,14 +1799,14 @@ static int cm3628_turn_onoff_als(bool bOn)
 				printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_WH_M, err);
 				return -1;
 			}else
-				printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WH_M, data_16);
+				printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WH_M, data_16);
 
 			err = i2c_smbus_write_byte_data(cm3628_als_conf_client, CM3628_ALS_WH_L, 0x00);
 			if(err < 0) {
 				printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_WH_L, err);
 				return -1;
 			}else
-				printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WH_L, data_16);
+				printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WH_L, data_16);
 
 			/* Set 0x04,0x05 ALS Low threshold */
 			err = i2c_smbus_write_byte_data(cm3628_als_conf_client, CM3628_ALS_WL_M, 0x00);
@@ -1814,14 +1814,14 @@ static int cm3628_turn_onoff_als(bool bOn)
 				printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_WL_M, err);
 				return -1;
 			}else
-				printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WL_M, data_16);
+				printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WL_M, data_16);
 
 			err = i2c_smbus_write_byte_data(cm3628_als_conf_client, CM3628_ALS_WL_L, 0x00);
 			if(err < 0) {
 				printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_WL_L, err);
 				return -1;
 			}else
-				printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WL_L, data_16);
+				printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WL_L, data_16);
 	
 			/* Set 0x00 ALS CONF1 */
 			/* Enable ALS & interrupt */
@@ -1831,7 +1831,7 @@ static int cm3628_turn_onoff_als(bool bOn)
 				printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_CONF1, err);
 				return -1;
 			}else
-				printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF1, data_16);
+				printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF1, data_16);
 
 			g_cm3628_data_as->Device_als_switch_on = 1;
 
@@ -1841,7 +1841,7 @@ static int cm3628_turn_onoff_als(bool bOn)
 			printk("[cm3628][als] turn on light sensor --.\n");
 		}
 		else	{
-			printk("[cm3628][als] turn off light sensor ++.\n");
+			printk(DBGMSK_PRX_G3"[cm3628][als] turn off light sensor ++.\n");
 
 			/* Set 0x00 ALS CONF1 */
 			/* Disable ALS & interrupt */
@@ -1851,7 +1851,7 @@ static int cm3628_turn_onoff_als(bool bOn)
 				printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_CONF1, err);
 				return -1;
 			}else
-				printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF1, data_16);
+				printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF1, data_16);
 
 			g_cm3628_data_as->Device_als_switch_on = 0;
 		
@@ -1922,7 +1922,7 @@ static int get_calibrated_lux_from_cm3628_adc(int adc)
 		g_cm3628_light_first=0;
 	}
 */
-	printk("[cm3628][als] adc=%d, k_adc=%d, lux=%d, last=%d\n", adc, lux, g_cm3628_data_as->light_lux, g_cm3628_data_as->last_light_lux);
+	printk(DBGMSK_PRX_G3"[cm3628][als] adc=%d, k_adc=%d, lux=%d, last=%d\n", adc, lux, g_cm3628_data_as->light_lux, g_cm3628_data_as->last_light_lux);
 
 	return lux;
 }
@@ -2060,7 +2060,7 @@ static int cm3628_reg_reset(unsigned int mode)
 			printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_CONF1, err);
 			return -1;
 		}else
-			printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF1, (ALS_THRES<<2 | ALS_SD_OFF));
+			printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF1, (ALS_THRES<<2 | ALS_SD_OFF));
 
 		/* Set 0x01 ALS CONF2 */
 		err = i2c_smbus_write_byte_data(cm3628_als_conf_client, CM3628_ALS_CONF2, CM3628_REG_INIT );
@@ -2068,7 +2068,7 @@ static int cm3628_reg_reset(unsigned int mode)
 			printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_CONF2, err);
 			return -1;
 		}else
-			printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF2, CM3628_REG_INIT);
+			printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_CONF2, CM3628_REG_INIT);
 
 		/* Set 0x02,0x03 ALS High threshold */
 		err = i2c_smbus_write_byte_data(cm3628_als_conf_client, CM3628_ALS_WH_M, CM3628_REG_INIT );
@@ -2076,14 +2076,14 @@ static int cm3628_reg_reset(unsigned int mode)
 			printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_WH_M, err);
 			return -1;
 		}else
-			printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WH_M, CM3628_REG_INIT);
+			printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WH_M, CM3628_REG_INIT);
 
 		err = i2c_smbus_write_byte_data(cm3628_als_conf_client, CM3628_ALS_WH_L, CM3628_REG_INIT);
 		if(err < 0) {
 			printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_WH_L, err);
 			return -1;
 		}else
-			printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WH_L, CM3628_REG_INIT);
+			printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WH_L, CM3628_REG_INIT);
 
 		/* Set 0x04,0x05 ALS Low threshold */
 		err = i2c_smbus_write_byte_data(cm3628_als_conf_client, CM3628_ALS_WL_M, CM3628_REG_INIT);
@@ -2091,14 +2091,14 @@ static int cm3628_reg_reset(unsigned int mode)
 			printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_WL_M, err);
 			return -1;
 		}else
-			printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WL_M, CM3628_REG_INIT);
+			printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WL_M, CM3628_REG_INIT);
 
 		err = i2c_smbus_write_byte_data(cm3628_als_conf_client, CM3628_ALS_WL_L, CM3628_REG_INIT);
 		if(err < 0) {
 			printk("[cm3628][als] (%s): err(0x%x)=%d\n",__FUNCTION__,CM3628_ALS_WL_L, err);
 			return -1;
 		}else
-			printk("[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WL_L, CM3628_REG_INIT);
+			printk(DBGMSK_PRX_G3"[cm3628][als] set als_config(0x%x), data=0x%x\n", CM3628_ALS_WL_L, CM3628_REG_INIT);
 	}
 	if (mode == CM3628_PS_MODE) {
 		cm3628_ara_read_reg( cm3628_ara_client );
@@ -2109,7 +2109,7 @@ static int cm3628_reg_reset(unsigned int mode)
 			printk("[cm3628][ps] (%s): err(0x%x)=%d\n",__FUNCTION__, CM3628_PS_CONF1, err);
 			return -1;
 		}else
-			printk("[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_CONF1, PS_SD_OFF);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_CONF1, PS_SD_OFF);
 
 		//Set 0x01
 		err = i2c_smbus_write_byte_data(cm3628_ps_conf_client, CM3628_PS_THD, g_cm3628_data_ps->g_ps_threshold_hi);
@@ -2117,7 +2117,7 @@ static int cm3628_reg_reset(unsigned int mode)
 			printk("[cm3628][ps] (%s): err(0x%x)=%d\n",__FUNCTION__, CM3628_PS_THD, err);
 			return -1;
 		}else
-			printk("[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_THD, g_cm3628_data_ps->g_ps_threshold_hi);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_THD, g_cm3628_data_ps->g_ps_threshold_hi);
 
 		//Set 0x02
 		err = i2c_smbus_write_byte_data(cm3628_ps_conf_client, CM3628_PS_CANC, CM3628_REG_INIT);
@@ -2125,7 +2125,7 @@ static int cm3628_reg_reset(unsigned int mode)
 			printk("[cm3628][ps] (%s): err(0x%x)=%d\n",__FUNCTION__, CM3628_PS_CANC, err);
 			return -1;
 		}else
-			printk("[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_CANC, CM3628_REG_INIT);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_CANC, CM3628_REG_INIT);
 
 		//Set 0x03
 		err = i2c_smbus_write_byte_data(cm3628_ps_conf_client, CM3628_PS_CONF2, CM3628_REG_INIT);
@@ -2133,7 +2133,7 @@ static int cm3628_reg_reset(unsigned int mode)
 			printk("[cm3628][ps] (%s): err(0x%x)=%d\n",__FUNCTION__, CM3628_PS_CONF2, err);
 			return -1;
 		}else
-			printk("[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_CONF2, CM3628_REG_INIT);
+			printk(DBGMSK_PRX_G4"[cm3628][ps] set ps_config(0x%x), pdata=0x%x\n", CM3628_PS_CONF2, CM3628_REG_INIT);
 
 // ASUS_BSP +++ Peter_Lu "Set L18 sensor power source from standby mode to normal mode for keep sensor power source stable"
 		if (ldoa18_regulator == NULL)	{
@@ -2359,7 +2359,7 @@ static int cm3628_suspend(struct i2c_client *client, pm_message_t mesg)
 	/* For make sure Light sensor mush be switch off when system suspend */
 	if(g_cm3628_data_as->Device_als_switch_on == 1)	{
 		//In case upper layer doesn't switch off ambient before early_suspend.
-		printk("[cm3628] cm3628_suspend, turn off ambient\n");
+		printk(DBGMSK_PRX_G2"[cm3628] cm3628_suspend, turn off ambient\n");
 
 		/* Flag for check system still in suspend state */
 		g_ambient_suspended = 1;
@@ -2372,7 +2372,7 @@ static int cm3628_suspend(struct i2c_client *client, pm_message_t mesg)
 
 static int cm3628_resume(struct i2c_client *client)
 {
-	printk("[cm3628]++cm3628_resume, gpio %d : %d\n",
+	printk(DBGMSK_PRX_G2"[cm3628]++cm3628_resume, gpio %d : %d\n",
 		CM3628_GPIO_PROXIMITY_INT,gpio_get_value(CM3628_GPIO_PROXIMITY_INT) );
 
 	if( !g_bIsP01Attached /*&& g_cm3628_data_ps->Device_ps_switch_on && !gpio_get_value(GPIO_PROXIMITY_INT)*/) {
@@ -2394,7 +2394,7 @@ static int cm3628_resume(struct i2c_client *client)
 
 	g_cm3628_earlysuspend_int = 0;
 
-	printk("[cm3628]--cm3628_resume\n");
+	printk(DBGMSK_PRX_G2"[cm3628]--cm3628_resume\n");
 
 	return 0 ;
 }
@@ -2627,7 +2627,7 @@ cm3628_ara_probe_err:
 #ifdef CONFIG_EEPROM_NUVOTON
 static void cm3628_lightsensor_attached_pad(struct work_struct *work)
 {
-	printk("[cm3628_als] lightsensor_attached_pad()++\n");
+	printk(DBGMSK_PRX_G2"[cm3628_als] lightsensor_attached_pad()++\n");
 
 	//if HAL already turned on als, we switch to Pad light sensor
 	if(g_cm3628_data_ps->Device_ps_switch_on)
@@ -2635,8 +2635,8 @@ static void cm3628_lightsensor_attached_pad(struct work_struct *work)
 
 	if(g_HAL_als_switch_on) 
 	{
-		printk("[cm3628_als] lightsensor_attached_pad, checking if pad is attached\n");
-		printk("[cm3628_als] lightsensor_attached_pad, attached! switch to al3010 : %d lux\n",
+		printk(DBGMSK_PRX_G2"[cm3628_als] lightsensor_attached_pad, checking if pad is attached\n");
+		printk(DBGMSK_PRX_G2"[cm3628_als] lightsensor_attached_pad, attached! switch to al3010 : %d lux\n",
 			g_cm3628_data_as->light_lux);
 
 		/*shut down cm3628_als*/
@@ -2644,29 +2644,29 @@ static void cm3628_lightsensor_attached_pad(struct work_struct *work)
 	}
 
 	g_bIsP01Attached = true;
-	printk("[cm3628_als] lightsensor_attached_pad()--\n");
+	printk(DBGMSK_PRX_G2"[cm3628_als] lightsensor_attached_pad()--\n");
 
 	return;
 }
 
 int cm3628_lightsensor_detached_pad(void)
 {
-	printk("[cm3628_als] Cm36283_detached_pad()++\n");
+	printk(DBGMSK_PRX_G2"[cm3628_als] Cm36283_detached_pad()++\n");
 
 	//if HAL still turned on the als, we switch back to phone light sensor
 	if(g_HAL_als_switch_on)	{
-		printk("[cm3628_als] lightsensor_detached_pad(), switch back to cm36283 : %d lux\n",
+		printk(DBGMSK_PRX_G2"[cm3628_als] lightsensor_detached_pad(), switch back to cm36283 : %d lux\n",
 			g_cm3628_data_as->light_lux);
 
 		//turn on cm36283_als
 		cm3628_turn_onoff_als(1);
 	}
 	else
-		printk("[cm3628_als] lightsensor_detached_pad(), als is turned off\n");
+		printk(DBGMSK_PRX_G2"[cm3628_als] lightsensor_detached_pad(), als is turned off\n");
 
 	//if phone call or ps still on, we switch back to cm36283
 	if (g_cm3628_data_ps->Device_ps_switch_on)	{
-		printk("[cm3628_proxm] ps_detached_pad(), phone call still on\n");
+		printk(DBGMSK_PRX_G2"[cm3628_proxm] ps_detached_pad(), phone call still on\n");
 		cm3628_turn_onoff_proxm(1);
 		queue_delayed_work(cm3628_delay_workqueue, &cm3628_proximity_interrupt_delay_work, 0);
 	}
@@ -2678,10 +2678,10 @@ int cm3628_lightsensor_detached_pad(void)
 		queue_delayed_work(cm3628_delay_workqueue, &cm3628_proximity_interrupt_delay_work, 0);
 	}
 	else
-		printk("[cm3628_als] ps is turned off\n");
+		printk(DBGMSK_PRX_G2"[cm3628_als] ps is turned off\n");
 
 	g_bIsP01Attached = false;
-	printk("[cm3628_als] Cm3628_detached_pad()--\n");
+	printk(DBGMSK_PRX_G2"[cm3628_als] Cm3628_detached_pad()--\n");
 
 	return 0;
 }
@@ -2807,9 +2807,9 @@ static int __init cm3628_init(void)
 static void __exit cm3628_exit(void)
 {
 	if(g_ASUS_hwID >= A91_SR1)	{
-		printk("[cm3628] cm3628_platform_exit +.\n");
+		printk(DBGMSK_PRX_G2"[cm3628] cm3628_platform_exit +.\n");
 		platform_driver_unregister(&cm3628_platform_driver);
-		printk("[cm3628] cm3628_platform_exit -.\n");
+		printk(DBGMSK_PRX_G2"[cm3628] cm3628_platform_exit -.\n");
 	}
 }
 

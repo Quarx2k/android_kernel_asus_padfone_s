@@ -24,6 +24,12 @@
 #include <linux/input.h>
 #include "linux/input/proximity_class.h"
 
+#include <linux/delay.h>
+#include <linux/workqueue.h>
+
+static struct workqueue_struct *Al3010flush_delay_workqueue = NULL;
+static struct delayed_work al3010_flush_work;
+
 //.....................For Camera backlight issue...........................//
 /*
 enum camera_iso {
@@ -76,9 +82,22 @@ EXPORT_SYMBOL(set_camera_autobrightness_mode);
 //
 #include <linux/slab.h>
 struct input_dev *master_input_dev = NULL;
+static int flush_tag = 0;
+
+static void report_flush(struct work_struct *work)
+{
+	if (master_input_dev != NULL && flush_tag == 1)	{
+		input_event(master_input_dev, EV_ABS, ABS_MISC, -2);
+		input_sync(master_input_dev);
+		flush_tag = 0;
+	}
+}
 
 int als_lux_report_event_register(struct input_dev *dev)
 {
+	Al3010flush_delay_workqueue = create_singlethread_workqueue("flush");
+	INIT_DELAYED_WORK( &al3010_flush_work, report_flush);
+
 	if (master_input_dev != NULL)	{
 		printk("[als] Input_dev already registered");
 		return -EBUSY;
@@ -130,9 +149,24 @@ void als_lux_report_event(int lux)
 	}
 	else
 		printk("[als] Without register input_dev for lightsensoer!!!\n");
+
+	
+
+	
 		
 }    
 EXPORT_SYMBOL(als_lux_report_event);
+
+
+void als_lux_report_flush(void)
+{
+	//int i, level = 0;
+	printk("[als] ******* report flush complete.\n");
+	flush_tag = 1;
+	queue_delayed_work(Al3010flush_delay_workqueue, &al3010_flush_work, 250);
+		
+}    
+EXPORT_SYMBOL(als_lux_report_flush);
 
 /////////////////////////////////////////////////////////////////////////////////
 // Sensoers kernel note port

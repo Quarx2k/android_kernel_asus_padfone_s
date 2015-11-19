@@ -19,6 +19,10 @@
 
 #define MDSS_MDP_ROT_SESSION_MASK	0x40000000
 
+#ifdef CONFIG_ASUS_CAMERA_STS
+bool get_camera_status(void);
+#endif
+
 struct mdss_mdp_rotator_session {
 	u32 session_id;
 	u32 ref_cnt;
@@ -54,6 +58,13 @@ struct mdss_mdp_rotator_session {
 static inline u32 mdss_mdp_get_rotator_dst_format(u32 in_format, u32 in_rot90,
 	u32 bwc)
 {
+
+#ifdef CONFIG_ASUS_CAMERA_STS
+	if ((MDP_Y_CBCR_H2V2 == in_format || MDP_Y_CR_CB_GH2V2 == in_format) && get_camera_status()) {
+		return in_format;
+	}
+#endif
+
 	switch (in_format) {
 	case MDP_RGB_565:
 	case MDP_BGR_565:
