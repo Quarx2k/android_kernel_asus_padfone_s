@@ -26,6 +26,13 @@
 #define DWC3_IDEV_CHG_MAX 1500
 #else
 #define DWC3_IDEV_CHG_MAX 2000
+#include <linux/microp_notify.h>
+#include <linux/microp_api.h>
+#include <linux/microp_pin_def.h>
+#include <linux/microp.h>
+#include <linux/fs.h>
+#include <linux/proc_fs.h>
+#include <linux/gpio.h>
 #endif
 
 struct dwc3_charger;
@@ -114,6 +121,20 @@ enum dwc3_usb_mode_type {
 	DWC3_USB_HOST,
 	DWC3_USB_OTG,
 	DWC3_USB_AUTO,
+};
+
+#define GPIO_USB_SW_SEL_EVB0 65
+#define GPIO_USB_SW_SEL_EVB 73
+#define GPIO_USB_SW_SEL_SR1 65
+
+enum usb_mydp_sw {
+	MYDP_PORT = 0,
+	USB_PORT,
+};
+
+enum microp_host_sw {
+	MICROP_USB_PATH_HOST = 0,
+	MICROP_USB_PATH_CLIENT,
 };
 
 /* external transceiver that can perform connect/disconnect monitoring in LPM */

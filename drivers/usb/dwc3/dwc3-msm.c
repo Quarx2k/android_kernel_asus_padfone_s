@@ -1573,13 +1573,20 @@ void asus_dwc3_mode_switch(enum dwc3_usb_mode_type req_mode)
 		mdwc->ext_xceiv.id = DWC3_ID_GROUND;
 		break;
 	case DWC3_USB_AUTO:
-		printk("[usb_dwc3] switch to peripheral mode (auto)\r\n");
-		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			printk("[usb_dwc3] switch to host mode (auto)\r\n");
+			mdwc->ext_xceiv.id = DWC3_ID_GROUND;
+		} else {
+			printk("[usb_dwc3] switch to peripheral mode (auto)\r\n");
+			mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		}
 		break;
 	default:
 		printk("[usb_dwc3] unknown mode!!! (%d)\r\n", req_mode);
 		goto out;
 	}
+
+
 
 	queue_delayed_work(system_nrt_wq,&mdwc->resume_work, 0);
 out:
@@ -2878,6 +2885,215 @@ unreg_chrdev:
 
 #ifdef CONFIG_SLIMPORT_ANX7808
 static void asus_dwc3_set_id_state(int online);
+#define GPIO_CHG_OTG_EVB0 52
+bool asus_dwc3_vbus_out_state(void)
+{
+	struct dwc3_msm *mdwc = context;
+	int state = 0;
+
+	if (g_ASUS_hwID == A90_EVB0) { // for external charger
+		state = gpio_get_value(GPIO_CHG_OTG_EVB0);
+	} else { // for internal charger
+		if (!mdwc->vbus_otg) {
+			dev_err(mdwc->dev, "failed to get vbus regulator state\n");
+		} else {
+			state = regulator_is_enabled(mdwc->vbus_otg);
+		}
+	}
+
+	return state;
+}
+
+void asus_dwc3_vbus_out_enable(bool enable, bool force)
+{
+	struct dwc3_msm *mdwc = context;
+	int ret = 0;
+
+	if (g_ASUS_hwID == A90_EVB0) { // for external charger
+		if (!force && AX_MicroP_IsP01Connected() && pad_exist()) {
+			dev_info(mdwc->dev, "ignore to set otg 5v in pad (external) (%d)\n", enable);
+			return;
+		}
+
+		if (enable == asus_dwc3_vbus_out_state()) {
+			dev_info(mdwc->dev, "vbus out is already %s (external)\n", enable ? "enabled" : "disabled");
+			return;
+		}
+
+		dev_info(mdwc->dev, "turn %s otg 5v (external)%s\n", enable ? "on" : "off", force ? "(force)" : "");
+	} else { // for internal charger
+		if (!mdwc->vbus_otg) {
+			mdwc->vbus_otg = devm_regulator_get(mdwc->dev, 	"vbus_dwc3");
+			if (IS_ERR(mdwc->vbus_otg)) {
+				ret = PTR_ERR(mdwc->vbus_otg);
+				dev_err(mdwc->dev, "failed to get vbus regulator (%d)\n", ret);
+				mdwc->vbus_otg = 0;
+				return;
+			} else {
+				dev_info(mdwc->dev, "succee to get vbus requlator\n");
+			}
+		}
+
+		if (!force && AX_MicroP_IsP01Connected() && pad_exist()) {
+			dev_info(mdwc->dev, "ignore to set otg 5v in pad (internal) (%d)\n", enable);
+			return;
+		}
+
+		if (enable == asus_dwc3_vbus_out_state()) {
+			dev_info(mdwc->dev, "vbus out is already %s (internal)\n", enable ? "enabled" : "disabled");
+			return;
+		}
+
+		dev_info(mdwc->dev, "turn %s otg 5v (internal)%s\n", enable ? "on" : "off", force ? "(force)" : "");
+		if (enable) {
+			ret = regulator_enable(mdwc->vbus_otg);
+			if (ret) {
+				dev_err(mdwc->dev, "unable to enable vbus_otg (%d)\n", ret);
+				return;
+			}
+		} else {
+			ret = regulator_disable(mdwc->vbus_otg);
+			if (ret) {
+				dev_err(mdwc->dev, "unable to disable vbus_otg (%d)\n", ret);
+				return;
+			}
+		}
+	}
+}
+
+static int asus_dwc3_set_pad_host_sw(enum microp_host_sw host_sw)
+{
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		switch (host_sw) {
+		case MICROP_USB_PATH_HOST:
+			ret = AX_MicroP_setGPIOOutputPin(OUT_uP_USB_SW_HST, 0);
+			if (ret < 0) {
+				printk("[usb_dwc3] fail to switch pad usb to host path! (%d)(%d)\n", host_sw, ret);
+			} else {
+				printk("[usb_dwc3] switch pad usb to host path (%d)\n", host_sw);
+			}
+			break;
+		case MICROP_USB_PATH_CLIENT:
+			ret = AX_MicroP_setGPIOOutputPin(OUT_uP_USB_SW_HST, 1);
+			if (ret < 0) {
+				printk("[usb_dwc3] fail to switch pad usb to client path! (%d)(%d)\n", host_sw, ret);
+			} else {
+				printk("[usb_dwc3] switch pad usb to client path (%d)\n", host_sw);
+			}
+			break;
+		default:
+				printk("[usb_dwc3] unknown pad usb host switch! (%d)\n", host_sw);
+			break;
+		}
+	} else {
+		printk("[usb_dwc3] not in pad, skip pad usb host switch control! (%d)(%d)(%d)\n",
+			host_sw, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+#if 0
+static int asus_dwc3_set_pad_cbus_en(bool on)
+{
+	struct dwc3_msm *mdwc = context;
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_MHL_CBUS_EN, on);
+		if (ret < 0) {
+			dev_err(mdwc->dev, "fail to set pad cbus enable! (%d)(%d)\n", on, ret);
+		} else {
+			dev_dbg(mdwc->dev, "set pad cbus enable success (%d)\n", on);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, skip pad cbus enable control! (%d)(%d)(%d)\n",
+			on, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+#endif
+static int asus_dwc3_set_pad_camera_power(bool on)
+{
+	struct dwc3_msm *mdwc = context;
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_CAM_PWR_EN, on);
+		if (ret < 0) {
+			dev_err(mdwc->dev, "fail to set pad camera power! (%d)(%d)\n", on, ret);
+		} else {
+			dev_info(mdwc->dev, "set pad camera power success (%d)\n", on);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, skip pad camera power control! (%d)(%d)(%d)\n",
+			on, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+
+static int asus_dwc3_set_pad_hub_power(bool on)
+{
+	struct dwc3_msm *mdwc = context;
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_HUB_PWR_EN, on);
+		if (ret < 0) {
+			dev_err(mdwc->dev, "fail to set pad hub power! (%d)(%d)\n", on, ret);
+		} else {
+			dev_info(mdwc->dev, "set pad hub power success (%d)\n", on);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, skip pad hub power control! (%d)(%d)(%d)\n",
+			on, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+
+
+static int asus_dwc3_usb_mydp_switch(enum usb_mydp_sw req_side)
+{
+	int ret = -1;
+	int gpio_usb_sw_sel = 0;
+
+	if (g_ASUS_hwID == A90_EVB0) {
+		gpio_usb_sw_sel = GPIO_USB_SW_SEL_EVB0;
+	} else if (g_ASUS_hwID == A90_EVB) {
+		gpio_usb_sw_sel = GPIO_USB_SW_SEL_EVB;
+	} else {
+		gpio_usb_sw_sel = GPIO_USB_SW_SEL_SR1;
+	}
+
+	switch (req_side) {
+	case USB_PORT:
+		ret = gpio_direction_output(gpio_usb_sw_sel, 1);
+		if(ret) {
+			printk("[usb_dwc3] switch to usb port fail!!!(%d)(%d)\r\n", req_side, ret);
+			goto out;
+		}
+		printk("[usb_dwc3] switch to usb port (%d)\r\n", gpio_get_value(gpio_usb_sw_sel));
+		break;
+	case MYDP_PORT:
+		ret = gpio_direction_output(gpio_usb_sw_sel, 0);
+		if(ret) {
+			printk("[usb_dwc3] switch to mydp port fail!!!(%d)(%d)\r\n", req_side, ret);
+			goto out;
+		}
+		printk("[usb_dwc3] switch to mydp port (%d)\r\n", gpio_get_value(gpio_usb_sw_sel));
+		break;
+	default:
+		printk("[usb_dwc3] unknown switch!!! (%d)\r\n", req_side);
+		goto out;
+	}
+
+out:
+	return ret;
+}
 
 static int asus_bat_microp_event_handler (
 	struct notifier_block *this,
@@ -2887,16 +3103,44 @@ static int asus_bat_microp_event_handler (
 	struct dwc3_msm *mdwc = context;
 	switch (event) {
 	case P01_ADD:
-		printk("%s() Pad attached! Enable usb! \r\n", __FUNCTION__);
+		printk("%s() Pad attached! Enable usb! %s\r\n", __FUNCTION__, pad_exist()?"true":"false");
+/*
+		asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
+		asus_dwc3_usb_mydp_switch(USB_PORT);
+		asus_dwc3_vbus_out_enable(false, 1);
+		asus_dwc3_set_pad_cbus_en(true);
+		asus_dwc3_mode_switch(DWC3_USB_AUTO);
+		asus_dwc3_set_pad_camera_power(true);
+                asus_dwc3_set_pad_hub_power(true);
+*/
+		asus_dwc3_mode_switch(DWC3_USB_AUTO);
+		asus_dwc3_usb_mydp_switch(USB_PORT);
+		asus_dwc3_vbus_out_enable(false, 1);
+		asus_dwc3_set_pad_hub_power(1);
+		asus_dwc3_set_pad_camera_power(1);
+		asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
+
 		break;
 	case P01_REMOVE: // means P01 removed
 		printk("%s() Pad deattached! Disable usb! \r\n", __FUNCTION__);
+		asus_dwc3_usb_mydp_switch(MYDP_PORT);
+		asus_dwc3_vbus_out_enable(false, 1);
+		asus_dwc3_set_pad_camera_power(0);
+		asus_dwc3_set_pad_hub_power(0);
+		asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
+		asus_dwc3_mode_switch(DWC3_USB_AUTO);
+/*
 		asus_dwc3_set_id_state(false);
+		asus_dwc3_set_pad_camera_power(false);
+                asus_dwc3_set_pad_hub_power(false);
+		asus_dwc3_mode_switch(DWC3_USB_PERIPHERAL);
+		asus_dwc3_set_pad_cbus_en(false);
+		asus_dwc3_vbus_out_enable(false, 1);
+*/
+		//asus_dwc3_usb_mydp_switch(MYDP_PORT);
 		pm_stay_awake(mdwc->dev);
 		break;
 	default:
-		//mutex_unlock(&asus_bat->microp_evt_lock);
-		//printk("[BAT] %s(), not listened evt: %lu \n", __FUNCTION__, event);
 		return NOTIFY_DONE;
 	}
 

@@ -3308,6 +3308,11 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		if (ret)
 			printk("GET Camera state failed (%d)\n", ret);
         break;
+	case MSMFB_PADFONE_STATE:
+		ret = copy_to_user(argp, &g_padfone_state, sizeof(g_padfone_state));
+        if (ret)
+		printk("GET Padfone state failed (%d)\n", ret);
+        break;
 #endif
 
 	default:

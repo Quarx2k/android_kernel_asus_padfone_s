@@ -253,7 +253,7 @@ static int asus_bat_pad_get_property (
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
 		if (pad_present) {
-			val->intval = AX_MicroP_get_AvgCurrent(1);
+			val->intval = AX_MicroP_get_AvgCurrent(0);
 		} else {
 			//printk("[BAT] pad not present, status unknown\n");
 			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
