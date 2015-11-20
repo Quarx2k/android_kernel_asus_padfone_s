@@ -58,7 +58,7 @@ static uint32_t alarm_enabled;
 static uint32_t wait_pending;
 
 static struct alarm alarms[ANDROID_ALARM_TYPE_COUNT];
-
+int asus_rtc_set = 0;
 static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int rv = 0;
@@ -129,6 +129,13 @@ from_old_alarm_set:
 		spin_lock_irqsave(&alarm_slock, flags);
 		pr_alarm(IO, "alarm %d set %ld.%09ld\n", alarm_type,
 			new_alarm_time.tv_sec, new_alarm_time.tv_nsec);
+		// ASUS_BSP+++ Shawn_Huang "Add debug log for setting alarm "
+		ktime_get_ts(&tmp_time);
+		printk("asus_alarm %d now %ld.%09ld, set %ld.%09ld\n", 
+			alarm_type,
+			tmp_time.tv_sec, tmp_time.tv_nsec,
+			new_alarm_time.tv_sec, new_alarm_time.tv_nsec);
+		// ASUS_BSP--- Shawn_Huang "Add debug log for setting alarm "
 		alarm_enabled |= alarm_type_mask;
 		alarm_start_range(&alarms[alarm_type],
 			timespec_to_ktime(new_alarm_time),
@@ -171,6 +178,12 @@ from_old_alarm_set:
 		alarm_pending |= ANDROID_ALARM_TIME_CHANGE_MASK;
 		wake_up(&alarm_wait_queue);
 		spin_unlock_irqrestore(&alarm_slock, flags);
+        { // jack added to get correct time for last shutdown log +++++++++++
+            if(!asus_rtc_set)
+            {  
+                asus_rtc_set = 1;
+            }
+        }// jack added to get correct time for last shutdown log ------------		
 		if (rv < 0)
 			goto err1;
 		break;

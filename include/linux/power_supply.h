@@ -45,6 +45,7 @@ enum {
 	POWER_SUPPLY_CHARGE_TYPE_NONE,
 	POWER_SUPPLY_CHARGE_TYPE_TRICKLE,
 	POWER_SUPPLY_CHARGE_TYPE_FAST,
+	POWER_SUPPLY_CHARGE_TYPE_TAPER,
 };
 
 enum {
@@ -106,6 +107,7 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_TRIM,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
+	POWER_SUPPLY_PROP_VCHG_LOOP_DBC_BYPASS,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_POWER_NOW,
@@ -150,12 +152,21 @@ enum power_supply_type {
 	POWER_SUPPLY_TYPE_UPS,
 	POWER_SUPPLY_TYPE_MAINS,
 	POWER_SUPPLY_TYPE_USB,		/* Standard Downstream Port */
- 	POWER_SUPPLY_TYPE_USB_DCP,	/* Dedicated Charging Port */
- 	POWER_SUPPLY_TYPE_USB_CDP,	/* Charging Downstream Port */
- 	POWER_SUPPLY_TYPE_USB_ACA,	/* Accessory Charger Adapters */
-	POWER_SUPPLY_TYPE_WIRELESS,	/* Wireless Charger */
- 	POWER_SUPPLY_TYPE_BMS,		/* Battery Monitor System */
-	POWER_SUPPLY_TYPE_DOCK_BATTERY, /* Dock battery */
+	POWER_SUPPLY_TYPE_USB_DCP,	/* Dedicated Charging Port */
+	POWER_SUPPLY_TYPE_USB_CDP,	/* Charging Downstream Port */
+	POWER_SUPPLY_TYPE_USB_ACA,	/* Accessory Charger Adapters */
+	POWER_SUPPLY_TYPE_BMS,		/* Battery Monitor System */
+	//ASUS_BSP +++ Josh_Liao "add asus battery driver"
+	POWER_SUPPLY_TYPE_PAD_BAT,
+	POWER_SUPPLY_TYPE_DOCK_BAT,	
+	POWER_SUPPLY_TYPE_PAD_AC, 
+	POWER_SUPPLY_TYPE_DOCK_AC,
+	//ASUS_BSP --- Josh_Liao "add asus battery driver"
+	//ASUS_BSP Eason_Chang: for Wireless charger+++
+#ifdef CONFIG_IDTP9023_CHARGER  
+	POWER_SUPPLY_TYPE_WIRELESS,
+#endif
+	//ASUS_BSP Eason_Chang: for Wireless charger---
 };
 
 union power_supply_propval {

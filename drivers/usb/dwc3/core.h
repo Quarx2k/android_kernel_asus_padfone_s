@@ -71,8 +71,6 @@
 #define DWC3_DEVICE_EVENT_WAKEUP		4
 #define DWC3_DEVICE_EVENT_HIBER_REQ		5
 #define DWC3_DEVICE_EVENT_EOPF			6
-/* For version 2.30a and above */
-#define DWC3_DEVICE_EVENT_SUSPEND		6
 #define DWC3_DEVICE_EVENT_SOF			7
 #define DWC3_DEVICE_EVENT_ERRATIC_ERROR		9
 #define DWC3_DEVICE_EVENT_CMD_CMPL		10
@@ -291,8 +289,6 @@
 #define DWC3_DEVTEN_ERRTICERREN		(1 << 9)
 #define DWC3_DEVTEN_SOFEN		(1 << 7)
 #define DWC3_DEVTEN_EOPFEN		(1 << 6)
-/* For version 2.30a and above*/
-#define DWC3_DEVTEN_SUSPEND		(1 << 6)
 #define DWC3_DEVTEN_HIBERNATIONREQEVTEN	(1 << 5)
 #define DWC3_DEVTEN_WKUPEVTEN		(1 << 4)
 #define DWC3_DEVTEN_ULSTCNGEN		(1 << 3)
@@ -632,14 +628,6 @@ struct dwc3_hwparams {
 /* HWPARAMS1 */
 #define DWC3_NUM_INT(n)		(((n) & (0x3f << 15)) >> 15)
 
-/* HWPARAMS3 */
-#define DWC3_NUM_IN_EPS_MASK	(0x1f << 18)
-#define DWC3_NUM_EPS_MASK	(0x3f << 12)
-#define DWC3_NUM_EPS(p)		(((p)->hwparams3 &		\
-			(DWC3_NUM_EPS_MASK)) >> 12)
-#define DWC3_NUM_IN_EPS(p)	(((p)->hwparams3 &		\
-			(DWC3_NUM_IN_EPS_MASK)) >> 18)
-
 /* HWPARAMS7 */
 #define DWC3_RAM1_DEPTH(n)	((n) & 0xffff)
 
@@ -707,8 +695,6 @@ struct dwc3_scratchpad_array {
  * @u2pel: parameter from Set SEL request.
  * @u1sel: parameter from Set SEL request.
  * @u1pel: parameter from Set SEL request.
- * @num_out_eps: number of out endpoints
- * @num_in_eps: number of in endpoints
  * @ep0_next_event: hold the next expected event
  * @ep0state: state of endpoint zero
  * @link_state: link state
@@ -727,10 +713,8 @@ struct dwc3 {
 	dma_addr_t		ep0_trb_addr;
 	dma_addr_t		ep0_bounce_addr;
 	struct dwc3_request	ep0_usb_req;
-
 	/* device lock */
 	spinlock_t		lock;
-
 	struct device		*dev;
 
 	struct dwc3_otg		*dotg;
@@ -791,9 +775,6 @@ struct dwc3 {
 
 	u8			speed;
 
-	u8			num_out_eps;
-	u8			num_in_eps;
-
 	void			*mem;
 
 	struct dwc3_hwparams	hwparams;
@@ -818,8 +799,8 @@ struct dwc3 {
 
 struct dwc3_event_type {
 	u32	is_devspec:1;
-	u32	type:7;
-	u32	reserved8_31:24;
+	u32	type:6;
+	u32	reserved8_31:25;
 } __packed;
 
 #define DWC3_DEPEVT_XFERCOMPLETE	0x01

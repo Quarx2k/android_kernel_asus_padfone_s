@@ -52,12 +52,72 @@
 #include "gadget.h"
 #include "debug.h"
 
-#include <linux/microp_notify.h>
-#include <linux/microp_pin_def.h>
-#include <linux/microp_api.h>
-#include <linux/microp_notifier_controller.h>
-
+//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
 static struct dwc3_msm *context;
+#ifdef CONFIG_CHARGER_ASUS
+extern void UsbSetOtgSwitch(bool switchOtg);
+#else
+void UsbSetOtgSwitch(bool switchOtg){return;}
+#endif
+//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+static struct delayed_work asus_chg_work;
+static struct work_struct asus_usb_work;
+static int g_charger_mode = ASUS_CHG_SRC_NONE;
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
+
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+int asus_state_otg = ASUS_OTG_NONE;
+int asus_state_carkit = ASUS_CARKIT_OFFLINE;
+struct switch_dev asus_switch_otg_carkit;
+#endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
+//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+static struct workqueue_struct *microp_cb_delay_wq;
+static struct delayed_work microp_cb_delay_work;
+//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+
+//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+#include <linux/earlysuspend.h>
+
+#elif defined(CONFIG_FB)
+#include <linux/notifier.h>
+#include <linux/fb.h>
+
+struct notifier_block fb_notif;
+#endif
+
+enum host_auto_sw {
+	HOST_AUTO_NONE = 0,
+	HOST_AUTO_HOST,
+};
+static int g_host_none_mode = 0;
+static int g_keep_power_on = 0;
+static int g_suspend_delay_work_run = 0;
+const char *usb_device_list[] = {"/Removable/USBdisk1", "/Removable/USBdisk2", "/Removable/SD", "/sys/class/net/eth0", "/sys/class/sound/card1"};
+static struct workqueue_struct *early_suspend_delay_wq;
+static struct delayed_work early_suspend_delay_work;
+static struct work_struct late_resume_work;
+static struct wake_lock early_suspend_wlock;
+//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+
+//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+static struct mutex asus_dwc3_mutex;
+//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+#ifdef CONFIG_SLIMPORT_ANX7808
+static struct work_struct check_at_boot;
+static int g_otg_check_at_boot = 0;
+extern bool get_otg_state(void);
+static int asus_dwc3_get_id_state(void);
+static void asus_dwc3_set_id_state(int online);
+#endif
+//ASUS_BSP--- BennyCheng "add otg check at boot"
 
 /* ADC threshold values */
 static int adc_low_threshold = 700;
@@ -270,6 +330,10 @@ struct dwc3_msm {
 #define USB_SSPHY_1P8_VOL_MIN		1800000 /* uV */
 #define USB_SSPHY_1P8_VOL_MAX		1800000 /* uV */
 #define USB_SSPHY_1P8_HPM_LOAD		23000	/* uA */
+
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+static struct dwc3_msm *context;
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 
 static struct usb_ext_notification *usb_ext;
 
@@ -899,7 +963,7 @@ static int dwc3_msm_ep_queue(struct usb_ep *ep,
 	 * Override req->complete function, but before doing that,
 	 * store it's original pointer in the req_complete_list.
 	 */
-	req_complete = kzalloc(sizeof(*req_complete), gfp_flags);
+	req_complete = kzalloc(sizeof(*req_complete), GFP_KERNEL);
 	if (!req_complete) {
 		dev_err(mdwc->dev, "%s: not enough memory\n", __func__);
 		return -ENOMEM;
@@ -1531,12 +1595,22 @@ static void dwc3_msm_qscratch_reg_init(struct dwc3_msm *mdwc,
 	 * VBUS valid threshold, disconnect valid threshold, DC voltage level,
 	 * preempasis and rise/fall time.
 	 */
-	if (override_phy_init)
-		mdwc->hsphy_init_seq = override_phy_init;
-	if (mdwc->hsphy_init_seq)
+	//ASUS_BSP+++ BennyCheng "support dynamic hsphy parameter_override_x setting"
+	if (override_phy_init) {
 		dwc3_msm_write_readback(mdwc->base,
 					PARAMETER_OVERRIDE_X_REG, 0x03FFFFFF,
-					mdwc->hsphy_init_seq & 0x03FFFFFF);
+					override_phy_init & 0x03FFFFFF);
+	} else {
+		mdwc->hsphy_init_seq = 0xd194e4;
+		if (mdwc->hsphy_init_seq)
+			dwc3_msm_write_readback(mdwc->base,
+						PARAMETER_OVERRIDE_X_REG, 0x03FFFFFF,
+						mdwc->hsphy_init_seq & 0x03FFFFFF);
+	}
+
+	dev_info(mdwc->dev, "parameter_override_x: 0x%x\n",
+		dwc3_msm_read_reg(mdwc->base, PARAMETER_OVERRIDE_X_REG));
+	//ASUS_BSP--- BennyCheng "support dynamic hsphy parameter_override_x setting"
 
 	/*
 	 * Enable master clock for RAMs to allow BAM to access RAMs when
@@ -1552,38 +1626,6 @@ static void dwc3_msm_qscratch_reg_init(struct dwc3_msm *mdwc,
 	 */
 	mdwc->qscratch_ctl_val =
 		dwc3_msm_read_reg(mdwc->base, QSCRATCH_CTRL_REG);
-}
-
-void asus_dwc3_mode_switch(enum dwc3_usb_mode_type req_mode)
-{
-	struct dwc3_msm *mdwc = context;
-
-	switch (req_mode) {
-	case DWC3_USB_NONE:
-		printk("[usb_dwc3] switch to none mode\r\n");
-		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
-		mdwc->ext_xceiv.bsv = false;
-		break;
-	case DWC3_USB_PERIPHERAL:
-		printk("[usb_dwc3] switch to peripheral mode\r\n");
-		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
-		break;
-	case DWC3_USB_HOST:
-		printk("[usb_dwc3] switch to host mode\r\n");
-		mdwc->ext_xceiv.id = DWC3_ID_GROUND;
-		break;
-	case DWC3_USB_AUTO:
-		printk("[usb_dwc3] switch to peripheral mode (auto)\r\n");
-		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
-		break;
-	default:
-		printk("[usb_dwc3] unknown mode!!! (%d)\r\n", req_mode);
-		goto out;
-	}
-
-	queue_delayed_work(system_nrt_wq,&mdwc->resume_work, 0);
-out:
-	return;
 }
 
 static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
@@ -1664,19 +1706,13 @@ static void dwc3_block_reset_usb_work(struct work_struct *w)
 			DWC3_DEVTEN_CMDCMPLTEN |
 			DWC3_DEVTEN_ERRTICERREN |
 			DWC3_DEVTEN_WKUPEVTEN |
+			DWC3_DEVTEN_ULSTCNGEN |
 			DWC3_DEVTEN_CONNECTDONEEN |
 			DWC3_DEVTEN_USBRSTEN |
 			DWC3_DEVTEN_DISCONNEVTEN);
-	/*
-	 * Enable SUSPENDEVENT(BIT:6) for version 230A and above
-	 * else enable USB Link change event (BIT:3) for older version
-	 */
-	if (dwc3_msm_read_reg(mdwc->base, DWC3_GSNPSID) < DWC3_REVISION_230A)
-		reg |= DWC3_DEVTEN_ULSTCNGEN;
-	else
-		reg |= DWC3_DEVTEN_SUSPEND;
-
 	dwc3_msm_write_reg(mdwc->base, DWC3_DEVTEN, reg);
+
+
 }
 
 static void dwc3_chg_enable_secondary_det(struct dwc3_msm *mdwc)
@@ -1786,6 +1822,37 @@ static const char *chg_to_string(enum dwc3_chg_type chg_type)
 	}
 }
 
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+static void asus_usb_detect_work(struct work_struct *w)
+{
+	cancel_delayed_work_sync(&asus_chg_work);
+	g_charger_mode = ASUS_CHG_SRC_USB;
+#ifdef CONFIG_CHARGER_ASUS
+	asus_chg_set_chg_mode(ASUS_CHG_SRC_USB);
+#endif
+	printk("[usb_dwc3] set_chg_mode: USB\n");
+	//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
+	//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
+}
+
+static void asus_chg_detect_work(struct work_struct *w)
+{
+	struct dwc3_msm *dwc = context;
+	if(dwc!=NULL && dwc->vbus_active){
+		g_charger_mode = ASUS_CHG_SRC_UNKNOWN;
+#ifdef CONFIG_CHARGER_ASUS
+		asus_chg_set_chg_mode(ASUS_CHG_SRC_UNKNOWN);
+#endif
+		printk("[usb_dwc3] set_chg_mode: UNKNOWN\n");
+		//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
+		//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
+	}
+	else{
+		printk("[usb_dwc3] vbus not active, ignore set_chg_mode: UNKNOWN\n");
+	}
+}
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
+
 #define DWC3_CHG_DCD_POLL_TIME		(100 * HZ/1000) /* 100 msec */
 #define DWC3_CHG_DCD_MAX_RETRIES	6 /* Tdcd_tmout = 6 * 100 msec */
 #define DWC3_CHG_PRIMARY_DET_TIME	(50 * HZ/1000) /* TVDPSRC_ON */
@@ -1875,6 +1942,35 @@ static void dwc3_chg_detect_work(struct work_struct *w)
 		}
 		dev_dbg(mdwc->dev, "chg_type = %s\n",
 			chg_to_string(mdwc->charger.chg_type));
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+#ifdef CONFIG_CHARGER_ASUS
+		if(mdwc->charger.chg_type != DWC3_SDP_CHARGER){
+			//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+			if(!mdwc->ext_xceiv.host_mode){
+				if(asus_state_otg == ASUS_OTG_NONE){
+					asus_chg_set_chg_mode(ASUS_CHG_SRC_DC);
+					printk("[usb_dwc3] set_chg_mode: ASUS AC\n");
+				}
+			}else{
+				printk("[usb_dwc3] In Pad not notify set_chg_mode: ASUS AC\n");
+			}
+#else
+			if(!mdwc->ext_xceiv.host_mode){
+				asus_chg_set_chg_mode(ASUS_CHG_SRC_DC);
+				printk("[usb_dwc3] set_chg_mode: ASUS AC\n");
+			}else{
+				printk("[usb_dwc3] In Pad not notify set_chg_mode: ASUS AC\n");
+			}
+#endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+		}
+		else{
+			//wait 2 sec to check non-asus charger
+			schedule_delayed_work(&asus_chg_work, (2000 * HZ/1000));
+		}
+#endif
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 		mdwc->charger.notify_detection_complete(mdwc->otg_xceiv->otg,
 								&mdwc->charger);
 		return;
@@ -1891,6 +1987,16 @@ static void dwc3_start_chg_det(struct dwc3_charger *charger, bool start)
 
 	if (start == false) {
 		dev_dbg(mdwc->dev, "canceling charging detection work\n");
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+		cancel_delayed_work_sync(&asus_chg_work);
+		g_charger_mode = ASUS_CHG_SRC_NONE;
+#ifdef CONFIG_CHARGER_ASUS
+		asus_chg_set_chg_mode(ASUS_CHG_SRC_NONE);
+#endif
+		printk("[usb_dwc3] set_chg_mode: NONE\n");
+		//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
+		//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 		cancel_delayed_work_sync(&mdwc->chg_work);
 		mdwc->chg_state = USB_CHG_STATE_UNDEFINED;
 		charger->chg_type = DWC3_INVALID_CHARGER;
@@ -1907,19 +2013,44 @@ static void dwc3_start_chg_det(struct dwc3_charger *charger, bool start)
 	queue_delayed_work(system_nrt_wq, &mdwc->chg_work, 0);
 }
 
+//ASUS_BSP+++ BennyCheng "add dwc3 pm lock timeout check"
+#define MSM_OTG_SUSPEND_CHECK_TIMEOUT 10000L
+static void asus_dwc3_suspend_check(struct work_struct *work)
+{
+	struct dwc3_msm *mdwc = context;
+
+	dev_info(mdwc->dev, "check otg suspend status (%d)\n", pm_runtime_suspended(mdwc->otg_xceiv->dev));
+
+	if (!pm_runtime_suspended(mdwc->otg_xceiv->dev)) {
+		pm_relax(mdwc->dev);
+	}
+}
+
+static DECLARE_DELAYED_WORK(asus_dwc3_suspend_check_work, asus_dwc3_suspend_check);
+//ASUS_BSP--- BennyCheng "add dwc3 pm lock timeout check"
+
+//ASUS_BSP+++ BennyCheng "fix wrong condition for host mode suspend/resume"
+static bool dcp = 0;
+static bool host_bus_suspend = 0;
+//ASUS_BSP--- BennyCheng "fix wrong condition for host mode suspend/resume"
 static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 {
 	int ret;
-	bool dcp;
-	bool host_bus_suspend;
 	bool host_ss_active;
 	bool host_ss_suspend;
 	bool device_bus_suspend;
 
 	dev_dbg(mdwc->dev, "%s: entering lpm\n", __func__);
 
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_lock(&asus_dwc3_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+
 	if (atomic_read(&mdwc->in_lpm)) {
-		dev_dbg(mdwc->dev, "%s: Already suspended\n", __func__);
+		//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+		dev_info(mdwc->dev, "%s: Already suspended\n", __func__);
+		mutex_unlock(&asus_dwc3_mutex);
+		//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
 		return 0;
 	}
 
@@ -1940,7 +2071,9 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	dcp = ((mdwc->charger.chg_type == DWC3_DCP_CHARGER) ||
 	      (mdwc->charger.chg_type == DWC3_PROPRIETARY_CHARGER) ||
 	      (mdwc->charger.chg_type == DWC3_FLOATED_CHARGER));
-	host_bus_suspend = mdwc->host_mode == 1;
+	//ASUS_BSP+++ BennyCheng "fix wrong condition for host mode suspend/resume"
+	host_bus_suspend = mdwc->ext_xceiv.host_mode == 1 && mdwc->otg_xceiv->otg->host;
+	//ASUS_BSP--- BennyCheng "fix wrong condition for host mode suspend/resume"
 	host_ss_suspend = host_bus_suspend && host_ss_active;
 	device_bus_suspend = ((mdwc->charger.chg_type == DWC3_SDP_CHARGER) ||
 				 (mdwc->charger.chg_type == DWC3_CDP_CHARGER));
@@ -2010,12 +2143,16 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	if (!host_bus_suspend)
 		dwc3_msm_config_gdsc(mdwc, 0);
 
-	clk_disable_unprepare(mdwc->iface_clk);
-	clk_disable_unprepare(mdwc->utmi_clk);
-
 	if (!host_ss_suspend) {
 		clk_disable_unprepare(mdwc->core_clk);
 		mdwc->lpm_flags |= MDWC3_PHY_REF_AND_CORECLK_OFF;
+	}
+	clk_disable_unprepare(mdwc->iface_clk);
+
+	if (!host_bus_suspend)
+		clk_disable_unprepare(mdwc->utmi_clk);
+
+	if (!host_bus_suspend) {
 		/* USB PHY no more requires TCXO */
 		clk_disable_unprepare(mdwc->xo_clk);
 		mdwc->lpm_flags |= MDWC3_TCXO_SHUTDOWN;
@@ -2039,8 +2176,6 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	pm_relax(mdwc->dev);
 	atomic_set(&mdwc->in_lpm, 1);
 
-	dev_info(mdwc->dev, "DWC3 in low power mode\n");
-
 	if (mdwc->hs_phy_irq) {
 		/*
 		 * with DCP or during cable disconnect, we dont require wakeup
@@ -2054,20 +2189,37 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		enable_irq(mdwc->hs_phy_irq);
 	}
 
+	//ASUS_BSP+++ BennyCheng "add dwc3 pm lock timeout check"
+	if (mdwc->ext_xceiv.host_mode) {
+		cancel_delayed_work(&asus_dwc3_suspend_check_work);
+	}
+	//ASUS_BSP--- BennyCheng "add dwc3 pm lock timeout check"
+
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_unlock(&asus_dwc3_mutex);
+
+	dev_info(mdwc->dev, "[usb_dwc3] DWC3 in low power mode\n");
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+
 	return 0;
 }
 
 static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 {
 	int ret;
-	bool dcp;
-	bool host_bus_suspend;
 	bool resume_from_core_clk_off = false;
 
 	dev_dbg(mdwc->dev, "%s: exiting lpm\n", __func__);
 
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_lock(&asus_dwc3_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+
 	if (!atomic_read(&mdwc->in_lpm)) {
-		dev_dbg(mdwc->dev, "%s: Already resumed\n", __func__);
+		//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+		dev_info(mdwc->dev, "%s: Already resumed\n", __func__);
+		mutex_unlock(&asus_dwc3_mutex);
+		//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
 		return 0;
 	}
 
@@ -2083,11 +2235,6 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 			dev_err(mdwc->dev, "Failed to vote for bus scaling\n");
 	}
 
-	dcp = ((mdwc->charger.chg_type == DWC3_DCP_CHARGER) ||
-	      (mdwc->charger.chg_type == DWC3_PROPRIETARY_CHARGER) ||
-	      (mdwc->charger.chg_type == DWC3_FLOATED_CHARGER));
-	host_bus_suspend = mdwc->host_mode == 1;
-
 	if (mdwc->lpm_flags & MDWC3_TCXO_SHUTDOWN) {
 		/* Vote for TCXO while waking up USB HSPHY */
 		ret = clk_prepare_enable(mdwc->xo_clk);
@@ -2101,7 +2248,8 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	if (!host_bus_suspend)
 		dwc3_msm_config_gdsc(mdwc, 1);
 
-	clk_prepare_enable(mdwc->utmi_clk);
+	if (!host_bus_suspend)
+		clk_prepare_enable(mdwc->utmi_clk);
 
 	if (mdwc->otg_xceiv && mdwc->ext_xceiv.otg_capability && !dcp &&
 							!host_bus_suspend)
@@ -2191,7 +2339,18 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 			mdwc->lpm_flags &= ~MDWC3_ASYNC_IRQ_WAKE_CAPABILITY;
 	}
 
-	dev_info(mdwc->dev, "DWC3 exited from low power mode\n");
+	//ASUS_BSP+++ BennyCheng "add dwc3 pm lock timeout check"
+	if (mdwc->ext_xceiv.host_mode) {
+		schedule_delayed_work(&asus_dwc3_suspend_check_work,
+			msecs_to_jiffies(MSM_OTG_SUSPEND_CHECK_TIMEOUT));
+	}
+	//ASUS_BSP--- BennyCheng "add dwc3 pm lock timeout check"
+
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_unlock(&asus_dwc3_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+
+	dev_info(mdwc->dev, "[usb_dwc3] DWC3 exited from low power mode\n");
 
 	return 0;
 }
@@ -2242,10 +2401,14 @@ static void dwc3_resume_work(struct work_struct *w)
 		mdwc->resume_pending = true;
 	} else {
 		pm_runtime_get_sync(mdwc->dev);
+		dwc3_pm_count+=1;
+		printk("[DWC3-PM][dwc3_resume_work] get:%d,count:%d\n",atomic_read(&mdwc->dev->power.usage_count),dwc3_pm_count);
 		if (mdwc->otg_xceiv)
 			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
 							DWC3_EVENT_PHY_RESUME);
 		pm_runtime_put_noidle(mdwc->dev);
+		dwc3_pm_count-=1;
+		printk("[DWC3-PM][dwc3_resume_work] put_noidle:%d,count:%d\n",atomic_read(&mdwc->dev->power.usage_count),dwc3_pm_count);
 		if (mdwc->otg_xceiv && (mdwc->ext_xceiv.otg_capability)) {
 			dwc3_wait_for_ext_chg_done(mdwc);
 			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
@@ -2314,6 +2477,1122 @@ const struct file_operations dwc3_connect_fops = {
 	.release = single_release,
 };
 
+//ASUS_BSP+++ BennyCheng "add microp related debug files"
+static int asus_dwc3_get_pad_hub_power(void)
+{
+	struct dwc3_msm *mdwc = context;
+	int pin_level = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_HUB_PWR_EN);
+		if (pin_level < 0) {
+			dev_err(mdwc->dev, "get pad hub power status failed! (%d)\n", pin_level);
+		} else {
+			dev_dbg(mdwc->dev, "get pad hub power status success (%d)\n", pin_level);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, cannot get hub power status! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return pin_level;
+}
+
+static int asus_dwc3_set_pad_hub_power(bool on)
+{
+	struct dwc3_msm *mdwc = context;
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_HUB_PWR_EN, on);
+		if (ret < 0) {
+			dev_err(mdwc->dev, "fail to set pad hub power! (%d)(%d)\n", on, ret);
+		} else {
+			dev_dbg(mdwc->dev, "set pad hub power success (%d)\n", on);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, skip pad hub power control! (%d)(%d)(%d)\n",
+			on, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+
+static ssize_t asus_dwc3_pad_hub_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "on", 2)) {
+		asus_dwc3_set_pad_hub_power(1);
+	} else if (!strncmp(buf, "off", 3)) {
+		asus_dwc3_set_pad_hub_power(0);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+static int asus_dwc3_pad_hub_show(struct seq_file *s, void *unused)
+{
+	int pin_level = -1;
+
+	pin_level = asus_dwc3_get_pad_hub_power();
+
+	if (pin_level >= 0) {
+		if (pin_level) {
+			seq_printf(s, "on\n");
+		} else {
+			seq_printf(s, "off\n");
+		}
+	} else {
+		seq_printf(s, "err\n");
+	}
+
+	return 0;
+}
+
+static int asus_dwc3_pad_hub_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_pad_hub_show, inode->i_private);
+}
+
+const struct file_operations asus_dwc3_pad_hub_fops = {
+	.open = asus_dwc3_pad_hub_open,
+	.read = seq_read,
+	.write = asus_dwc3_pad_hub_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_dwc3_get_pad_camera_power(void)
+{
+	struct dwc3_msm *mdwc = context;
+	int pin_level = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_CAM_PWR_EN);
+		if (pin_level < 0) {
+			dev_err(mdwc->dev, "get pad camera power status failed! (%d)\n", pin_level);
+		} else {
+			dev_dbg(mdwc->dev, "get pad camera power status success (%d)\n", pin_level);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, cannot get camera power status! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return pin_level;
+}
+
+static int asus_dwc3_set_pad_camera_power(bool on)
+{
+	struct dwc3_msm *mdwc = context;
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_CAM_PWR_EN, on);
+		if (ret < 0) {
+			dev_err(mdwc->dev, "fail to set pad camera power! (%d)(%d)\n", on, ret);
+		} else {
+			dev_dbg(mdwc->dev, "set pad camera power success (%d)\n", on);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, skip pad camera power control! (%d)(%d)(%d)\n",
+			on, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+
+static ssize_t asus_dwc3_pad_camera_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "on", 2)) {
+		asus_dwc3_set_pad_camera_power(1);
+	} else if (!strncmp(buf, "off", 3)) {
+		asus_dwc3_set_pad_camera_power(0);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+static int asus_dwc3_pad_camera_show(struct seq_file *s, void *unused)
+{
+	int pin_level = -1;
+
+	pin_level = asus_dwc3_get_pad_camera_power();
+
+	if (pin_level >= 0) {
+		if (pin_level) {
+			seq_printf(s, "on\n");
+		} else {
+			seq_printf(s, "off\n");
+		}
+	} else {
+		seq_printf(s, "err\n");
+	}
+
+	return 0;
+}
+
+static int asus_dwc3_pad_camera_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_pad_camera_show, inode->i_private);
+}
+
+const struct file_operations asus_dwc3_pad_camera_fops = {
+	.open = asus_dwc3_pad_camera_open,
+	.read = seq_read,
+	.write = asus_dwc3_pad_camera_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_dwc3_get_pad_cbus_en(void)
+{
+	struct dwc3_msm *mdwc = context;
+	int pin_level = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_MHL_CBUS_EN);
+		if (pin_level < 0) {
+			dev_err(mdwc->dev, "get pad cbus enable status failed! (%d)\n", pin_level);
+		} else {
+			dev_dbg(mdwc->dev, "get pad cbus enable status success (%d)\n", pin_level);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, cannot get cbus enable status! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return pin_level;
+}
+
+static int asus_dwc3_set_pad_cbus_en(bool on)
+{
+	struct dwc3_msm *mdwc = context;
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_MHL_CBUS_EN, on);
+		if (ret < 0) {
+			dev_err(mdwc->dev, "fail to set pad cbus enable! (%d)(%d)\n", on, ret);
+		} else {
+			dev_dbg(mdwc->dev, "set pad cbus enable success (%d)\n", on);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, skip pad cbus enable control! (%d)(%d)(%d)\n",
+			on, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+
+static ssize_t asus_dwc3_pad_cbus_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "on", 2)) {
+		asus_dwc3_set_pad_cbus_en(1);
+	} else if (!strncmp(buf, "off", 3)) {
+		asus_dwc3_set_pad_cbus_en(0);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+static int asus_dwc3_pad_cbus_show(struct seq_file *s, void *unused)
+{
+	int pin_level = -1;
+
+	pin_level = asus_dwc3_get_pad_cbus_en();
+
+	if (pin_level >= 0) {
+		if (pin_level) {
+			seq_printf(s, "on\n");
+		} else {
+			seq_printf(s, "off\n");
+		}
+	} else {
+		seq_printf(s, "err\n");
+	}
+
+	return 0;
+}
+
+static int asus_dwc3_pad_cbus_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_pad_cbus_show, inode->i_private);
+}
+
+const struct file_operations asus_dwc3_pad_cbus_fops = {
+	.open = asus_dwc3_pad_cbus_open,
+	.read = seq_read,
+	.write = asus_dwc3_pad_cbus_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_dwc3_get_pad_host_sw(void)
+{
+	struct dwc3_msm *mdwc = context;
+	int pin_level = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_USB_SW_HST);
+		if (pin_level < 0) {
+			dev_err(mdwc->dev, "get pad host switch status failed! (%d)\n", pin_level);
+		} else {
+			dev_dbg(mdwc->dev, "get pad host switch status success (%d)\n", pin_level);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, cannot get host switch status! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return pin_level;
+}
+
+static int asus_dwc3_set_pad_host_sw(enum microp_host_sw host_sw)
+{
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		switch (host_sw) {
+		case MICROP_USB_PATH_HOST:
+			ret = AX_MicroP_setGPIOOutputPin(OUT_uP_USB_SW_HST, 0);
+			if (ret < 0) {
+				printk("[usb_dwc3] fail to switch pad usb to host path! (%d)(%d)\n", host_sw, ret);
+			} else {
+				printk("[usb_dwc3] switch pad usb to host path (%d)\n", host_sw);
+			}
+			break;
+		case MICROP_USB_PATH_CLIENT:
+			ret = AX_MicroP_setGPIOOutputPin(OUT_uP_USB_SW_HST, 1);
+			if (ret < 0) {
+				printk("[usb_dwc3] fail to switch pad usb to client path! (%d)(%d)\n", host_sw, ret);
+			} else {
+				printk("[usb_dwc3] switch pad usb to client path (%d)\n", host_sw);
+			}
+			break;
+		default:
+				printk("[usb_dwc3] unknown pad usb host switch! (%d)\n", host_sw);
+			break;
+		}
+	} else {
+		printk("[usb_dwc3] not in pad, skip pad usb host switch control! (%d)(%d)(%d)\n",
+			host_sw, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+
+static ssize_t asus_dwc3_pad_host_sw_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "host", 4)) {
+		asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
+	} else if (!strncmp(buf, "client", 6)) {
+		asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_CLIENT);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+static int asus_dwc3_pad_host_sw_show(struct seq_file *s, void *unused)
+{
+	int pin_level = -1;
+
+	pin_level = asus_dwc3_get_pad_host_sw();
+
+	if (pin_level >= 0) {
+		if (pin_level) {
+			seq_printf(s, "client\n");
+		} else {
+			seq_printf(s, "host\n");
+		}
+	} else {
+		seq_printf(s, "err\n");
+	}
+
+	return 0;
+}
+
+static int asus_dwc3_pad_host_sw_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_pad_host_sw_show, inode->i_private);
+}
+
+const struct file_operations asus_dwc3_pad_host_sw_fops = {
+	.open = asus_dwc3_pad_host_sw_open,
+	.read = seq_read,
+	.write = asus_dwc3_pad_host_sw_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_dwc3_get_microp_mode(void)
+{
+	struct dwc3_msm *mdwc = context;
+	int microp_state = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		microp_state = AX_MicroP_getOPState();
+		if (microp_state < 0) {
+			dev_err(mdwc->dev, "get microp state failed! (%d)\n", microp_state);
+		} else {
+			dev_dbg(mdwc->dev, "get microp state success (%d)\n", microp_state);
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, cannot get microp state! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return microp_state;
+}
+
+static void asus_dwc3_set_microp_mode(enum microp_mode_sw mode)
+{
+	int ret = 0, retries = 0;
+	struct dwc3_msm *mdwc = context;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		switch (mode) {
+		case MICROP_SLEEP:
+			ret = AX_MicroP_enterSleeping();
+			if (ret >= 0) {
+				while (st_MICROP_Sleep != AX_MicroP_getOPState() && retries++ < 5);
+
+				if (retries <= 5)
+					dev_dbg(mdwc->dev, "microp enter sleep success\n");
+				else
+					dev_err(mdwc->dev, "microp fail to enter sleep!\n");
+			} else {
+				dev_err(mdwc->dev, "fail to set microp to sleep! (%d)\n", ret);
+			}
+			break;
+		case MICROP_ACTIVE:
+			ret = AX_MicroP_enterResuming();
+			if (ret >= 0) {
+                            dev_dbg(mdwc->dev, "microp exit sleep success\n");
+			} else {
+				dev_err(mdwc->dev, "fail to set microp to active! (%d)\n", ret);
+			}
+			break;
+		default:
+				dev_err(mdwc->dev, "unknown microp mode! (%d)\n", mode);
+			break;
+		}
+	} else {
+		dev_info(mdwc->dev, "not in pad, cannot set microp state! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+}
+
+static ssize_t asus_dwc3_pad_microp_state_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "on", 2)) {
+		asus_dwc3_set_microp_mode(MICROP_ACTIVE);
+	} else if (!strncmp(buf, "off", 3)) {
+		asus_dwc3_set_microp_mode(MICROP_SLEEP);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+static int asus_dwc3_pad_microp_state_show(struct seq_file *s, void *unused)
+{
+	struct dwc3_msm *mdwc = context;
+	int microp_state = -1;
+
+	microp_state = asus_dwc3_get_microp_mode();
+	if (microp_state >= 0) {
+		switch (microp_state) {
+		case st_MICROP_Off:
+			seq_printf(s, "off\n");
+			break;
+		case st_MICROP_Sleep:
+			seq_printf(s, "sleep\n");
+			break;
+		case st_MICROP_Active:
+			seq_printf(s, "active\n");
+			break;
+		case st_MICROP_Unknown:
+			seq_printf(s, "unknown\n");
+		default:
+			dev_err(mdwc->dev, "unknown microp mode! (%d)\n", microp_state);
+			break;
+		}
+	} else {
+		seq_printf(s, "err\n");
+	}
+
+	return 0;
+}
+
+static int asus_dwc3_pad_microp_state_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_pad_microp_state_show, inode->i_private);
+}
+
+const struct file_operations asus_dwc3_pad_microp_state_fops = {
+	.open = asus_dwc3_pad_microp_state_open,
+	.read = seq_read,
+	.write = asus_dwc3_pad_microp_state_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+//ASUS_BSP--- BennyCheng "add microp related debug files"
+
+//ASUS_BSP+++ BennyCheng "support dynamic hsphy parameter_override_x setting"
+static int myxtoi(const char *name)
+{
+	int val = 0;
+
+	for (;; name++) {
+		switch (*name) {
+		case '0' ... '9':
+			val = 16*val+(*name-'0');
+			break;
+		case 'A' ... 'F':
+			val = 16*val+(*name-'A'+10);
+			break;
+		case 'a' ... 'f':
+			val = 16*val+(*name-'a'+10);
+			break;
+		default:
+			return val;
+		}
+	}
+}
+
+void asus_dwc3_set_parameter_override_x(int hsphy_init_seq)
+{
+	struct dwc3_msm *mdwc = context;
+
+	if (hsphy_init_seq) {
+		mdwc->hsphy_init_seq = hsphy_init_seq;
+	}
+
+	pm_runtime_get_sync(mdwc->dev);
+	dwc3_pm_count += 1;
+	printk("[DWC3-PM][parameter_override_x] get_sync:%d, count:%d\n", atomic_read(&mdwc->dev->power.usage_count), dwc3_pm_count);
+
+	if (override_phy_init) {
+		dwc3_msm_write_readback(mdwc->base,
+					PARAMETER_OVERRIDE_X_REG, 0x03FFFFFF,
+					override_phy_init & 0x03FFFFFF);
+	} else {
+		dwc3_msm_write_readback(mdwc->base,
+					PARAMETER_OVERRIDE_X_REG, 0x03FFFFFF,
+					mdwc->hsphy_init_seq & 0x03FFFFFF);
+	}
+
+	/* reset HS controller */
+	dwc3_msm_write_reg_field(mdwc->base, HS_PHY_CTRL_REG, 0x1, 0x1);
+	usleep_range(10, 15);
+	dwc3_msm_write_reg_field(mdwc->base, HS_PHY_CTRL_REG, 0x1, 0x0);
+
+	dev_info(mdwc->dev, "parameter_override_x: 0x%x\n",
+		dwc3_msm_read_reg(mdwc->base, PARAMETER_OVERRIDE_X_REG));
+
+	pm_runtime_put_sync(mdwc->dev);
+	dwc3_pm_count -= 1;
+	printk("[DWC3-PM][parameter_override_x] put_sync:%d, count:%d\n", atomic_read(&mdwc->dev->power.usage_count), dwc3_pm_count);
+}
+
+static ssize_t asus_dwc3_parameter_override_x_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	override_phy_init = myxtoi(buf);
+	asus_dwc3_set_parameter_override_x(PARAMETER_OVERRIDE_X_DEBUG);
+out:
+	return status;
+}
+
+static int asus_dwc3_parameter_override_x_show(struct seq_file *s, void *unused)
+{
+	struct dwc3_msm *mdwc = context;
+
+	pm_runtime_get_sync(mdwc->dev);
+	dwc3_pm_count += 1;
+	printk("[DWC3-PM][parameter_override_x_show] get_sync:%d, count:%d\n", atomic_read(&mdwc->dev->power.usage_count), dwc3_pm_count);
+
+	seq_printf(s, "0x%x (default: 0x%x, reg: 0x%x)\n", override_phy_init, mdwc->hsphy_init_seq,
+			dwc3_msm_read_reg(mdwc->base, PARAMETER_OVERRIDE_X_REG));
+
+	pm_runtime_put_sync(mdwc->dev);
+	dwc3_pm_count -= 1;
+	printk("[DWC3-PM][parameter_override_x_show] put_sync:%d, count:%d\n", atomic_read(&mdwc->dev->power.usage_count), dwc3_pm_count);
+
+	return 0;
+}
+
+static int asus_dwc3_parameter_override_x_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_parameter_override_x_show, inode->i_private);
+}
+
+const struct file_operations asus_dwc3_parameter_override_x_fops = {
+	.open = asus_dwc3_parameter_override_x_open,
+	.read = seq_read,
+	.write = asus_dwc3_parameter_override_x_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+//ASUS_BSP--- BennyCheng "support dynamic hsphy parameter_override_x setting"
+
+//ASUS_BSP+++ BennyCheng "add usb mydp switch support"
+static int asus_dwc3_usb_mydp_switch(enum usb_mydp_sw req_side)
+{
+	int ret = -1;
+	int gpio_usb_sw_sel = 0;
+
+	if (g_ASUS_hwID == A90_EVB0) {
+		gpio_usb_sw_sel = GPIO_USB_SW_SEL_EVB0;
+	} else if (g_ASUS_hwID == A90_EVB) {
+		gpio_usb_sw_sel = GPIO_USB_SW_SEL_EVB;
+	} else {
+		gpio_usb_sw_sel = GPIO_USB_SW_SEL_SR1;
+	}
+
+	switch (req_side) {
+	case USB_PORT:
+		ret = gpio_direction_output(gpio_usb_sw_sel, 1);
+		if(ret) {
+			printk("[usb_dwc3] switch to usb port fail!!!(%d)(%d)\r\n", req_side, ret);
+			goto out;
+		}
+		printk("[usb_dwc3] switch to usb port (%d)\r\n", gpio_get_value(gpio_usb_sw_sel));
+		break;
+	case MYDP_PORT:
+		ret = gpio_direction_output(gpio_usb_sw_sel, 0);
+		if(ret) {
+			printk("[usb_dwc3] switch to mydp port fail!!!(%d)(%d)\r\n", req_side, ret);
+			goto out;
+		}
+		printk("[usb_dwc3] switch to mydp port (%d)\r\n", gpio_get_value(gpio_usb_sw_sel));
+		break;
+	default:
+		printk("[usb_dwc3] unknown switch!!! (%d)\r\n", req_side);
+		goto out;
+	}
+
+out:
+	return ret;
+}
+
+static int asus_dwc3_proc_usb_mydp_sw_show(struct seq_file *s, void *unused)
+{
+	int usb_mydp_sw_gpio_value = 0;
+
+	if (g_ASUS_hwID == A90_EVB0) {
+		usb_mydp_sw_gpio_value = gpio_get_value(GPIO_USB_SW_SEL_EVB0);
+	} else if (g_ASUS_hwID == A90_EVB) {
+		usb_mydp_sw_gpio_value = gpio_get_value(GPIO_USB_SW_SEL_EVB);
+	} else {
+		usb_mydp_sw_gpio_value = gpio_get_value(GPIO_USB_SW_SEL_SR1);
+	}
+
+	if (0 == usb_mydp_sw_gpio_value) {
+		seq_printf(s, "mydp (%d)\n", usb_mydp_sw_gpio_value);
+	} else if (1 == usb_mydp_sw_gpio_value) {
+		seq_printf(s, "usb (%d)\n", usb_mydp_sw_gpio_value);
+	} else {
+		seq_printf(s, "unknown (%d)\n", usb_mydp_sw_gpio_value);
+	}
+
+	return 0;
+}
+
+static int asus_dwc3_proc_usb_mydp_sw_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_proc_usb_mydp_sw_show, PDE(inode)->data);
+}
+
+static ssize_t asus_dwc3_proc_usb_mydp_sw_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "mydp", 4)) {
+		asus_dwc3_usb_mydp_switch(MYDP_PORT);
+	} else if (!strncmp(buf, "usb", 3)) {
+		asus_dwc3_usb_mydp_switch(USB_PORT);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+const struct file_operations asus_dwc3_proc_usb_mydp_sw_fops = {
+	.open = asus_dwc3_proc_usb_mydp_sw_open,
+	.read = seq_read,
+	.write = asus_dwc3_proc_usb_mydp_sw_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+//ASUS_BSP--- BennyCheng "add usb mydp switch support"
+
+//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+#define GPIO_CHG_OTG_EVB0 52
+bool asus_dwc3_vbus_out_state(void)
+{
+	struct dwc3_msm *mdwc = context;
+	int state = 0;
+
+	if (g_ASUS_hwID == A90_EVB0) { // for external charger
+		state = gpio_get_value(GPIO_CHG_OTG_EVB0);
+	} else { // for internal charger
+		if (!mdwc->vbus_otg) {
+			dev_err(mdwc->dev, "failed to get vbus regulator state\n");
+		} else {
+			state = regulator_is_enabled(mdwc->vbus_otg);
+		}
+	}
+
+	return state;
+}
+
+void asus_dwc3_vbus_out_enable(bool enable, bool force)
+{
+	struct dwc3_msm *mdwc = context;
+	int ret = 0;
+
+	if (g_ASUS_hwID == A90_EVB0) { // for external charger
+		if (!force && AX_MicroP_IsP01Connected() && pad_exist()) {
+			dev_info(mdwc->dev, "ignore to set otg 5v in pad (external) (%d)\n", enable);
+			return;
+		}
+
+		if (enable == asus_dwc3_vbus_out_state()) {
+			dev_info(mdwc->dev, "vbus out is already %s (external)\n", enable ? "enabled" : "disabled");
+			return;
+		}
+
+		dev_info(mdwc->dev, "turn %s otg 5v (external)%s\n", enable ? "on" : "off", force ? "(force)" : "");
+		UsbSetOtgSwitch(enable);
+	} else { // for internal charger
+		if (!mdwc->vbus_otg) {
+			mdwc->vbus_otg = devm_regulator_get(mdwc->dev, 	"vbus_dwc3");
+			if (IS_ERR(mdwc->vbus_otg)) {
+				ret = PTR_ERR(mdwc->vbus_otg);
+				dev_err(mdwc->dev, "failed to get vbus regulator (%d)\n", ret);
+				mdwc->vbus_otg = 0;
+				return;
+			} else {
+				dev_info(mdwc->dev, "succee to get vbus requlator\n");
+			}
+		}
+
+		if (!force && AX_MicroP_IsP01Connected() && pad_exist()) {
+			dev_info(mdwc->dev, "ignore to set otg 5v in pad (internal) (%d)\n", enable);
+			return;
+		}
+
+		if (enable == asus_dwc3_vbus_out_state()) {
+			dev_info(mdwc->dev, "vbus out is already %s (internal)\n", enable ? "enabled" : "disabled");
+			return;
+		}
+
+		dev_info(mdwc->dev, "turn %s otg 5v (internal)%s\n", enable ? "on" : "off", force ? "(force)" : "");
+		if (enable) {
+			ret = regulator_enable(mdwc->vbus_otg);
+			if (ret) {
+				dev_err(mdwc->dev, "unable to enable vbus_otg (%d)\n", ret);
+				return;
+			}
+		} else {
+			ret = regulator_disable(mdwc->vbus_otg);
+			if (ret) {
+				dev_err(mdwc->dev, "unable to disable vbus_otg (%d)\n", ret);
+				return;
+			}
+		}
+	}
+}
+
+static int asus_dwc3_5v_output_show(struct seq_file *s, void *unused)
+{
+	if (asus_dwc3_vbus_out_state()) {
+		seq_printf(s, "enable (%s)\n", g_ASUS_hwID == A90_EVB0 ? "external" : "internal");
+	} else {
+		seq_printf(s, "disable (%s)\n", g_ASUS_hwID == A90_EVB0 ? "external" : "internal");
+	}
+
+	return 0;
+}
+
+static int asus_dwc3_5v_output_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_5v_output_show, inode->i_private);
+}
+
+static ssize_t asus_dwc3_5v_output_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "enable", 6)) {
+		asus_dwc3_vbus_out_enable(true, 1);
+	} else if (!strncmp(buf, "disable", 7)) {
+		asus_dwc3_vbus_out_enable(false, 1);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+const struct file_operations asus_dwc3_5v_output_fops = {
+	.open = asus_dwc3_5v_output_open,
+	.read = seq_read,
+	.write = asus_dwc3_5v_output_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_dwc3_mode_show(struct seq_file *s, void *unused)
+{
+	struct dwc3_msm *mdwc = s->private;
+
+	if (DWC3_USB_AUTO == mdwc->ext_xceiv.otg_mode ) {
+		if (DWC3_ID_GROUND == mdwc->ext_xceiv.id) {
+			seq_printf(s, "host (auto)\n");
+		} else if (DWC3_ID_FLOAT == mdwc->ext_xceiv.id) {
+			seq_printf(s, "peripheral (auto)\n");
+		}
+	} else {
+		if (DWC3_ID_GROUND == mdwc->ext_xceiv.id) {
+			seq_printf(s, "host\n");
+		} else if (DWC3_ID_FLOAT == mdwc->ext_xceiv.id) {
+			seq_printf(s, "peripheral\n");
+		}
+	}
+
+	return 0;
+}
+
+static int asus_dwc3_mode_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_mode_show, inode->i_private);
+}
+
+void asus_dwc3_mode_switch(enum dwc3_usb_mode_type req_mode)
+{
+	struct dwc3_msm *mdwc = context;
+
+	switch (req_mode) {
+	case DWC3_USB_NONE:
+		printk("[usb_dwc3] switch to none mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		mdwc->ext_xceiv.bsv = false;
+		debug_id = mdwc->ext_xceiv.id;
+		debug_bsv = mdwc->ext_xceiv.bsv;
+		mdwc->ext_xceiv.host_mode = 0;
+		break;
+	case DWC3_USB_PERIPHERAL:
+		printk("[usb_dwc3] switch to peripheral mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		debug_id = mdwc->ext_xceiv.id;
+		mdwc->ext_xceiv.host_mode = 0;
+		break;
+	case DWC3_USB_HOST:
+		printk("[usb_dwc3] switch to host mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_GROUND;
+		debug_id = mdwc->ext_xceiv.id;
+		mdwc->ext_xceiv.host_mode = 1;
+		break;
+	case DWC3_USB_AUTO:
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			printk("[usb_dwc3] switch to host mode (auto)\r\n");
+			mdwc->ext_xceiv.id = DWC3_ID_GROUND;
+			debug_id = mdwc->ext_xceiv.id;
+			mdwc->ext_xceiv.host_mode = 1;
+		} else {
+			printk("[usb_dwc3] switch to peripheral mode (auto)\r\n");
+			mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+			debug_id = mdwc->ext_xceiv.id;
+			mdwc->ext_xceiv.host_mode = 0;
+		}
+		break;
+	default:
+		printk("[usb_dwc3] unknown mode!!! (%d)\r\n", req_mode);
+		goto out;
+	}
+
+	queue_delayed_work(system_nrt_wq,&mdwc->resume_work, 0);
+out:
+	return;
+}
+
+static ssize_t asus_dwc3_mode_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct dwc3_msm *mdwc = s->private;
+	char buf[16];
+	int status = count;
+	enum dwc3_usb_mode_type req_mode;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "host", 4)) {
+		req_mode = DWC3_USB_HOST;
+		//ASUS_BSP+++ BennyCheng "add pad usb path switch control"
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_dwc3_set_pad_camera_power(1);
+			asus_dwc3_set_pad_hub_power(1);
+			asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
+		}
+		//ASUS_BSP--- BennyCheng "add pad usb path switch control"
+	} else if (!strncmp(buf, "peripheral", 10)) {
+		req_mode = DWC3_USB_PERIPHERAL;
+		//ASUS_BSP+++ BennyCheng "add pad usb path switch control"
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_dwc3_set_pad_camera_power(0);
+			asus_dwc3_set_pad_hub_power(0);
+			asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_CLIENT);
+		}
+		mdwc->ext_xceiv.bsv = mdwc->ext_xceiv.vbus_state;
+		//ASUS_BSP--- BennyCheng "add pad usb path switch control"
+	} else if (!strncmp(buf, "none", 4)) {
+		req_mode = DWC3_USB_NONE;
+	} else if (!strncmp(buf, "auto", 4)) {
+		req_mode = DWC3_USB_AUTO;
+		//ASUS_BSP+++ BennyCheng "add pad usb path switch control"
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_dwc3_set_pad_camera_power(1);
+			asus_dwc3_set_pad_hub_power(1);
+			asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
+		} else {
+			mdwc->ext_xceiv.bsv = mdwc->ext_xceiv.vbus_state;
+		}
+		//ASUS_BSP--- BennyCheng "add pad usb path switch control"
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+
+	mdwc->ext_xceiv.otg_mode = req_mode;
+	asus_dwc3_mode_switch(req_mode);
+out:
+	return status;
+}
+
+const struct file_operations asus_dwc3_mode_fops = {
+	.open = asus_dwc3_mode_open,
+	.read = seq_read,
+	.write = asus_dwc3_mode_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_dwc3_proc_mode_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_mode_show, PDE(inode)->data);
+}
+
+const struct file_operations asus_dwc3_proc_mode_fops = {
+	.open = asus_dwc3_proc_mode_open,
+	.read = seq_read,
+	.write = asus_dwc3_mode_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+#ifdef CONFIG_SLIMPORT_ANX7808
+static ssize_t asus_dwc3_proc_otg_boot_check_write(struct file *file, const char __user *ubuf,
+size_t count, loff_t *ppos)
+{
+	queue_work(system_nrt_wq, &check_at_boot);
+	return 0;
+}
+
+const struct file_operations asus_dwc3_proc_otg_boot_check_fops = {
+	.write = asus_dwc3_proc_otg_boot_check_write,
+};
+#endif
+//ASUS_BSP--- BennyCheng "add otg check at boot"
+
+//ASUS_BSP+++ BennyCheng "support dynamic hsphy parameter_override_x setting"
+static int asus_dwc3_proc_parameter_override_x_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_dwc3_parameter_override_x_show, PDE(inode)->data);
+}
+
+const struct file_operations asus_dwc3_proc_parameter_override_x_fops = {
+	.open = asus_dwc3_proc_parameter_override_x_open,
+	.read = seq_read,
+	.write = asus_dwc3_parameter_override_x_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+//ASUS_BSP--- BennyCheng "support dynamic hsphy parameter_override_x setting"
+
+static struct proc_dir_entry *asus_dwc3_proc_root;
+
+static int asus_dwc3_proc_init(struct dwc3_msm *mdwc)
+{
+	struct proc_dir_entry *proc_entry;
+
+	asus_dwc3_proc_root = proc_mkdir("msm_dwc3", NULL);
+	if (!asus_dwc3_proc_root) {
+		return -ENODEV;
+	}
+
+	proc_entry = proc_create_data("mode", S_IRUGO |S_IWUSR, asus_dwc3_proc_root,
+			&asus_dwc3_proc_mode_fops, mdwc);
+	if (!proc_entry) {
+		remove_proc_entry("mode", asus_dwc3_proc_root);
+		asus_dwc3_proc_root = NULL;
+		return -ENODEV;
+	}
+
+	//ASUS_BSP+++ BennyCheng "add usb mydp switch support"
+	proc_entry = proc_create_data("usb_mydp_sw", S_IRUGO |S_IWUSR, asus_dwc3_proc_root,
+			&asus_dwc3_proc_usb_mydp_sw_fops, mdwc);
+	if (!proc_entry) {
+		remove_proc_entry("usb_mydp_sw", asus_dwc3_proc_root);
+		asus_dwc3_proc_root = NULL;
+		return -ENODEV;
+	}
+	//ASUS_BSP--- BennyCheng "add usb mydp switch support"
+
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+#ifdef CONFIG_SLIMPORT_ANX7808
+	proc_entry = proc_create_data("otg_boot_check", S_IRUGO |S_IWUSR, asus_dwc3_proc_root,
+			&asus_dwc3_proc_otg_boot_check_fops, mdwc);
+	if (!proc_entry) {
+		remove_proc_entry("otg_boot_check", asus_dwc3_proc_root);
+		asus_dwc3_proc_root = NULL;
+		return -ENODEV;
+	}
+#endif
+//ASUS_BSP--- BennyCheng "add otg check at boot"
+
+	//ASUS_BSP+++ BennyCheng "support dynamic hsphy parameter_override_x setting"
+	proc_entry = proc_create_data("parameter_override_x", S_IRUGO |S_IWUSR, asus_dwc3_proc_root,
+			&asus_dwc3_proc_parameter_override_x_fops, mdwc);
+	if (!proc_entry) {
+		remove_proc_entry("parameter_override_x", asus_dwc3_proc_root);
+		asus_dwc3_proc_root = NULL;
+		return -ENODEV;
+	}
+	//ASUS_BSP--- BennyCheng "support dynamic hsphy parameter_override_x setting"
+
+	return 0;
+}
+
+static void asus_dwc3_proc_cleanup(void)
+{
+	remove_proc_entry("mode", asus_dwc3_proc_root);
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+#ifdef CONFIG_SLIMPORT_ANX7808
+	remove_proc_entry("otg_boot_check", asus_dwc3_proc_root);
+#endif
+//ASUS_BSP--- BennyCheng "add otg check at boot"
+}
+//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
 static struct dentry *dwc3_debugfs_root;
 
 static void dwc3_msm_debugfs_init(struct dwc3_msm *mdwc)
@@ -2335,11 +3614,569 @@ static void dwc3_msm_debugfs_init(struct dwc3_msm *mdwc)
 				dwc3_debugfs_root, mdwc, &dwc3_connect_fops))
 		goto error;
 
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	if (!debugfs_create_file("mode", S_IRUGO | S_IWUSR,
+				dwc3_debugfs_root, mdwc, &asus_dwc3_mode_fops))
+		goto error;
+
+	if (!debugfs_create_file("otg_5v_output", S_IRUGO | S_IWUSR,
+			dwc3_debugfs_root, mdwc, &asus_dwc3_5v_output_fops))
+		goto error;
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+	//ASUS_BSP+++ BennyCheng "add microp related debug files"
+	if (!debugfs_create_file("hub", S_IRUGO | S_IWUSR,
+				dwc3_debugfs_root, mdwc, &asus_dwc3_pad_hub_fops))
+		goto error;
+
+	if (!debugfs_create_file("camera", S_IRUGO | S_IWUSR,
+				dwc3_debugfs_root, mdwc, &asus_dwc3_pad_camera_fops))
+		goto error;
+
+	if (!debugfs_create_file("cbus", S_IRUGO | S_IWUSR,
+				dwc3_debugfs_root, mdwc, &asus_dwc3_pad_cbus_fops))
+		goto error;
+
+	if (!debugfs_create_file("host_sw", S_IRUGO | S_IWUSR,
+				dwc3_debugfs_root, mdwc, &asus_dwc3_pad_host_sw_fops))
+		goto error;
+
+	if (!debugfs_create_file("microp_state", S_IRUGO | S_IWUSR,
+				dwc3_debugfs_root, mdwc, &asus_dwc3_pad_microp_state_fops))
+		goto error;
+	//ASUS_BSP--- BennyCheng "add microp related debug files"
+
+	//ASUS_BSP+++ BennyCheng "support dynamic hsphy parameter_override_x setting"
+	if (!debugfs_create_file("parameter_override_x", S_IRUGO | S_IWUSR,
+				dwc3_debugfs_root, mdwc, &	asus_dwc3_parameter_override_x_fops))
+		goto error;
+	//ASUS_BSP--- BennyCheng "support dynamic hsphy parameter_override_x setting"
+
 	return;
 
 error:
 	debugfs_remove_recursive(dwc3_debugfs_root);
 }
+
+//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+void asus_dwc3_host_mode_prepare(void)
+{
+	//ASUS_BSP+++ BennyCheng "re-awake usb wake lock during host/client switch"
+	struct dwc3_msm *mdwc = context;
+	//ASUS_BSP--- BennyCheng "re-awake usb wake lock during host/client switch"
+
+	//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+	g_suspend_delay_work_run = 0;
+	g_keep_power_on = 0;
+	g_host_none_mode = 0;
+	//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+	//ASUS_BSP+++ BennyCheng "add dwc3 pm lock timeout check"
+	schedule_delayed_work(&asus_dwc3_suspend_check_work,
+		msecs_to_jiffies(MSM_OTG_SUSPEND_CHECK_TIMEOUT));
+	//ASUS_BSP--- BennyCheng "add dwc3 pm lock timeout check"
+
+	//ASUS_BSP+++ BennyCheng "re-awake usb wake lock during host/client switch"
+	pm_stay_awake(mdwc->dev);
+	//ASUS_BSP--- BennyCheng "re-awake usb wake lock during host/client switch"
+}
+
+void asus_dwc3_host_mode_cleanup(void)
+{
+	//ASUS_BSP+++ BennyCheng "re-awake usb wake lock during host/client switch"
+	struct dwc3_msm *mdwc = context;
+	//ASUS_BSP--- BennyCheng "re-awake usb wake lock during host/client switch"
+
+	//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+	cancel_work_sync(&late_resume_work);
+	cancel_delayed_work_sync(&early_suspend_delay_work);
+	//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+	//ASUS_BSP+++ BennyCheng "add dwc3 pm lock timeout check"
+	cancel_delayed_work_sync(&asus_dwc3_suspend_check_work);
+	//ASUS_BSP--- BennyCheng "add dwc3 pm lock timeout check"
+
+	//ASUS_BSP+++ BennyCheng "re-awake usb wake lock during host/client switch"
+	pm_stay_awake(mdwc->dev);
+	//ASUS_BSP--- BennyCheng "re-awake usb wake lock during host/client switch"
+}
+
+static void asus_dwc3_microp_cb_delay_work(struct work_struct *w)
+{
+	struct dwc3_msm *mdwc = context;
+
+	dev_info(mdwc->dev, "%s()+++\n", __func__);
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		asus_dwc3_usb_mydp_switch(USB_PORT);
+
+		if (DWC3_USB_AUTO == mdwc->ext_xceiv.otg_mode) {
+			asus_dwc3_mode_switch(DWC3_USB_AUTO);
+
+			asus_dwc3_set_pad_hub_power(1);
+			asus_dwc3_set_pad_camera_power(1);
+		} else {
+			if (DWC3_USB_HOST == mdwc->ext_xceiv.otg_mode) {
+				asus_dwc3_set_pad_hub_power(1);
+				asus_dwc3_set_pad_camera_power(1);
+			}
+			printk("[usb_dwc3] not auto mode! skip switch! (%d)\r\n", mdwc->ext_xceiv.otg_mode);
+		}
+	} else {
+		mdwc->ext_xceiv.bsv = mdwc->ext_xceiv.vbus_state;
+
+		if (DWC3_USB_AUTO == mdwc->ext_xceiv.otg_mode) {
+			asus_dwc3_mode_switch(DWC3_USB_AUTO);
+		} else {
+			printk("[usb_dwc3] not auto mode! skip switch! (%d)\r\n", mdwc->ext_xceiv.otg_mode);
+		}
+
+		asus_dwc3_vbus_out_enable(false, 1);
+
+		asus_dwc3_usb_mydp_switch(MYDP_PORT);
+	}
+
+	dev_info(mdwc->dev, "%s()---\n", __func__);
+}
+
+static int asus_dwc3_microp_event(struct notifier_block *this, unsigned long event, void *ptr)
+{
+	//ASUS_BSP+++ BennyCheng "cancel works related to host when pad unplug"
+	struct dwc3_msm *mdwc = context;
+	//ASUS_BSP--- BennyCheng "cancel works related to host when pad unplug"
+
+	switch (event) {
+		case P01_ADD:
+			printk("[usb_dwc3] Microp ADD Event +++\n");
+
+			cancel_delayed_work_sync(&microp_cb_delay_work);
+
+			//ASUS_BSP+++ BennyCheng "add pad usb path switch control"
+			if (DWC3_USB_AUTO == mdwc->ext_xceiv.otg_mode || DWC3_USB_HOST == mdwc->ext_xceiv.otg_mode) {
+				asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
+			} else if (DWC3_USB_PERIPHERAL == mdwc->ext_xceiv.otg_mode) {
+				asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_CLIENT);
+			}
+			//ASUS_BSP--- BennyCheng "add pad usb path switch control"
+
+			asus_dwc3_usb_mydp_switch(USB_PORT);
+
+			asus_dwc3_vbus_out_enable(false, 1);
+
+			asus_dwc3_set_pad_camera_power(0);
+			asus_dwc3_set_pad_hub_power(0);
+
+			if(g_otg_check_at_boot)
+				queue_delayed_work_on(0, microp_cb_delay_wq, &microp_cb_delay_work, 2 * HZ);
+
+			printk("[usb_dwc3] Microp ADD Event ---\n");
+		break;
+		case P01_REMOVE:
+			printk("[usb_dwc3] Microp REMOVE Event +++\n");
+
+			cancel_delayed_work_sync(&microp_cb_delay_work);
+
+			//ASUS_BSP+++ BennyCheng "cancel works related to host when pad unplug"
+			if (DWC3_USB_AUTO == mdwc->ext_xceiv.otg_mode) {
+				asus_dwc3_host_mode_cleanup();
+			}
+			//ASUS_BSP--- BennyCheng "cancel works related to host when pad unplug"
+
+			//ASUS_BSP+++ BennyCheng "change wq delay time to 5s to avoid switching client during low power"
+			if (g_suspend_delay_work_run) {
+				queue_delayed_work_on(0, microp_cb_delay_wq, &microp_cb_delay_work, 2 * HZ);
+			} else {
+				queue_delayed_work_on(0, microp_cb_delay_wq, &microp_cb_delay_work, 5 * HZ);
+			}
+
+			printk("[usb_dwc3] Microp REMOVE Event ---(%d)\n", g_suspend_delay_work_run);
+			//ASUS_BSP--- BennyCheng "change wq delay time to 5s to avoid switching client during low power"
+		break;
+	default:
+		break;
+	}
+
+        return NOTIFY_DONE;
+}
+
+static struct notifier_block asus_dwc3_microp_notifier = {
+        .notifier_call = asus_dwc3_microp_event,
+        .priority = USB_MP_NOTIFY,
+};
+//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+
+//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+static bool asus_dwc3_keep_power_on_check(void)
+{
+	struct dwc3_msm *mdwc = context;
+	struct file *flp = NULL;
+	mm_segment_t oldfs;
+	int index = 0, num = 0, ret = 0;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+
+	num = sizeof(usb_device_list)/sizeof(usb_device_list[0]);
+
+	for(index = 0; index < num; index++) {
+		flp = filp_open(usb_device_list[index], O_RDONLY, S_IRWXU);
+		if(IS_ERR(flp))
+			continue;
+		else {
+			ret = 1;
+			filp_close(flp, NULL);
+			dev_info(mdwc->dev, "%s exist\n", usb_device_list[index]);
+			break;
+		}
+	}
+
+	set_fs(oldfs);
+
+	return ret;
+}
+
+static void asus_dwc3_host_auto_switch(enum host_auto_sw req_mode)
+{
+	struct dwc3_msm *mdwc = context;
+
+	switch (req_mode) {
+	case HOST_AUTO_NONE:
+		printk("[usb_dwc3] switch to auto none mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+		mdwc->ext_xceiv.bsv = false;
+		debug_id = mdwc->ext_xceiv.id;
+		debug_bsv = mdwc->ext_xceiv.bsv;
+		g_host_none_mode = 1;
+		break;
+	case HOST_AUTO_HOST:
+		printk("[usb_dwc3] switch to auto host mode\r\n");
+		mdwc->ext_xceiv.id = DWC3_ID_GROUND;
+		debug_id = mdwc->ext_xceiv.id;
+		g_host_none_mode = 0;
+		break;
+	default:
+		printk("[usb_dwc3] unknown auto mode!!! (%d)\r\n", req_mode);
+		goto out;
+	}
+
+	queue_delayed_work(system_nrt_wq,&mdwc->resume_work, 0);
+out:
+	return;
+}
+
+void asus_dwc3_host_power_off(void)
+{
+	struct dwc3_msm *mdwc = context;
+
+	if (mdwc->ext_xceiv.host_mode) {
+		dev_info(mdwc->dev, "%s()+++ (%d)(%d)\n", __func__, g_keep_power_on, g_host_none_mode);
+		if (!g_host_none_mode) {
+			g_suspend_delay_work_run = 1;
+
+			asus_dwc3_host_auto_switch(HOST_AUTO_NONE);
+
+			if (AX_MicroP_IsP01Connected() && pad_exist()) {
+				asus_dwc3_set_microp_mode(MICROP_SLEEP);
+			}
+		}
+		dev_info(mdwc->dev, "%s()---\n", __func__);
+	}
+}
+
+static void asus_dwc3_early_suspend_delay_work(struct work_struct *w)
+{
+	struct dwc3_msm *mdwc = context;
+
+	dev_info(mdwc->dev, "%s()+++\n", __func__);
+
+	g_suspend_delay_work_run = 1;
+
+#ifdef ASUS_FACTORY_BUILD
+	if (mdwc->ext_xceiv.host_mode) {
+		g_keep_power_on = asus_dwc3_keep_power_on_check();
+		dev_info(mdwc->dev, "g_keep_power_on (%d)\n", g_keep_power_on);
+
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			if (!g_keep_power_on) {
+				asus_dwc3_host_auto_switch(HOST_AUTO_NONE);
+
+				if (asus_dwc3_get_pad_cbus_en()) {
+					asus_dwc3_set_pad_cbus_en(0);
+				}
+
+				asus_dwc3_set_microp_mode(MICROP_SLEEP);
+			} else {
+				/*
+				 * If a usb storage is plugged, unlocking lock here to allow the usb storgae enter pm suspend and
+				 * turning off the power of hub in the beginning of pm suspend
+				 */
+				if (asus_dwc3_get_pad_cbus_en()) {
+					asus_dwc3_set_pad_cbus_en(0);
+				}
+
+				if (asus_dwc3_get_pad_camera_power()) {
+					asus_dwc3_set_pad_camera_power(0);
+				}
+
+				pm_relax(mdwc->dev);
+			}
+		} else {
+			if (!g_keep_power_on) {
+				asus_dwc3_host_auto_switch(HOST_AUTO_NONE);
+			} else {
+				/*
+				 * If a usb storage is plugged, unlocking lock here to allow the usb storgae enter pm suspend and
+				 * turning off the power of hub in the beginning of pm suspend
+				 */
+				pm_relax(mdwc->dev);
+			}
+		}
+	} else {
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_dwc3_set_microp_mode(MICROP_SLEEP);
+		}
+	}
+#else
+	if (mdwc->ext_xceiv.host_mode) {
+		g_keep_power_on = asus_dwc3_keep_power_on_check();
+		dev_info(mdwc->dev, "g_keep_power_on (%d)\n", g_keep_power_on);
+
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			if (!g_keep_power_on) {
+				asus_dwc3_host_auto_switch(HOST_AUTO_NONE);
+
+				if (asus_dwc3_get_pad_cbus_en()) {
+					asus_dwc3_set_pad_cbus_en(0);
+				}
+
+				asus_dwc3_set_microp_mode(MICROP_SLEEP);
+			} else {
+				/*
+				 * If a usb storage is plugged, unlocking lock here to allow the usb storgae enter pm suspend and
+				 * turning off the power of hub in the beginning of pm suspend
+				 */
+				if (asus_dwc3_get_pad_cbus_en()) {
+					asus_dwc3_set_pad_cbus_en(0);
+				}
+
+				if (asus_dwc3_get_pad_camera_power()) {
+					asus_dwc3_set_pad_camera_power(0);
+				}
+
+				pm_relax(mdwc->dev);
+			}
+		} else {
+			if (!g_keep_power_on) {
+				asus_dwc3_host_auto_switch(HOST_AUTO_NONE);
+			} else {
+				/*
+				 * If a usb storage is plugged, unlocking lock here to allow the usb storgae enter pm suspend and
+				 * turning off the power of hub in the beginning of pm suspend
+				 */
+				pm_relax(mdwc->dev);
+			}
+		}
+	}
+#endif
+
+	dev_info(mdwc->dev, "%s()---\n", __func__);
+}
+
+static void asus_dwc3_late_resume_work(struct work_struct *w)
+{
+	int wait = 0;
+	struct dwc3_msm *mdwc = context;
+
+	dev_info(mdwc->dev, "%s()+++\n", __func__);
+
+#ifdef ASUS_FACTORY_BUILD
+	if (mdwc->ext_xceiv.host_mode) {
+		while ((mdwc->otg_xceiv->state != OTG_STATE_B_IDLE) && (wait++ < 10)) {
+			msleep(100);
+		}
+
+		if (wait >= 10) {
+			dev_err(mdwc->dev, "not b_idle state, skip host auto switch (%d)\n", mdwc->otg_xceiv->state );
+			return;
+		}
+
+		asus_dwc3_host_auto_switch(HOST_AUTO_HOST);
+	}
+#else
+	while ((mdwc->otg_xceiv->state != OTG_STATE_B_IDLE) && (wait++ < 10)) {
+		msleep(100);
+	}
+
+	if (wait >= 10) {
+		dev_err(mdwc->dev, "not b_idle state, skip host auto switch (%d)\n", mdwc->otg_xceiv->state );
+		return;
+	}
+
+	asus_dwc3_host_auto_switch(HOST_AUTO_HOST);
+#endif
+
+	dev_info(mdwc->dev, "%s()--- (%d)\n", __func__, wait);
+}
+
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+static void asus_dwc3_early_suspend(struct early_suspend *h)
+{
+	struct dwc3_msm *mdwc = context;
+
+	dev_info(mdwc->dev, "%s()+++\n", __func__);
+
+	if (mdwc->ext_xceiv.host_mode) {
+		wake_lock_timeout(&early_suspend_wlock, 5 * HZ);
+		cancel_work_sync(&late_resume_work);
+		queue_delayed_work_on(0, early_suspend_delay_wq, &early_suspend_delay_work, 4 * HZ);
+	}
+
+	dev_info(mdwc->dev, "%s()---\n", __func__);
+}
+
+static void asus_dwc3_late_resume(struct early_suspend *h)
+{
+	struct dwc3_msm *mdwc = context;
+
+	dev_info(mdwc->dev, "%s()+++\n", __func__);
+
+	if (mdwc->ext_xceiv.host_mode) {
+		cancel_delayed_work_sync(&early_suspend_delay_work);
+		if (g_suspend_delay_work_run) {
+			if (mdwc->ext_xceiv.host_mode) {
+				queue_work(system_nrt_wq, &late_resume_work);
+			}
+			g_suspend_delay_work_run = 0;
+		}
+
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_dwc3_set_microp_mode(MICROP_ACTIVE);
+
+			if (!asus_dwc3_get_pad_cbus_en()) {
+				asus_dwc3_set_pad_cbus_en(1);
+			}
+
+			asus_dwc3_set_pad_hub_power(1);
+			asus_dwc3_set_pad_camera_power(1);
+		}
+	}
+
+	dev_info(mdwc->dev, "%s()---\n", __func__);
+}
+
+struct early_suspend asus_dwc3_early_suspend_handler = {
+    .level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
+    .suspend = asus_dwc3_early_suspend,
+    .resume = asus_dwc3_late_resume,
+};
+
+#elif defined(CONFIG_FB)
+
+static void asus_dwc3_early_suspend(void)
+{
+	struct dwc3_msm *mdwc = context;
+
+	dev_info(mdwc->dev, "%s()+++\n", __func__);
+
+#ifdef ASUS_FACTORY_BUILD
+	wake_lock_timeout(&early_suspend_wlock, 5 * HZ);
+	cancel_work_sync(&late_resume_work);
+	cancel_delayed_work_sync(&early_suspend_delay_work);
+	queue_delayed_work_on(0, early_suspend_delay_wq, &early_suspend_delay_work, 4 * HZ);
+#else
+	if (mdwc->ext_xceiv.host_mode) {
+		wake_lock_timeout(&early_suspend_wlock, 5 * HZ);
+		cancel_work_sync(&late_resume_work);
+		cancel_delayed_work_sync(&early_suspend_delay_work);
+		queue_delayed_work_on(0, early_suspend_delay_wq, &early_suspend_delay_work, 4 * HZ);
+	}
+#endif
+
+	dev_info(mdwc->dev, "%s()---\n", __func__);
+}
+
+static void asus_dwc3_late_resume(void)
+{
+	struct dwc3_msm *mdwc = context;
+
+	dev_info(mdwc->dev, "%s()+++\n", __func__);
+
+#ifdef ASUS_FACTORY_BUILD
+	cancel_work_sync(&late_resume_work);
+	cancel_delayed_work_sync(&early_suspend_delay_work);
+	if (g_suspend_delay_work_run) {
+		if (mdwc->ext_xceiv.host_mode) {
+			queue_work(system_nrt_wq, &late_resume_work);
+		}
+		g_suspend_delay_work_run = 0;
+	}
+
+	if (mdwc->ext_xceiv.host_mode) {
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_dwc3_set_microp_mode(MICROP_ACTIVE);
+
+			if (!asus_dwc3_get_pad_cbus_en()) {
+				asus_dwc3_set_pad_cbus_en(1);
+			}
+
+			asus_dwc3_set_pad_hub_power(1);
+			asus_dwc3_set_pad_camera_power(1);
+		}
+	} else {
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_dwc3_set_microp_mode(MICROP_ACTIVE);
+		}
+	}
+#else
+	if (mdwc->ext_xceiv.host_mode) {
+		cancel_work_sync(&late_resume_work);
+		cancel_delayed_work_sync(&early_suspend_delay_work);
+		if (g_suspend_delay_work_run) {
+			if (mdwc->ext_xceiv.host_mode) {
+				queue_work(system_nrt_wq, &late_resume_work);
+			}
+			g_suspend_delay_work_run = 0;
+		}
+
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_dwc3_set_microp_mode(MICROP_ACTIVE);
+
+			if (!asus_dwc3_get_pad_cbus_en()) {
+				asus_dwc3_set_pad_cbus_en(1);
+			}
+
+			asus_dwc3_set_pad_hub_power(1);
+			asus_dwc3_set_pad_camera_power(1);
+		}
+	}
+#endif
+
+	dev_info(mdwc->dev, "%s()---\n", __func__);
+}
+
+static int asus_dwc3_fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	static int blank_old = 0;
+	int *blank;
+
+	if (evdata && evdata->data && event == FB_EVENT_BLANK) {
+		blank = evdata->data;
+		if (*blank == FB_BLANK_UNBLANK) {
+			if (blank_old == FB_BLANK_POWERDOWN) {
+				blank_old = FB_BLANK_UNBLANK;
+				asus_dwc3_late_resume();
+			}
+		} else if (*blank == FB_BLANK_POWERDOWN) {
+			if (blank_old == 0 || blank_old == FB_BLANK_UNBLANK) {
+				blank_old = FB_BLANK_POWERDOWN;
+				asus_dwc3_early_suspend();
+			}
+		}
+	}
+
+	return 0;
+}
+#endif
+//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
 
 static irqreturn_t msm_dwc3_irq(int irq, void *data)
 {
@@ -2356,6 +4193,9 @@ static irqreturn_t msm_dwc3_irq(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+#ifndef CONFIG_CHARGER_ASUS
 
 static int
 get_prop_usbin_voltage_now(struct dwc3_msm *mdwc)
@@ -2377,6 +4217,7 @@ get_prop_usbin_voltage_now(struct dwc3_msm *mdwc)
 		return results.physical;
 	}
 }
+
 
 static int dwc3_msm_power_get_property_usb(struct power_supply *psy,
 				  enum power_supply_property psp,
@@ -2502,7 +4343,6 @@ dwc3_msm_property_is_writeable(struct power_supply *psy,
 	return 0;
 }
 
-
 static char *dwc3_msm_pm_power_supplied_to[] = {
 	"battery",
 };
@@ -2516,6 +4356,10 @@ static enum power_supply_property dwc3_msm_pm_power_props_usb[] = {
 	POWER_SUPPLY_PROP_SCOPE,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 };
+#endif
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
+
+//ASUS_BSP+++ BennyCheng "not use pmic & adc for id pin detection"
 #ifndef CONFIG_SLIMPORT_ANX7808
 static void dwc3_init_adc_work(struct work_struct *w);
 
@@ -2703,6 +4547,7 @@ static ssize_t adc_enable_store(struct device *dev,
 static DEVICE_ATTR(adc_enable, S_IRUGO | S_IWUSR, adc_enable_show,
 		adc_enable_store);
 #endif
+//ASUS_BSP--- BennyCheng "not use pmic & adc for id pin detection"
 
 static int dwc3_msm_ext_chg_open(struct inode *inode, struct file *file)
 {
@@ -2749,6 +4594,8 @@ dwc3_msm_ext_chg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (val) { /* block LPM */
 			if (mdwc->charger.chg_type == DWC3_DCP_CHARGER) {
 				pm_runtime_get_sync(mdwc->dev);
+				dwc3_pm_count+=1;
+				printk("[DWC3-PM][MSM_USB_EXT_CHG_BLOCK_LPM] get_sync:%d,count:%d\n",atomic_read(&mdwc->dev->power.usage_count),dwc3_pm_count);
 			} else {
 				mdwc->ext_chg_active = false;
 				complete(&mdwc->ext_chg_wait);
@@ -2758,6 +4605,8 @@ dwc3_msm_ext_chg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			mdwc->ext_chg_active = false;
 			complete(&mdwc->ext_chg_wait);
 			pm_runtime_put(mdwc->dev);
+			dwc3_pm_count-=1;
+			printk("[DWC3-PM][MSM_USB_EXT_CHG_BLOCK_LPM] put:%d,count:%d\n",atomic_read(&mdwc->dev->power.usage_count),dwc3_pm_count);
 		}
 		break;
 	case MSM_USB_EXT_CHG_VOLTAGE_INFO:
@@ -2876,270 +4725,84 @@ unreg_chrdev:
 	return ret;
 }
 
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
 #ifdef CONFIG_SLIMPORT_ANX7808
-static void asus_dwc3_set_id_state(int online);
-#define GPIO_CHG_OTG_EVB0 52
-bool asus_dwc3_vbus_out_state(void)
+static void asus_dwc3_check_at_boot(struct work_struct *w)
 {
-	struct dwc3_msm *mdwc = context;
-	int state = 0;
-
-	if (g_ASUS_hwID == A90_EVB0) { // for external charger
-		state = gpio_get_value(GPIO_CHG_OTG_EVB0);
-	} else { // for internal charger
-		if (!mdwc->vbus_otg) {
-			dev_err(mdwc->dev, "failed to get vbus regulator state\n");
-		} else {
-			state = regulator_is_enabled(mdwc->vbus_otg);
-		}
-	}
-
-	return state;
-}
-
-void asus_dwc3_vbus_out_enable(bool enable, bool force)
-{
-	struct dwc3_msm *mdwc = context;
-	int ret = 0;
-
-	if (g_ASUS_hwID == A90_EVB0) { // for external charger
-		if (!force && AX_MicroP_IsP01Connected() && pad_exist()) {
-			dev_info(mdwc->dev, "ignore to set otg 5v in pad (external) (%d)\n", enable);
-			return;
-		}
-
-		if (enable == asus_dwc3_vbus_out_state()) {
-			dev_info(mdwc->dev, "vbus out is already %s (external)\n", enable ? "enabled" : "disabled");
-			return;
-		}
-
-		dev_info(mdwc->dev, "turn %s otg 5v (external)%s\n", enable ? "on" : "off", force ? "(force)" : "");
-	} else { // for internal charger
-		if (!mdwc->vbus_otg) {
-			mdwc->vbus_otg = devm_regulator_get(mdwc->dev, 	"vbus_dwc3");
-			if (IS_ERR(mdwc->vbus_otg)) {
-				ret = PTR_ERR(mdwc->vbus_otg);
-				dev_err(mdwc->dev, "failed to get vbus regulator (%d)\n", ret);
-				mdwc->vbus_otg = 0;
-				return;
-			} else {
-				dev_info(mdwc->dev, "succee to get vbus requlator\n");
-			}
-		}
-
-		if (!force && AX_MicroP_IsP01Connected() && pad_exist()) {
-			dev_info(mdwc->dev, "ignore to set otg 5v in pad (internal) (%d)\n", enable);
-			return;
-		}
-
-		if (enable == asus_dwc3_vbus_out_state()) {
-			dev_info(mdwc->dev, "vbus out is already %s (internal)\n", enable ? "enabled" : "disabled");
-			return;
-		}
-
-		dev_info(mdwc->dev, "turn %s otg 5v (internal)%s\n", enable ? "on" : "off", force ? "(force)" : "");
-		if (enable) {
-			ret = regulator_enable(mdwc->vbus_otg);
-			if (ret) {
-				dev_err(mdwc->dev, "unable to enable vbus_otg (%d)\n", ret);
-				return;
-			}
-		} else {
-			ret = regulator_disable(mdwc->vbus_otg);
-			if (ret) {
-				dev_err(mdwc->dev, "unable to disable vbus_otg (%d)\n", ret);
-				return;
-			}
+	if (!g_otg_check_at_boot) {
+		g_otg_check_at_boot = 1;
+		if (asus_dwc3_get_id_state()) {
+			printk("[usb_dwc3] otg connected at boot\n");
+			asus_dwc3_set_id_state(1);
+		} else if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			printk("[usb_dwc3] otg connected at boot(pad)");
+			queue_delayed_work_on(0, microp_cb_delay_wq, &microp_cb_delay_work, 0);
 		}
 	}
 }
 
-static int asus_dwc3_set_pad_host_sw(enum microp_host_sw host_sw)
+static int asus_dwc3_get_id_state(void)
 {
-	int ret = -1;
+	int otg_state = 0;
 
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		switch (host_sw) {
-		case MICROP_USB_PATH_HOST:
-			ret = AX_MicroP_setGPIOOutputPin(OUT_uP_USB_SW_HST, 0);
-			if (ret < 0) {
-				printk("[usb_dwc3] fail to switch pad usb to host path! (%d)(%d)\n", host_sw, ret);
-			} else {
-				printk("[usb_dwc3] switch pad usb to host path (%d)\n", host_sw);
-			}
-			break;
-		case MICROP_USB_PATH_CLIENT:
-			ret = AX_MicroP_setGPIOOutputPin(OUT_uP_USB_SW_HST, 1);
-			if (ret < 0) {
-				printk("[usb_dwc3] fail to switch pad usb to client path! (%d)(%d)\n", host_sw, ret);
-			} else {
-				printk("[usb_dwc3] switch pad usb to client path (%d)\n", host_sw);
-			}
-			break;
-		default:
-				printk("[usb_dwc3] unknown pad usb host switch! (%d)\n", host_sw);
-			break;
-		}
-	} else {
-		printk("[usb_dwc3] not in pad, skip pad usb host switch control! (%d)(%d)(%d)\n",
-			host_sw, AX_MicroP_IsP01Connected(), pad_exist());
-	}
+	otg_state = get_otg_state();
 
-	return ret;
-}
-#if 0
-static int asus_dwc3_set_pad_cbus_en(bool on)
-{
-	struct dwc3_msm *mdwc = context;
-	int ret = -1;
+	printk("[usb_dwc3] otg state (%d)\n", otg_state);
 
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_MHL_CBUS_EN, on);
-		if (ret < 0) {
-			dev_err(mdwc->dev, "fail to set pad cbus enable! (%d)(%d)\n", on, ret);
-		} else {
-			dev_dbg(mdwc->dev, "set pad cbus enable success (%d)\n", on);
-		}
-	} else {
-		dev_info(mdwc->dev, "not in pad, skip pad cbus enable control! (%d)(%d)(%d)\n",
-			on, AX_MicroP_IsP01Connected(), pad_exist());
-	}
-
-	return ret;
+	return otg_state;
 }
 #endif
-static int asus_dwc3_set_pad_camera_power(bool on)
-{
-	struct dwc3_msm *mdwc = context;
-	int ret = -1;
+//ASUS_BSP--- BennyCheng "add otg check at boot"
 
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_CAM_PWR_EN, on);
-		if (ret < 0) {
-			dev_err(mdwc->dev, "fail to set pad camera power! (%d)(%d)\n", on, ret);
-		} else {
-			dev_info(mdwc->dev, "set pad camera power success (%d)\n", on);
-		}
-	} else {
-		dev_info(mdwc->dev, "not in pad, skip pad camera power control! (%d)(%d)(%d)\n",
-			on, AX_MicroP_IsP01Connected(), pad_exist());
-	}
-
-	return ret;
-}
-
-static int asus_dwc3_set_pad_hub_power(bool on)
-{
-	struct dwc3_msm *mdwc = context;
-	int ret = -1;
-
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_HUB_PWR_EN, on);
-		if (ret < 0) {
-			dev_err(mdwc->dev, "fail to set pad hub power! (%d)(%d)\n", on, ret);
-		} else {
-			dev_info(mdwc->dev, "set pad hub power success (%d)\n", on);
-		}
-	} else {
-		dev_info(mdwc->dev, "not in pad, skip pad hub power control! (%d)(%d)(%d)\n",
-			on, AX_MicroP_IsP01Connected(), pad_exist());
-	}
-
-	return ret;
-}
-
-
-static int asus_dwc3_usb_mydp_switch(enum usb_mydp_sw req_side)
-{
-	int ret = -1;
-	int gpio_usb_sw_sel = 0;
-
-	if (g_ASUS_hwID == A90_EVB0) {
-		gpio_usb_sw_sel = GPIO_USB_SW_SEL_EVB0;
-	} else if (g_ASUS_hwID == A90_EVB) {
-		gpio_usb_sw_sel = GPIO_USB_SW_SEL_EVB;
-	} else {
-		gpio_usb_sw_sel = GPIO_USB_SW_SEL_SR1;
-	}
-
-	switch (req_side) {
-	case USB_PORT:
-		ret = gpio_direction_output(gpio_usb_sw_sel, 1);
-		if(ret) {
-			printk("[usb_dwc3] switch to usb port fail!!!(%d)(%d)\r\n", req_side, ret);
-			goto out;
-		}
-		printk("[usb_dwc3] switch to usb port (%d)\r\n", gpio_get_value(gpio_usb_sw_sel));
-		break;
-	case MYDP_PORT:
-		ret = gpio_direction_output(gpio_usb_sw_sel, 0);
-		if(ret) {
-			printk("[usb_dwc3] switch to mydp port fail!!!(%d)(%d)\r\n", req_side, ret);
-			goto out;
-		}
-		printk("[usb_dwc3] switch to mydp port (%d)\r\n", gpio_get_value(gpio_usb_sw_sel));
-		break;
-	default:
-		printk("[usb_dwc3] unknown switch!!! (%d)\r\n", req_side);
-		goto out;
-	}
-
-out:
-	return ret;
-}
-
-static int asus_bat_microp_event_handler (
-	struct notifier_block *this,
-	unsigned long event,
-	void *ptr)
-{
-	struct dwc3_msm *mdwc = context;
-	switch (event) {
-	case P01_ADD:
-		printk("%s() Pad attached! Enable usb! %s\r\n", __FUNCTION__, pad_exist()?"true":"false");
-/*
-		asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
-		asus_dwc3_usb_mydp_switch(USB_PORT);
-		asus_dwc3_vbus_out_enable(false, 1);
-		asus_dwc3_set_pad_cbus_en(true);
-		asus_dwc3_mode_switch(DWC3_USB_HOST);
-		asus_dwc3_set_pad_camera_power(true);
-                asus_dwc3_set_pad_hub_power(true);
-*/
-		asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
-		asus_dwc3_usb_mydp_switch(USB_PORT);
-		asus_dwc3_vbus_out_enable(false, 1);
-		asus_dwc3_set_pad_camera_power(1);
-		asus_dwc3_set_pad_hub_power(1);
-
-		break;
-	case P01_REMOVE: // means P01 removed
-		printk("%s() Pad deattached! Disable usb! \r\n", __FUNCTION__);
-		asus_dwc3_set_pad_host_sw(MICROP_USB_PATH_HOST);
-		asus_dwc3_usb_mydp_switch(MYDP_PORT);
-		asus_dwc3_vbus_out_enable(false, 1);
-		asus_dwc3_set_pad_camera_power(0);
-		asus_dwc3_set_pad_hub_power(0);
-/*
-		asus_dwc3_set_id_state(false);
-		asus_dwc3_set_pad_camera_power(false);
-                asus_dwc3_set_pad_hub_power(false);
-		asus_dwc3_mode_switch(DWC3_USB_PERIPHERAL);
-		asus_dwc3_set_pad_cbus_en(false);
-		asus_dwc3_vbus_out_enable(false, 1);
-*/
-		//asus_dwc3_usb_mydp_switch(MYDP_PORT);
-		pm_stay_awake(mdwc->dev);
-		break;
-	default:
-		return NOTIFY_DONE;
-	}
-
-	return NOTIFY_DONE;
-}
-
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_SLIMPORT_ANX7808
 static void asus_dwc3_set_id_state(int online)
 {
+	struct dwc3_msm *mdwc = context;
+
+	//ASUS_BSP+++ BennyCheng "add otg check at boot"
+	if (!g_otg_check_at_boot) {
+		printk("[usb_dwc3] not handle ID events before boot completed (%d)\n", online);
+		return;
+	}
+	//ASUS_BSP--- BennyCheng "add otg check at boot"
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		printk("[usb_dwc3] ignore abnormal ID events in pad (%d)\n", online);
+		return;
+	}
+
+	if (DWC3_USB_AUTO != mdwc->ext_xceiv.otg_mode) {
+		printk("[usb_dwc3] OTG not support for non AUTO mode!(%d)\n", mdwc->ext_xceiv.otg_mode);
+		return;
+	}
+
+#ifdef CONFIG_ASUS_CARKIT
+	if((online && (asus_state_otg > ASUS_OTG_DISCONNECT)) || ((!online) && (asus_state_otg <= ASUS_OTG_DISCONNECT))){
+		printk("[usb_dwc3] ID already set to %d (%d)\n", online, asus_state_otg);
+		return;
+	}
+
+	if (online) {
+		printk("[usb_dwc3] OTG ID in\n");
+		asus_state_otg = ASUS_OTG_CONNECT;
+	} else {
+		printk("[usb_dwc3] OTG ID out\n");
+		asus_state_otg = ASUS_OTG_DISCONNECT;
+	}
+
+	if (atomic_read(&mdwc->in_lpm)) {
+		printk("[usb_dwc3] %s received in LPM\n", __func__);
+		queue_delayed_work(system_nrt_wq, &mdwc->resume_work, 0);
+	} else {
+		mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg, DWC3_EVENT_XCEIV_STATE);
+	}
+#else
+	if((online && mdwc->ext_xceiv.id_state) || (!online && !mdwc->ext_xceiv.id_state)) {
+		printk("[usb_dwc3] ID already set to %d (%d)\n", online, mdwc->ext_xceiv.id_state);
+		return;
+	}
+
 	if (online) {
 		printk("[usb_dwc3] OTG ID in\n");
 		asus_dwc3_mode_switch(DWC3_USB_HOST);
@@ -3147,12 +4810,80 @@ static void asus_dwc3_set_id_state(int online)
 		printk("[usb_dwc3] OTG ID out\n");
 		asus_dwc3_mode_switch(DWC3_USB_PERIPHERAL);
 	}
+#endif
+
+	mdwc->ext_xceiv.id_state = online;
+}
+#endif
+
+#ifdef CONFIG_ASUS_CARKIT
+static ssize_t otg_carkit_switch_name(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "Asus-carkit\n");
 }
 
-static struct notifier_block asus_bat_microp_notifier = {
-        .notifier_call = asus_bat_microp_event_handler,
-};
+static ssize_t otg_carkit_switch_state(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "%d\n", asus_state_carkit);
+}
+
+int CarKitNotifyInitialize(void)
+{
+	int ret = 0;
+	asus_switch_otg_carkit.name = "dock";
+	asus_switch_otg_carkit.print_state = otg_carkit_switch_state;
+	asus_switch_otg_carkit.print_name = otg_carkit_switch_name;
+	ret = switch_dev_register(&asus_switch_otg_carkit);
+	if (ret < 0) {
+	    printk("[usb_dwc3] %s: Unable to register switch dev! %d\n", __FUNCTION__, ret);
+	    return -1;
+	}
+	return 0;
+}
 #endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+#ifdef CONFIG_CHARGER_ASUS
+static void asus_set_vbus_state(int online){
+	static bool init;
+	struct dwc3_msm *dwc = context;
+	printk("[usb_dwc3]PMIC BSV:%d\n",online);
+	if(dwc->ext_xceiv.bsv!=online){
+		if (dwc->otg_xceiv && (dwc->ext_xceiv.otg_capability ||!init)) {
+			//ASUS_BSP+++ BennyCheng "ignore BSV events in host mode or in pad auto mode"
+			if (dwc->ext_xceiv.host_mode || (DWC3_USB_AUTO == dwc->ext_xceiv.otg_mode
+				&& AX_MicroP_IsP01Connected() && pad_exist())) {
+				dev_err(dwc->dev, "PMIC: ignore BSV events in host mode or in pad auto mode (%d)(%d)(%d)(%d)\n",
+					online, AX_MicroP_IsP01Connected(), pad_exist(), dwc->ext_xceiv.host_mode);
+			} else {
+				dwc->ext_xceiv.bsv = online;
+				if (atomic_read(&dwc->in_lpm)) {
+					dev_dbg(dwc->dev,"%s received in LPM\n", __func__);
+					queue_delayed_work(system_nrt_wq,&dwc->resume_work, 0);
+				} else {
+					dwc->ext_xceiv.notify_ext_events(dwc->otg_xceiv->otg,DWC3_EVENT_XCEIV_STATE);
+				}
+			}
+			//ASUS_BSP--- BennyCheng "ignore BSV events in host mode or in pad auto mode"
+		}
+	}
+	if (!init)
+		init = true;
+	dwc->vbus_active = online;
+	//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+	dwc->ext_xceiv.vbus_state = online;
+	//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+}
+#endif
+
+void asus_dwc3_reset_notify(void){
+	struct dwc3_msm *mdwc = context;
+	if((mdwc->charger.chg_type == DWC3_SDP_CHARGER)&&(g_charger_mode!=ASUS_CHG_SRC_USB)){
+		schedule_work(&asus_usb_work);
+	}
+}
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 
 static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 {
@@ -3160,9 +4891,11 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	struct dwc3_msm *mdwc;
 	struct resource *res;
 	void __iomem *tcsr;
+	//ASUS_BSP+++ BennyCheng "not use pmic & adc for id pin detection"
 #ifndef CONFIG_SLIMPORT_ANX7808
 	unsigned long flags;
 #endif
+	//ASUS_BSP--- BennyCheng "not use pmic & adc for id pin detection"
 	int ret = 0;
 	int len = 0;
 	u32 tmp[3];
@@ -3174,9 +4907,9 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, mdwc);
-
+	//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
 	context = mdwc;
-
+	//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 	mdwc->dev = &pdev->dev;
 
 	INIT_LIST_HEAD(&mdwc->req_complete_list);
@@ -3184,11 +4917,18 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&mdwc->resume_work, dwc3_resume_work);
 	INIT_WORK(&mdwc->restart_usb_work, dwc3_restart_usb_work);
 	INIT_WORK(&mdwc->usb_block_reset_work, dwc3_block_reset_usb_work);
+	//ASUS_BSP+++ BennyCheng "not use pmic & adc for id pin detection"
 #ifndef CONFIG_SLIMPORT_ANX7808
 	INIT_WORK(&mdwc->id_work, dwc3_id_work);
 	INIT_DELAYED_WORK(&mdwc->init_adc_work, dwc3_init_adc_work);
 #endif
+	//ASUS_BSP--- BennyCheng "not use pmic & adc for id pin detection"
 	init_completion(&mdwc->ext_chg_wait);
+
+	//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+	INIT_WORK(&asus_usb_work, asus_usb_detect_work);
+	INIT_DELAYED_WORK(&asus_chg_work, asus_chg_detect_work);
+	//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 
 	ret = dwc3_msm_config_gdsc(mdwc, 1);
 	if (ret) {
@@ -3366,13 +5106,36 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	}
 
 	mdwc->id_state = mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
+	//ASUS_BSP+++ BennyCheng "depend on PMIC for VBUS notifications"
+#ifdef CONFIG_CHARGER_ASUS
 	mdwc->ext_xceiv.otg_capability = of_property_read_bool(node,
 				"qcom,otg-capability");
+#else
+	mdwc->ext_xceiv.otg_capability = 0 ;
+#endif
+	dev_info(&pdev->dev, "otg_capability = %d\n", mdwc->ext_xceiv.otg_capability);
+	//ASUS_BSP--- BennyCheng "depend on PMIC for VBUS notifications"
+
 	mdwc->charger.charging_disabled = of_property_read_bool(node,
 				"qcom,charging-disabled");
 
 	mdwc->charger.skip_chg_detect = of_property_read_bool(node,
 				"qcom,skip-charger-detection");
+
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	mdwc->ext_xceiv.otg_mode = DWC3_USB_AUTO;
+	mdwc->ext_xceiv.host_mode = 0;
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+	//ASUS_BSP+++ BennyCheng "init bsv & id state for boot case"
+	mdwc->ext_xceiv.bsv = false;
+	//ASUS_BSP-- BennyCheng "init bsv & id state for boot case"
+
+	//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+	mdwc->ext_xceiv.vbus_state = 0;
+	mdwc->ext_xceiv.id_state = 0;
+	//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
 	/*
 	 * DWC3 has separate IRQ line for OTG events (ID/BSV) and for
 	 * DP and DM linestate transitions during low power mode.
@@ -3390,6 +5153,8 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 			goto disable_hs_ldo;
 		}
 	}
+
+//ASUS_BSP+++ BennyCheng "not use pmic & adc for id pin detection"
 #ifndef CONFIG_SLIMPORT_ANX7808
 	if (mdwc->ext_xceiv.otg_capability) {
 		mdwc->pmic_id_irq =
@@ -3436,6 +5201,8 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 		}
 	}
 #endif
+//ASUS_BSP--- BennyCheng "not use pmic & adc for id pin detection"
+
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	if (!res) {
 		dev_dbg(&pdev->dev, "missing TCSR memory resource\n");
@@ -3478,6 +5245,10 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	else if (!mdwc->hsphy_init_seq)
 		dev_warn(&pdev->dev, "incorrect hsphyinitseq.Using PORvalue\n");
 
+	//ASUS_BSP+++ BennyCheng "support dynamic hsphy parameter_override_x setting"
+	mdwc->hsphy_init_seq = PARAMETER_OVERRIDE_X_PHONE;
+	//ASUS_BSP--- BennyCheng "support dynamic hsphy parameter_override_x setting"
+
 	if (of_property_read_u32(node, "qcom,dwc-ssphy-deemphasis-value",
 						&mdwc->deemphasis_val))
 		dev_dbg(&pdev->dev, "unable to read ssphy deemphasis value\n");
@@ -3512,6 +5283,11 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 			"unable to read platform data qdss tx fifo size\n");
 
 	dwc3_set_notifier(&dwc3_msm_notify_event);
+
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+#ifdef CONFIG_CHARGER_ASUS
+	registerChargerInOutNotificaition(&asus_set_vbus_state);
+#else
 	/* usb_psy required only for vbus_notifications or charging support */
 	if (mdwc->ext_xceiv.otg_capability ||
 			!mdwc->charger.charging_disabled) {
@@ -3538,6 +5314,8 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 			goto disable_hs_ldo;
 		}
 	}
+#endif
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 
 	if (node) {
 		ret = of_platform_populate(node, NULL, NULL, &pdev->dev);
@@ -3589,17 +5367,22 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	} else {
 		dev_dbg(&pdev->dev, "No OTG, DWC3 running in host only mode\n");
 		mdwc->host_mode = 1;
-		mdwc->vbus_otg = devm_regulator_get(&pdev->dev, "vbus_dwc3");
-		if (IS_ERR(mdwc->vbus_otg)) {
-			dev_dbg(&pdev->dev, "Failed to get vbus regulator\n");
-			mdwc->vbus_otg = 0;
-		} else {
-			ret = regulator_enable(mdwc->vbus_otg);
-			if (ret) {
+		//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+		if (g_ASUS_hwID != A90_EVB0) {
+			mdwc->vbus_otg = devm_regulator_get(&pdev->dev, "vbus_dwc3");
+			if (IS_ERR(mdwc->vbus_otg)) {
+				dev_dbg(&pdev->dev, "Failed to get vbus regulator\n");
 				mdwc->vbus_otg = 0;
-				dev_err(&pdev->dev, "Failed to enable vbus_otg\n");
+			} else {
+				ret = regulator_enable(mdwc->vbus_otg);
+				if (ret) {
+					mdwc->vbus_otg = 0;
+					dev_err(&pdev->dev, "Failed to enable vbus_otg\n");
+				}
 			}
 		}
+		//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
 		mdwc->otg_xceiv = NULL;
 	}
 	if (mdwc->ext_xceiv.otg_capability && mdwc->charger.start_detection) {
@@ -3607,22 +5390,81 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 		if (ret)
 			dev_err(&pdev->dev, "Fail to setup dwc3 setup cdev\n");
 	}
-#ifdef CONFIG_SLIMPORT_ANX7808
-	dp_registerCarkitInOutNotificaition(&asus_dwc3_set_id_state);
-	register_microp_notifier(&asus_bat_microp_notifier);
-	notify_register_microp_notifier(&asus_bat_microp_notifier, "usb_detect");
-#endif
+
 	device_init_wakeup(mdwc->dev, 1);
 	pm_stay_awake(mdwc->dev);
 	dwc3_msm_debugfs_init(mdwc);
+
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	ret = asus_dwc3_proc_init(mdwc);
+	if (ret) {
+		dev_err(&pdev->dev, "proc file init fail (%d)\n", ret);
+	}
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+	//ASUS_BSP+++ BennyCheng "add usb mydp switch support"
+	if (g_ASUS_hwID == A90_EVB0) {
+		gpio_request(GPIO_USB_SW_SEL_EVB0, "USB_SW_SEL");
+	} else if (g_ASUS_hwID == A90_EVB) {
+		gpio_request(GPIO_USB_SW_SEL_EVB, "USB_SW_SEL");
+	} else {
+		gpio_request(GPIO_USB_SW_SEL_SR1, "USB_SW_SEL");
+	}
+	//ASUS_BSP--- BennyCheng "add usb mydp switch support"
+
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+	CarKitNotifyInitialize();
+#endif
+#ifdef CONFIG_SLIMPORT_ANX7808
+	dp_registerCarkitInOutNotificaition(&asus_dwc3_set_id_state);
+#endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
+	//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+	if (!microp_cb_delay_wq)
+		microp_cb_delay_wq = create_singlethread_workqueue("asus_dwc3_microp_cb_delay_wq");
+	INIT_DELAYED_WORK_DEFERRABLE(&microp_cb_delay_work, asus_dwc3_microp_cb_delay_work);
+	register_microp_notifier(&asus_dwc3_microp_notifier);
+	//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+
+	//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+	wake_lock_init(&early_suspend_wlock, WAKE_LOCK_SUSPEND, "asus_dwc3_early_suspend_wlock");
+	if (!early_suspend_delay_wq)
+		early_suspend_delay_wq = create_singlethread_workqueue("asus_dwc3_early_suspend_delay_wq");
+	INIT_DELAYED_WORK_DEFERRABLE(&early_suspend_delay_work, asus_dwc3_early_suspend_delay_work);
+	INIT_WORK(&late_resume_work, asus_dwc3_late_resume_work);
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+	register_early_suspend(&asus_dwc3_early_suspend_handler);
+#elif defined(CONFIG_FB)
+	fb_notif.notifier_call = asus_dwc3_fb_notifier_callback;
+	ret = fb_register_client(&fb_notif);
+	if (ret)
+		dev_err(&pdev->dev, "Unable to register fb_notifier: %d\n", ret);
+#endif
+	//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_init(&asus_dwc3_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+#ifdef CONFIG_SLIMPORT_ANX7808
+	INIT_WORK(&check_at_boot, asus_dwc3_check_at_boot);
+#endif
+//ASUS_BSP--- BennyCheng "add otg check at boot"
 
 	return 0;
 
 put_xcvr:
 	usb_put_transceiver(mdwc->otg_xceiv);
 put_psupply:
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+#ifndef CONFIG_CHARGER_ASUS
 	if (mdwc->usb_psy.dev)
 		power_supply_unregister(&mdwc->usb_psy);
+#endif
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 disable_hs_ldo:
 	dwc3_hsusb_ldo_enable(mdwc, 0);
 free_hs_ldo_init:
@@ -3682,8 +5524,12 @@ static int __devexit dwc3_msm_remove(struct platform_device *pdev)
 	}
 	if (mdwc->usb_psy.dev)
 		power_supply_unregister(&mdwc->usb_psy);
-	if (mdwc->vbus_otg)
-		regulator_disable(mdwc->vbus_otg);
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	if (g_ASUS_hwID != A90_EVB0) {
+		if (mdwc->vbus_otg)
+			regulator_disable(mdwc->vbus_otg);
+	}
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 
 	pm_runtime_disable(mdwc->dev);
 	device_init_wakeup(mdwc->dev, 0);
@@ -3705,6 +5551,48 @@ static int __devexit dwc3_msm_remove(struct platform_device *pdev)
 	clk_put(mdwc->xo_clk);
 
 	dwc3_msm_config_gdsc(mdwc, 0);
+
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	asus_dwc3_proc_cleanup();
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+	//ASUS_BSP+++ BennyCheng "add usb mydp switch support"
+	if (g_ASUS_hwID == A90_EVB0) {
+		gpio_free(GPIO_USB_SW_SEL_EVB0);
+	} else if (g_ASUS_hwID == A90_EVB) {
+		gpio_free(GPIO_USB_SW_SEL_EVB);
+	} else {
+		gpio_free(GPIO_USB_SW_SEL_SR1);
+	}
+	//ASUS_BSP--- BennyCheng "add usb mydp switch support"
+
+	//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+	cancel_delayed_work_sync(&microp_cb_delay_work);
+	destroy_workqueue(microp_cb_delay_wq);
+	unregister_microp_notifier(&asus_dwc3_microp_notifier);
+	//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+
+	//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+	cancel_delayed_work_sync(&early_suspend_delay_work);
+	cancel_work_sync(&late_resume_work);
+	destroy_workqueue(early_suspend_delay_wq);
+	wake_lock_destroy(&early_suspend_wlock);
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+	unregister_early_suspend(&asus_dwc3_early_suspend_handler);
+#elif defined(CONFIG_FB)
+	fb_unregister_client(&fb_notif);
+#endif
+	//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_destroy(&asus_dwc3_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+#ifdef CONFIG_SLIMPORT_ANX7808
+	cancel_work_sync(&check_at_boot);
+#endif
+//ASUS_BSP--- BennyCheng "add otg check at boot"
 
 	return 0;
 }
