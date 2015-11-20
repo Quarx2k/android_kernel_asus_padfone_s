@@ -1,5 +1,6 @@
 /*
         Wireless charger IDT P9023 Implementation
+
 */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -7,12 +8,25 @@
 #include <linux/workqueue.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
+#include <linux/asus_bat.h>
+#include <linux/asus_chg.h>
 #include <linux/i2c.h>
 #include <asm/uaccess.h>
 #include <linux/proc_fs.h>
 #include <linux/module.h>
-#include "idtp9023_charger.h"
-#include <linux/power_supply.h>
+#include "axc_IDTP9023Charger.h"
+
+//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
+extern void ASUS_Wireless_set_VDDMAX(void);
+extern void IDTP9023_handler_judgeWireless(void);
+extern bool g_ASUS_WC_set_low_VDDMAX; 
+extern bool g_PastTime_set_WC_low_VDD;
+//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
+//ASUS_BSP Eason_Chang:add WirelessChg soft start+++
+extern bool g_ASUS_WC_CHG_DONE_set_DCIN300;
+extern bool g_PastTime_set_WC_DCIN300;
+extern void set_DCIN_300mA(void);
+//ASUS_BSP Eason_Chang:add WirelessChg soft start---
 
 extern void msleep(unsigned int msecs);
 static u32 g_IDTP9023_slave_addr=0;
@@ -21,48 +35,35 @@ static int g_IDTP9023_reg_address=0;
 //Eason: read RxID +++
 static int IDTP9023_value_since_reg0xA854_shift[6];
 //Eason: read RxID ---
-static struct IDTP9023_info *g_IDTP9023_info = NULL;
-
+static struct IDTP9023_info *g_IDTP9023_info=NULL;
 struct IDTP9023_platform_data{
         int intr_gpio;
 };
-/*
-static enum power_supply_property pm_power_props_wireless[] = {
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_ONLINE,
-};
 
-static char *pm_power_supplied_to[] = {
-	"battery",
-};
-*/
 struct IDTP9023_info {
        struct i2c_client *i2c_client;
        struct IDTP9023_platform_data *pdata;
-       struct power_supply wireless_psy;
-       bool wireless_charging;
 };
 
-struct IDTP9023_command {
+struct IDTP9023_command{
     char *name;;
     u8 addr;
     u8 len;
-    enum readwrite {
-        E_READ=0,
-        E_WRITE=1,
-        E_READWRITE=2,
-        E_NOUSE=3,
+    enum readwrite{
+		E_READ=0,
+		E_WRITE=1,
+		E_READWRITE=2,
+		E_NOUSE=3,
     }rw;
 };
 
 enum IDTP9023_CMD_ID {
-    IDTP9023_CNTL,
+		IDTP9023_CNTL,
 };
 
-struct IDTP9023_command IDTP9023_CMD_Table[] = {
-    {"EOP", 0x00, 2, E_READWRITE}, //EOP
+struct IDTP9023_command IDTP9023_CMD_Table[]={
+		{"EOP",			0x00,  2,		E_READWRITE},	//EOP
 };
-
 
 static int IDTP9023_i2c_read(__u8 *buf_addr, int len, void *data)
 {
@@ -119,6 +120,22 @@ static int IDTP9023_i2c_read(__u8 *buf_addr, int len, void *data)
 static int IDTP9023_read_reg(int cmd, void *data)
 {
     int status=0;
+#if 0
+		if(cmd>=0 && cmd < ARRAY_SIZE(IDTP9023_CMD_Table))
+		{
+	        	if(E_WRITE==IDTP9023_CMD_Table[cmd].rw || E_NOUSE==IDTP9023_CMD_Table[cmd].rw)
+			{ // skip read for these command
+	            		printk("[BAT][WC][I2c]IDTP9023: read ignore cmd\r\n");      
+	        	}
+		       else
+			{   
+		            pr_debug("[BAT][WC][I2c]IDTP9023_read_reg\n");
+		            status=IDTP9023_i2c_read(IDTP9023_CMD_Table[cmd].addr, IDTP9023_CMD_Table[cmd].len, data);
+		        }    
+	    }
+	    else
+	        printk("[BAT][WC][I2c]IDTP9023: unknown read cmd\r\n");
+#endif
 		__u8 buf_addr[3];
 		buf_addr[0] = 0x88;
 		buf_addr[1] = 0x00;
@@ -164,6 +181,16 @@ static int IDTP9023_i2c_write(u16 addr, int len, void *data)
 	msg.len = len + 2, // register address len+1:u8 , len+2:u16 
 	msg.buf = buf;
 
+/*
+	struct i2c_msg msg[] = {
+		{
+			.addr = g_IDTP9023_slave_addr,
+			.flags = 0,
+			.len = len + 2, // register address len+1:u8 , len+2:u16 
+			.buf = buf,
+		},
+	};
+*/	
 
 if(3== g_IDTP9023_reg_address) 
 {
@@ -204,6 +231,18 @@ if( (4 <= g_IDTP9023_reg_address) && (9 >= g_IDTP9023_reg_address) )
 static int IDTP9023_write_reg(int cmd, void *data)
 {
     int status=0;
+#if 0
+    		if(cmd>=0 && cmd < ARRAY_SIZE(IDTP9023_CMD_Table))
+		{
+	       	 if(E_READ==IDTP9023_CMD_Table[cmd].rw  || E_NOUSE==IDTP9023_CMD_Table[cmd].rw)
+			 { // skip read for these command               
+	       	 }
+	        	else
+	            		status=IDTP9023_i2c_write(IDTP9023_CMD_Table[cmd].addr, IDTP9023_CMD_Table[cmd].len, data);
+	    	}
+	       else
+	        	printk("[BAT][WC][I2c]IDTP9023: unknown write cmd\r\n");
+#endif
 
 	uint16_t addr = 0x8800;
 
@@ -415,6 +454,8 @@ void IDTP9023_RxTurnOffTx(void)
 	printk("[BAT][WC]%s\n",__FUNCTION__);
 }
 
+extern void asus_chg_set_chg_mode(enum asus_chg_src chg_src);
+
 #define GPIO_WC_PD_DET 20
 struct workqueue_struct *wc_intr_wq = NULL;
 struct delayed_work wc_worker;
@@ -449,60 +490,79 @@ bool Is_WC_connect(void)
 	int connect;
 
 	//Eason_Chang: PF500KL WC_PD_DET reverse. default high, with wireless low+++
-	if (g_ASUS_hwID >= PF500KL_PR){	
+	if(g_ASUS_hwID >= PF500KL_PR){
+		
 		connect = !gpio_get_value(GPIO_WC_PD_DET);
-	} else {
+	}else{
 		connect = gpio_get_value(GPIO_WC_PD_DET);
 	}
 	//Eason_Chang: PF500KL WC_PD_DET reverse. default high, with wireless low---
 	
-	if (connect)
+	if(connect)
 		return true;
 	else
 		return false;
 }
 
-extern void setWirelessCharger(bool enable);
-
-static void wc_work(struct work_struct *data)
+static void wc_work(struct work_struct *dat)
 {
-	//Eason_Chang: PF500KL WC_PD_DET reverse. default high, with wireless low+++
 
-	if(g_ASUS_hwID >= PF500KL_PR) {
-		if(!gpio_get_value(GPIO_WC_PD_DET))
+	//Eason_Chang: PF500KL WC_PD_DET reverse. default high, with wireless low+++
+	if(g_ASUS_hwID >= PF500KL_PR){
+		if(1 == !gpio_get_value(GPIO_WC_PD_DET))
 		{
-			printk("Enable Wireless charger\n");
-			setWirelessCharger(true);
-			g_IDTP9023_info->wireless_charging = true;
-			g_IDTP9023_info->wireless_psy.type = POWER_SUPPLY_TYPE_WIRELESS;
-		}	
-		else
-		{
-			g_IDTP9023_reg_address = 0;//set default
-			setWirelessCharger(false);
-			g_IDTP9023_info->wireless_charging = false;
-			//g_IDTP9023_info->wireless_psy.type = POWER_SUPPLY_TYPE_BATTERY;
-			printk("Disable Wireless charger\n");
-		}	
-	} else {
-	//Eason_Chang: PF500KL WC_PD_DET reverse. default high, with wireless low---	
-		if(gpio_get_value(GPIO_WC_PD_DET))
-		{
-			printk("Enable Wireless charger\n");
-			setWirelessCharger(true);
-			g_IDTP9023_info->wireless_charging = true;
-			//g_IDTP9023_info->wireless_psy.type = POWER_SUPPLY_TYPE_WIRELESS;
+			asus_chg_set_chg_mode(ASUS_CHG_SRC_WC);
+
+			//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
+			IDTP9023_handler_judgeWireless();
+			//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
 		}	
 		else
 		{
 			//Eason: read RxID +++
-			printk("Disable Wireless charger\n");
 			g_IDTP9023_reg_address = 0;//set default
-			g_IDTP9023_info->wireless_charging = false;
-			//g_IDTP9023_info->wireless_psy.type = POWER_SUPPLY_TYPE_BATTERY;
+			//Eason: read RxID ---
+			asus_chg_set_chg_mode(ASUS_CHG_SRC_NONE);
+			//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
+			g_ASUS_WC_set_low_VDDMAX = false;
+			g_PastTime_set_WC_low_VDD = false;
+			ASUS_Wireless_set_VDDMAX();
+			//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
+			//ASUS_BSP Eason_Chang:add WirelessChg soft start+++
+			g_ASUS_WC_CHG_DONE_set_DCIN300 = false;
+			g_PastTime_set_WC_DCIN300 = false;
+			set_DCIN_300mA();
+			//ASUS_BSP Eason_Chang:add WirelessChg soft start---
+		}	
+	}else{
+	//Eason_Chang: PF500KL WC_PD_DET reverse. default high, with wireless low---	
+		if(1 == gpio_get_value(GPIO_WC_PD_DET))
+		{
+			asus_chg_set_chg_mode(ASUS_CHG_SRC_WC);
+
+			//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
+			IDTP9023_handler_judgeWireless();
+			//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
+		}	
+		else
+		{
+			//Eason: read RxID +++
+			g_IDTP9023_reg_address = 0;//set default
+			//Eason: read RxID ---
+			asus_chg_set_chg_mode(ASUS_CHG_SRC_NONE);
+			//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
+			g_ASUS_WC_set_low_VDDMAX = false;
+			g_PastTime_set_WC_low_VDD = false;
+			ASUS_Wireless_set_VDDMAX();
+			//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
+			//ASUS_BSP Eason_Chang:add WirelessChg soft start+++
+			g_ASUS_WC_CHG_DONE_set_DCIN300 = false;
+			g_PastTime_set_WC_DCIN300 = false;
+			set_DCIN_300mA();
+			//ASUS_BSP Eason_Chang:add WirelessChg soft start---
 		}	
 	}
-	//power_supply_changed(&g_IDTP9023_info->wireless_psy);
+	
 }
 
 static int AXC_IDTP9023_GPIO_setting(void)
@@ -568,42 +628,22 @@ err_exit:
 	printk("[BAT][WC]IDTP9023_Charger_InitGPIO_err_exit\n");  
 	return err;  
 }
-/*
-static int pm_power_get_property_wireless(struct power_supply *psy,
-					  enum power_supply_property psp,
-					  union power_supply_propval *val)
-{
-	switch (psp) {
-	case POWER_SUPPLY_PROP_PRESENT:
-	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = g_IDTP9023_info->wireless_charging;
-		break;
-	default:
-		return -EINVAL;
-	}
-	return 0;
-}
-*/
 
 static int IDT_P9023_i2c_probe(struct i2c_client *client, const struct i2c_device_id *devid)
 {
 
 	struct IDTP9023_info *info;
-	int rc = 0;
-
 	wc_intr_wq = create_singlethread_workqueue("wirelessChg_intr_wq");
 	INIT_DELAYED_WORK(&wc_worker,wc_work);
-
 	//Eason when device boot on wireless Tx, set wireless charging status +++
 	queue_delayed_work(wc_intr_wq, &wc_worker, 10 * HZ); 
 	//Eason when device boot on wireless Tx, set wireless charging status ---
 	printk("%s+++\n",__FUNCTION__);
 
-	g_IDTP9023_info = info = kzalloc(sizeof(struct IDTP9023_info), GFP_KERNEL);
-	g_IDTP9023_slave_addr = client->addr;
+	g_IDTP9023_info=info = kzalloc(sizeof(struct IDTP9023_info), GFP_KERNEL);
+	g_IDTP9023_slave_addr=client->addr;
 	info->i2c_client = client;
 	i2c_set_clientdata(client, info);
-
 
 	create_IDTP9023_proc_file();
 	create_IDTP9023Address_proc_file();
@@ -614,21 +654,6 @@ static int IDT_P9023_i2c_probe(struct i2c_client *client, const struct i2c_devic
 	if (0 != AXC_IDTP9023_GPIO_setting()) 
 	{
 		printk( "[BAT][WC]Charger gpio can't init\n");
-	}
-/*
-	g_IDTP9023_info->wireless_psy.name = "wireless";
-	g_IDTP9023_info->wireless_psy.type = POWER_SUPPLY_TYPE_WIRELESS;
-	g_IDTP9023_info->wireless_psy.supplied_to = pm_power_supplied_to;
-	g_IDTP9023_info->wireless_psy.num_supplicants = ARRAY_SIZE(pm_power_supplied_to);
-	g_IDTP9023_info->wireless_psy.num_supplicants = ARRAY_SIZE(pm_power_supplied_to);
-	g_IDTP9023_info->wireless_psy.properties = pm_power_props_wireless;
-	g_IDTP9023_info->wireless_psy.num_properties = ARRAY_SIZE(pm_power_props_wireless);
-	g_IDTP9023_info->wireless_psy.get_property = pm_power_get_property_wireless;
-	rc = power_supply_register(&client->dev, &g_IDTP9023_info->wireless_psy);*/
-	if (rc < 0) {
-		pr_err("wlc: power_supply_register wireless failed rx = %d\n",
-			      rc);
-		//goto free_chip;
 	}
 
 	printk("%s---\n",__FUNCTION__);

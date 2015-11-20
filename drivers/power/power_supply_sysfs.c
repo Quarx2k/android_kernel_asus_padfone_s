@@ -45,7 +45,18 @@ static ssize_t power_supply_show_property(struct device *dev,
 					  char *buf) {
 	static char *type_text[] = {
 		"Unknown", "Battery", "UPS", "Mains", "USB",
-		"USB_DCP", "USB_CDP", "USB_ACA", "BMS", "Wireless", "DockBattery"
+		"USB_DCP", "USB_CDP", "USB_ACA"
+//ASUS BSP Eason_Chang : A86 porting +++
+		,"BMS"
+#ifdef CONFIG_BATTERY_ASUS
+		, "PadBattery", "DockBattery", "PadAC", "DockAC"
+#endif /* CONFIG_BATTERY_ASUS */
+//ASUS BSP Eason_Chang : A86 porting ---	
+//ASUS_BSP Eason_Chang: for Wireless charger+++
+#ifdef CONFIG_IDTP9023_CHARGER  
+		, "Wireless"
+#endif		
+//ASUS_BSP Eason_Chang: for Wireless charger---
 	};
 	static char *status_text[] = {
 		"Unknown", "Charging", "Discharging", "Not charging", "Full"
@@ -153,6 +164,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(input_current_max),
 	POWER_SUPPLY_ATTR(input_current_trim),
 	POWER_SUPPLY_ATTR(input_current_settled),
+	POWER_SUPPLY_ATTR(bypass_vchg_loop_debouncer),
 	POWER_SUPPLY_ATTR(current_now),
 	POWER_SUPPLY_ATTR(current_avg),
 	POWER_SUPPLY_ATTR(power_now),
@@ -185,14 +197,6 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(scope),
 	POWER_SUPPLY_ATTR(system_temp_level),
 	POWER_SUPPLY_ATTR(resistance),
-#ifdef CONFIG_PIC1503_FASTCG
-	POWER_SUPPLY_ATTR(charge_timeout),
-	POWER_SUPPLY_ATTR(fastcharger),
-#endif
-	/* Local extensions */
-	POWER_SUPPLY_ATTR(usb_hc),
-	POWER_SUPPLY_ATTR(usb_otg),
-	POWER_SUPPLY_ATTR(charge_enabled),
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_ATTR(model_name),
 	POWER_SUPPLY_ATTR(manufacturer),

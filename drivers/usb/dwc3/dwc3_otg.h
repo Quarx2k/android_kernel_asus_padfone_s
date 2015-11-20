@@ -22,10 +22,9 @@
 #include <linux/usb/otg.h>
 #include "power.h"
 
-#ifndef CONFIG_ASUS_PF500KL
 #define DWC3_IDEV_CHG_MAX 1500
-#else
-#define DWC3_IDEV_CHG_MAX 2000
+
+//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
 #include <linux/microp_notify.h>
 #include <linux/microp_api.h>
 #include <linux/microp_pin_def.h>
@@ -33,7 +32,91 @@
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <linux/gpio.h>
+
+enum dwc3_usb_mode_type {
+	DWC3_USB_NONE = 0,
+	DWC3_USB_PERIPHERAL,
+	DWC3_USB_HOST,
+	DWC3_USB_OTG,
+	DWC3_USB_AUTO,
+};
+
+extern int dwc3_pm_count;
+extern bool pad_exist(void);
+extern void asus_dwc3_vbus_out_enable(bool enable, bool force);
+//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+//ASUS_BSP+++ BennyCheng "add usb mydp switch support"
+#define GPIO_USB_SW_SEL_EVB0 65
+#define GPIO_USB_SW_SEL_EVB 73
+#define GPIO_USB_SW_SEL_SR1 65
+
+enum usb_mydp_sw {
+	MYDP_PORT = 0,
+	USB_PORT,
+};
+//ASUS_BSP--- BennyCheng "add usb mydp switch support"
+
+//ASUS_BSP+++ BennyCheng "add microp related debug files"
+enum microp_mode_sw {
+	MICROP_SLEEP = 0,
+	MICROP_ACTIVE,
+};
+
+enum microp_host_sw {
+	MICROP_USB_PATH_HOST = 0,
+	MICROP_USB_PATH_CLIENT,
+};
+//ASUS_BSP--- BennyCheng "add microp related debug files"
+
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+#include <linux/switch.h>
+
+enum asus_otg_state {
+	ASUS_OTG_NONE,
+	ASUS_OTG_DISCONNECT,
+	ASUS_OTG_CONNECT,
+	ASUS_OTG_CARKIT,
+	ASUS_OTG_HOST,
+};
+
+#define ASUS_CARKIT_OFFLINE 0
+#define ASUS_CARKIT_ONLINE 2 //android native defined. Desk:1, CAR:2...
+
+extern int asus_state_otg; //for ID low switch control
+extern int asus_state_carkit; //carkit state
+extern struct switch_dev asus_switch_otg_carkit;
+
+extern void asus_dwc3_mode_switch(enum dwc3_usb_mode_type req_mode);
+extern int dp_registerCarkitInOutNotificaition(void (*callback)(int));
+#else
+extern int dp_registerCarkitInOutNotificaition(void (*callback)(int));
 #endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
+//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+extern void asus_dwc3_host_mode_prepare(void);
+extern void asus_dwc3_host_mode_cleanup(void);
+//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+
+//ASUS_BSP+++ BennyCheng "support dynamic hsphy parameter_override_x setting"
+#define PARAMETER_OVERRIDE_X_DEBUG               0x0
+#define PARAMETER_OVERRIDE_X_PHONE               0xd190e4
+//ASUS_BSP--- BennyCheng "support dynamic hsphy parameter_override_x setting"
+
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+#ifdef CONFIG_CHARGER_ASUS
+#include <linux/asus_chg.h>
+#else
+enum asus_chg_src {
+	ASUS_CHG_SRC_NONE = 0,
+	ASUS_CHG_SRC_USB,
+	ASUS_CHG_SRC_DC,
+	ASUS_CHG_SRC_UNKNOWN,
+};
+#endif
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 
 struct dwc3_charger;
 
@@ -91,6 +174,7 @@ struct dwc3_charger {
 	enum dwc3_chg_type	chg_type;
 	unsigned		max_power;
 	bool			charging_disabled;
+
 	bool			skip_chg_detect;
 
 	/* start/stop charger detection, provided by external charger module */
@@ -115,33 +199,19 @@ enum dwc3_id_state {
 	DWC3_ID_FLOAT,
 };
 
-enum dwc3_usb_mode_type {
-	DWC3_USB_NONE = 0,
-	DWC3_USB_PERIPHERAL,
-	DWC3_USB_HOST,
-	DWC3_USB_OTG,
-	DWC3_USB_AUTO,
-};
-
-#define GPIO_USB_SW_SEL_EVB0 65
-#define GPIO_USB_SW_SEL_EVB 73
-#define GPIO_USB_SW_SEL_SR1 65
-
-enum usb_mydp_sw {
-	MYDP_PORT = 0,
-	USB_PORT,
-};
-
-enum microp_host_sw {
-	MICROP_USB_PATH_HOST = 0,
-	MICROP_USB_PATH_CLIENT,
-};
-
 /* external transceiver that can perform connect/disconnect monitoring in LPM */
 struct dwc3_ext_xceiv {
 	enum dwc3_id_state	id;
 	bool			bsv;
 	bool			otg_capability;
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	enum dwc3_usb_mode_type otg_mode;
+	bool host_mode;
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+	//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+	bool vbus_state;
+	bool id_state;
+	//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
 
 	/* to notify OTG about LPM exit event, provided by OTG */
 	void	(*notify_ext_events)(struct usb_otg *otg,
@@ -155,5 +225,4 @@ struct dwc3_ext_xceiv {
 extern int dwc3_set_ext_xceiv(struct usb_otg *otg,
 				struct dwc3_ext_xceiv *ext_xceiv);
 
-extern int dp_registerCarkitInOutNotificaition(void (*callback)(int));
 #endif /* __LINUX_USB_DWC3_OTG_H */

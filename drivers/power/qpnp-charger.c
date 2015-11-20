@@ -30,11 +30,21 @@
 #include <linux/regulator/machine.h>
 #include <linux/of_batterydata.h>
 #include <linux/qpnp-revid.h>
-#include <linux/alarmtimer.h>
+#include <linux/android_alarm.h>
 #include <linux/spinlock.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/qpnp/pin.h>
+
+//ASUS_BSP Lenter +++
+#include <linux/asus_bat.h>
+#include <linux/asus_chg.h>
+#include "AXI_Basic_Define.h"
+//ASUS_BSP Lenter ---
+//Eason : force wireless DC path draw 900 +++
+#include <asm/uaccess.h>
+#include <linux/proc_fs.h>
+//Eason : force wireless DC path draw 900 ---
 
 /* Interrupt offsets */
 #define INT_RT_STS(base)			(base + 0x10)
@@ -97,6 +107,7 @@
 #define CHGR_MISC_BOOT_DONE			0x42
 #define CHGR_BUCK_PSTG_CTRL			0x73
 #define CHGR_BUCK_COMPARATOR_OVRIDE_1		0xEB
+#define CHGR_BUCK_COMPARATOR_OVRIDE_2		0xEC
 #define CHGR_BUCK_COMPARATOR_OVRIDE_3		0xED
 #define CHG_OVR0				0xED
 #define CHG_TRICKLE_CLAMP			0xE3
@@ -223,10 +234,6 @@
 #define CHG_FLAGS_VCP_WA		BIT(0)
 #define BOOST_FLASH_WA			BIT(1)
 #define POWER_STAGE_WA			BIT(2)
-
-#ifdef ASUS_PF500KL_PROJECT
-static struct qpnp_chg_chip *the_chip = NULL;
-#endif
 
 struct qpnp_chg_irq {
 	int		irq;
@@ -360,10 +367,6 @@ struct qpnp_chg_chip {
 	int				warm_bat_decidegc;
 	int				cool_bat_decidegc;
 	int				fake_battery_soc;
-#ifdef ASUS_PF500KL_PROJECT
-	unsigned int           		ac_online;
-	unsigned int         	  	current_max;
-#endif
 	unsigned int			safe_current;
 	unsigned int			revision;
 	unsigned int			type;
@@ -375,9 +378,6 @@ struct qpnp_chg_chip {
 	struct power_supply		*usb_psy;
 	struct power_supply		*bms_psy;
 	struct power_supply		batt_psy;
-#ifdef ASUS_PF500KL_PROJECT
-	struct power_supply		ac_psy;
-#endif
 	uint32_t			flags;
 	struct qpnp_adc_tm_btm_param	adc_param;
 	struct work_struct		adc_measure_work;
@@ -419,6 +419,59 @@ static struct of_device_id qpnp_charger_match_table[] = {
 	{ .compatible = QPNP_CHARGER_DEV_NAME, },
 	{}
 };
+
+//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
+#define ASUS_WIRELESS_LOW_VDDMAX 3600
+#define GPIO_WC_PD_DET 20
+extern bool g_ASUS_WC_set_low_VDDMAX;
+#include <linux/gpio.h>
+//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
+
+//ASUS_BSP lenter +++
+static struct qpnp_chg_chip *the_chip = NULL;
+
+//Clay: get battery Temp only when report Capacity +++
+int report_temp = 250;
+//Clay: get battery Temp only when report Capacity ---
+
+#ifdef CONFIG_PM_8941_CHARGER
+extern irqreturn_t PM8941_charger_in_out_handler(int irq, void *dev_id);
+extern void asus_fsm_chargingstop(AXE_Charging_Error_Reason reason);
+extern void asus_fsm_chargingstart(void);
+static bool g_PMIC_CHG_EN = true;// bool to record ASUS set PMIC CHG_EN flag actively
+#endif
+//ASUS_BSP lenter ---
+//ASUS_BSP Eason: notify thermal limit +++
+extern void notifyThermalLimit(int thermalnotify);
+//ASUS_BSP Eason: notify thermal limit ---
+//Eason: Factory5060Mode+++
+#ifdef ASUS_FACTORY_BUILD
+extern bool g_5060modeCharging;
+#endif
+//Eason: Factory5060Mode---
+
+//Eason : force wireless DC path draw 900 +++
+#ifdef ASUS_FACTORY_BUILD
+static int g_ForceWC900_value = 0;
+#define DC_PATH_FORCE_DRAW_CUR 900
+#endif
+//Eason : force wireless DC path draw 900 ---
+
+//ASUS_Eason : force setting BAT CHG_EN 0x1049[7] for BT test+++ 
+#ifdef CONFIG_PM_8941_CHARGER
+static bool g_ForceSetCHG_EN_value = true;
+#endif
+//ASUS_Eason : force setting BAT CHG_EN 0x1049[7] for BT test---
+
+//ASUS_Eason : set iterm current bigger, let pm_stay_awake  period in qpnp_eoc_work shorter+++
+#ifdef CONFIG_PM_8941_CHARGER	
+static bool g_EocCurBigger_switch = false; 
+static int g_EocCurBigger_value = 200; 
+#endif
+//ASUS_Eason : set iterm current bigger, let pm_stay_awake  period in qpnp_eoc_work shorter---
+//ASUS_BSP Eason: fix PM8941 eoc_work change status full, but cap is 99% +++
+extern void notify_batteryService_statusFull(void);
+//ASUS_BSP Eason: fix PM8941 eoc_work change status full, but cap is 99% ---
 
 enum bpd_type {
 	BPD_TYPE_BAT_ID,
@@ -922,33 +975,24 @@ qpnp_chg_idcmax_set(struct qpnp_chg_chip *chip, int mA)
 
 	if (mA == QPNP_CHG_I_MAX_MIN_100) {
 		dc = 0x00;
-		printk("1current=%d setting %02x\n", mA, dc);
+		pr_debug("current=%d setting %02x\n", mA, dc);
 		return qpnp_chg_write(chip, &dc,
 			chip->dc_chgpth_base + CHGR_I_MAX_REG, 1);
 	} else if (mA == QPNP_CHG_I_MAX_MIN_150) {
 		dc = 0x01;
-		printk("2current=%d setting %02x\n", mA, dc);
+		pr_debug("current=%d setting %02x\n", mA, dc);
 		return qpnp_chg_write(chip, &dc,
 			chip->dc_chgpth_base + CHGR_I_MAX_REG, 1);
 	}
 
 	dc = mA / QPNP_CHG_I_MAXSTEP_MA;
 
-	printk("3current=%d setting 0x%x\n", mA, dc);
+	pr_debug("current=%d setting 0x%x\n", mA, dc);
 	rc = qpnp_chg_write(chip, &dc,
 		chip->dc_chgpth_base + CHGR_I_MAX_REG, 1);
 
 	return rc;
 }
-#ifdef ASUS_PF500KL_PROJECT
-void setWirelessCharger(bool enable) {
-	if (enable) {
-		qpnp_chg_idcmax_set(the_chip, QPNP_CHG_I_MAX_MAX_MA);
-	} else {
-		qpnp_chg_idcmax_set(the_chip, the_chip->maxinput_dc_ma);
-	}
-}
-#endif
 
 static int
 qpnp_chg_iusb_trim_get(struct qpnp_chg_chip *chip)
@@ -1048,14 +1092,21 @@ qpnp_chg_iusbmax_set(struct qpnp_chg_chip *chip, int mA)
 	return rc;
 }
 
-#define QPNP_CHG_VINMIN_MIN_MV		4000
+//ASUS_BSP Eason_Chang BAT charger driver set usb path charge current +++ 
+void asus_usbPath_chg_current_set(int mA)
+{
+	qpnp_chg_iusbmax_set(the_chip,mA);
+}
+//ASUS_BSP Eason_Chang BAT charger driver set usb path charge current ---
+
+#define QPNP_CHG_VINMIN_MIN_MV		4200
 #define QPNP_CHG_VINMIN_HIGH_MIN_MV	5600
 #define QPNP_CHG_VINMIN_HIGH_MIN_VAL	0x2B
 #define QPNP_CHG_VINMIN_MAX_MV		9600
 #define QPNP_CHG_VINMIN_STEP_MV		50
 #define QPNP_CHG_VINMIN_STEP_HIGH_MV	200
 #define QPNP_CHG_VINMIN_MASK		0x3F
-#define QPNP_CHG_VINMIN_MIN_VAL	0x0C
+#define QPNP_CHG_VINMIN_MIN_VAL	0x10
 static int
 qpnp_chg_vinmin_set(struct qpnp_chg_chip *chip, int voltage)
 {
@@ -1226,11 +1277,54 @@ qpnp_chg_usb_suspend_enable(struct qpnp_chg_chip *chip, int enable)
 static int
 qpnp_chg_charge_en(struct qpnp_chg_chip *chip, int enable)
 {
+
+	//ASUS_Eason : force setting BAT CHG_EN 0x1049[7] for BT test+++ 
+#ifdef CONFIG_PM_8941_CHARGER	
+	if(false == g_ForceSetCHG_EN_value)
+	{
+		printk("[BAT][PM8941][BT]Force disable BAT CHG_EN\n");
+		return qpnp_chg_masked_write(chip, chip->chgr_base + CHGR_CHG_CTRL,
+				CHGR_CHG_EN,
+				0, 1);
+	}
+#endif
+	//ASUS_Eason : force setting BAT CHG_EN 0x1049[7] for BT test---
+
 	if (chip->insertion_ocv_uv == 0 && enable) {
 		pr_debug("Battery not present, skipping\n");
 		return 0;
 	}
 	pr_debug("charging %s\n", enable ? "enabled" : "disabled");
+
+
+//ASUS_BSP Eason
+#ifdef CONFIG_PM_8941_CHARGER
+
+	//Eason record CHG_EN +++
+	if( (false==g_PMIC_CHG_EN) && (true == enable) )
+	{
+		printk("[BAT][PM8941]CHG_EN:force disable\n");
+		return 0;
+	}		
+	//Eason record CHG_EN ---
+	
+	if(enable){
+		asus_fsm_chargingstart();
+	}
+	else{
+		if (chip->chg_done){
+			asus_fsm_chargingstop(CHARGING_DONE);
+			//ASUS_BSP Eason: fix PM8941 eoc_work change status full, but cap is 99% +++
+			notify_batteryService_statusFull();
+			//ASUS_BSP Eason: fix PM8941 eoc_work change status full, but cap is 99% ---
+		}
+		else{
+			asus_fsm_chargingstop(POWERBANK_STOP);
+		}
+	}
+
+#endif
+
 	return qpnp_chg_masked_write(chip, chip->chgr_base + CHGR_CHG_CTRL,
 			CHGR_CHG_EN,
 			enable ? CHGR_CHG_EN : 0, 1);
@@ -1350,8 +1444,13 @@ qpnp_arb_stop_work(struct work_struct *work)
 	struct qpnp_chg_chip *chip = container_of(dwork,
 				struct qpnp_chg_chip, arb_stop_work);
 
+	pr_debug("arb_stop_work\n");//ASUS_BSP Eason: also need to do CR473081 while DC_PATH plug out
+		
 	if (!chip->chg_done)
+	{
 		qpnp_chg_charge_en(chip, !chip->charging_disabled);
+		printk("[BAT][PM8941][CHG_EN]%s:%d\n",__FUNCTION__, !chip->charging_disabled);//ASUS_BSP Eason: check CHG_EN
+	}
 	qpnp_chg_force_run_on_batt(chip, chip->charging_disabled);
 }
 
@@ -1392,7 +1491,9 @@ qpnp_chg_vbatdet_lo_irq_handler(int irq, void *_chip)
 	if (!chip->charging_disabled && (chg_sts & FAST_CHG_ON_IRQ)) {
 		schedule_delayed_work(&chip->eoc_work,
 			msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+		printk("[BAT][PM8941][sche_eoc_work]%s\n",__FUNCTION__);//ASUS BSP Eason:check schedule eoc_work
 		pm_stay_awake(chip->dev);
+		printk("[BAT][PM8941][pm_stay_awake]%s\n",__FUNCTION__);//ASUS BSP Eason:check pm_stay_awake
 	}
 	qpnp_chg_disable_irq(&chip->chg_vbatdet_lo);
 
@@ -1414,6 +1515,9 @@ static irqreturn_t
 qpnp_chg_usb_chg_gone_irq_handler(int irq, void *_chip)
 {
 	struct qpnp_chg_chip *chip = _chip;
+
+#if 0//ASUS_BSP Eason A91 FC_2133 porting +++
+
 	u8 usb_sts;
 	int rc;
 
@@ -1437,6 +1541,23 @@ qpnp_chg_usb_chg_gone_irq_handler(int irq, void *_chip)
 		schedule_delayed_work(&chip->arb_stop_work,
 			msecs_to_jiffies(ARB_STOP_WORK_MS));
 	}
+#else
+	
+	pr_debug("chg_gone triggered\n");
+	//ASUS_BSP Eason: also need to do CR473081 while DC_PATH plug out
+	/*  
+	*  CR473091:workaround for issue "failure to detect charger removal"
+	*/
+	//if (qpnp_chg_is_usb_chg_plugged_in(chip)) {
+	if (qpnp_chg_is_usb_chg_plugged_in(chip)||qpnp_chg_is_dc_chg_plugged_in(chip)) {
+		qpnp_chg_charge_en(chip, 0);
+		printk("[BAT][PM8941][CHG_EN]%s:0\n",__FUNCTION__);//ASUS_BSP Eason: check CHG_EN
+		qpnp_chg_force_run_on_batt(chip, 1);
+		schedule_delayed_work(&chip->arb_stop_work,
+			msecs_to_jiffies(ARB_STOP_WORK_MS));
+	}
+
+#endif//ASUS_BSP Eason A91 FC_2133 porting ---
 
 	return IRQ_HANDLED;
 }
@@ -1534,6 +1655,22 @@ qpnp_chg_vddmax_and_trim_set(struct qpnp_chg_chip *chip,
 		return -EINVAL;
 	}
 
+
+//Eason_Chang: PF500KL WC_PD_DET reverse. default high, with wireless low+++
+if( (true == g_ASUS_WC_set_low_VDDMAX)&&(1 == !gpio_get_value(GPIO_WC_PD_DET))&&(g_ASUS_hwID >= PF500KL_PR) )
+{
+	voltage =  ASUS_WIRELESS_LOW_VDDMAX;
+	printk("[BAT][WC][workAround]%s:3600mV\n",__FUNCTION__);
+}else
+//Eason_Chang: PF500KL WC_PD_DET reverse. default high, with wireless low---
+//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
+if( (true == g_ASUS_WC_set_low_VDDMAX)&&(1 == gpio_get_value(GPIO_WC_PD_DET))&&(g_ASUS_hwID < PF500KL_PR) )
+{
+	voltage =  ASUS_WIRELESS_LOW_VDDMAX;
+	printk("[BAT][WC][workAround]%s:3600mV\n",__FUNCTION__);
+}
+//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
+
 	vddmax = (voltage - QPNP_CHG_V_MIN_MV) / QPNP_CHG_V_STEP_MV;
 	rc = qpnp_chg_write(chip, &vddmax, chip->chgr_base + CHGR_VDD_MAX, 1);
 	if (rc) {
@@ -1595,6 +1732,19 @@ qpnp_chg_set_appropriate_vddmax(struct qpnp_chg_chip *chip)
 		qpnp_chg_vddmax_and_trim_set(chip, chip->max_voltage_mv,
 				chip->delta_vddmax_mv);
 }
+
+//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low +++
+void ASUS_Wireless_set_VDDMAX(void)
+{
+	if(NULL == the_chip)
+	{
+		printk("[BAT]%s:not ready\n",__FUNCTION__);
+	}else{
+		printk("[BAT][WC][workAround]%s\n",__FUNCTION__);
+		qpnp_chg_set_appropriate_vddmax(the_chip);
+	}
+}
+//ASUS_BSP Eason_Chang: wireless mode (1)Cap>=80% &(2)Temp>45degC set VDD_MAX(0x1040) low ---
 
 static void
 qpnp_usbin_health_check_work(struct work_struct *work)
@@ -1755,11 +1905,8 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 					power_supply_changed(chip->usb_psy);
 				}
 			}
-			if (!qpnp_chg_is_dc_chg_plugged_in(chip)) {
-				chip->delta_vddmax_mv = 0;
-				qpnp_chg_set_appropriate_vddmax(chip);
+			if (!qpnp_chg_is_dc_chg_plugged_in(chip))
 				chip->chg_done = false;
-			}
 
 			if (!qpnp_is_dc_higher_prio(chip))
 				qpnp_chg_idcmax_set(chip, chip->maxinput_dc_ma);
@@ -1790,20 +1937,62 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 				}
 			}
 
-			if (!qpnp_chg_is_dc_chg_plugged_in(chip)) {
-				chip->delta_vddmax_mv = 0;
-				qpnp_chg_set_appropriate_vddmax(chip);
-			}
 			schedule_delayed_work(&chip->eoc_work,
 				msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+			printk("[BAT][PM8941][sche_eoc_work]%s\n",__FUNCTION__);//ASUS BSP Eason:check schedule eoc_work
 			schedule_work(&chip->soc_check_work);
 		}
 
 		power_supply_set_present(chip->usb_psy, chip->usb_present);
 		schedule_work(&chip->batfet_lcl_work);
 	}
+//ASUS_BSP Eason
+#ifdef CONFIG_PM_8941_CHARGER
+	PM8941_charger_in_out_handler(irq, chip);
+#endif
 
 	return IRQ_HANDLED;
+}
+
+#define BUCK_VIN_LOOP_CMP_OVRD_MASK	0x30
+static int
+qpnp_chg_bypass_vchg_loop_debouncer(struct qpnp_chg_chip *chip, bool bypass)
+{
+	int rc;
+	u8 value = bypass ? 0x10 : 0;
+
+	pr_debug("bypass vchg_loop debouncer: %d\n", bypass);
+
+	rc = qpnp_chg_masked_write(chip, chip->buck_base + SEC_ACCESS,
+					0xFF, 0xA5, 1);
+	if (rc) {
+		pr_err("failed to write SEC_ACCESS register, rc = %d\n", rc);
+		return rc;
+	}
+
+	rc = qpnp_chg_masked_write(chip,
+			chip->buck_base + CHGR_BUCK_COMPARATOR_OVRIDE_2,
+			BUCK_VIN_LOOP_CMP_OVRD_MASK, value, 1);
+	if (rc)
+		pr_err("failed to write BUCK_COMP_OVRIDE_2, rc = %d\n", rc);
+
+	return rc;
+}
+
+static int
+qpnp_chg_vchg_loop_debouncer_setting_get(struct qpnp_chg_chip *chip)
+{
+	int rc;
+	u8 value;
+
+	rc = qpnp_chg_read(chip, &value,
+			chip->buck_base + CHGR_BUCK_COMPARATOR_OVRIDE_2, 1);
+	if (rc) {
+		pr_err("failed to read BUCK_CMP_OVERIDE_2, rc = %d\n", rc);
+		return 0;
+	}
+
+	return value & BUCK_VIN_LOOP_CMP_OVRD_MASK;
 }
 
 #define TEST_EN_SMBC_LOOP		0xE5
@@ -1894,6 +2083,7 @@ qpnp_chg_bat_if_batt_pres_irq_handler(int irq, void *_chip)
 			}
 			chip->insertion_ocv_uv = 0;
 			qpnp_chg_charge_en(chip, 0);
+			printk("[BAT][PM8941][CHG_EN]%s:0\n",__FUNCTION__);//ASUS_BSP Eason: check CHG_EN
 		}
 		chip->batt_present = batt_present;
 		pr_debug("psy changed batt_psy\n");
@@ -1926,21 +2116,41 @@ qpnp_chg_dc_dcin_valid_irq_handler(int irq, void *_chip)
 
 	if (chip->dc_present ^ dc_present) {
 		chip->dc_present = dc_present;
+		//ASUS_BSP Eason:  allow charging in host mode +++
+		/*
+		*  Subject: power: qpnp-charger: allow charging in host mode
+		*  If host mode is enabled, allow the BATFET to be closed
+		*  thus that a DC charger is still able to charge the battery.
+		*/
 		if (qpnp_chg_is_otg_en_set(chip))
 			qpnp_chg_force_run_on_batt(chip, !dc_present ? 1 : 0);
-		if (!dc_present && !qpnp_chg_is_usb_chg_plugged_in(chip)) {
-			chip->delta_vddmax_mv = 0;
-			qpnp_chg_set_appropriate_vddmax(chip);
+		//ASUS_BSP Eason:  allow charging in host mode ---
+		if (!dc_present && (!qpnp_chg_is_usb_chg_plugged_in(chip) ||
+					qpnp_chg_is_otg_en_set(chip))) {
 			chip->chg_done = false;
 		} else {
-			if (!qpnp_chg_is_usb_chg_plugged_in(chip)) {
-				chip->delta_vddmax_mv = 0;
-				qpnp_chg_set_appropriate_vddmax(chip);
-			}
 			schedule_delayed_work(&chip->eoc_work,
 				msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+			printk("[BAT][PM8941][sche_eoc_work]%s\n",__FUNCTION__);//ASUS BSP Eason:check schedule eoc_work
 			schedule_work(&chip->soc_check_work);
 		}
+
+		if (qpnp_is_dc_higher_prio(chip)) {
+			pr_debug("dc has higher priority\n");
+			if (dc_present) {
+				qpnp_chg_iusbmax_set(chip,
+						QPNP_CHG_I_MAX_MIN_100);
+				power_supply_set_voltage_limit(chip->usb_psy,
+						USB_5V_UV);
+			} else {
+				chip->aicl_settled = false;
+				qpnp_chg_iusbmax_set(chip,
+						USB_WALL_THRESHOLD_MA);
+				power_supply_set_voltage_limit(chip->usb_psy,
+						USB_9V_UV);
+			}
+		}
+
 		pr_debug("psy changed dc_psy\n");
 		power_supply_changed(&chip->dc_psy);
 		pr_debug("psy changed batt_psy\n");
@@ -2076,7 +2286,9 @@ qpnp_chg_chgr_chg_fastchg_irq_handler(int irq, void *_chip)
 			if (!chip->charging_disabled) {
 				schedule_delayed_work(&chip->eoc_work,
 					msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+				printk("[BAT][PM8941][sche_eoc_work]%s\n",__FUNCTION__);//ASUS BSP Eason:check schedule eoc_work
 				pm_stay_awake(chip->dev);
+				printk("[BAT][PM8941][pm_stay_awake]%s\n",__FUNCTION__);//ASUS BSP Eason:check pm_stay_awake
 			}
 			if (chip->parallel_ovp_mode)
 				switch_parallel_ovp_mode(chip, 1);
@@ -2124,6 +2336,7 @@ qpnp_batt_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_TRIM:
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED:
+	case POWER_SUPPLY_PROP_VCHG_LOOP_DBC_BYPASS:
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN:
 	case POWER_SUPPLY_PROP_COOL_TEMP:
 	case POWER_SUPPLY_PROP_WARM_TEMP:
@@ -2147,6 +2360,7 @@ qpnp_chg_buck_control(struct qpnp_chg_chip *chip, int enable)
 	}
 
 	rc = qpnp_chg_charge_en(chip, enable);
+	printk("[BAT][PM8941][CHG_EN]%s:%d\n",__FUNCTION__, enable);//ASUS_BSP Eason: check CHG_EN
 	if (rc) {
 		pr_err("Failed to control charging %d\n", rc);
 		return rc;
@@ -2222,6 +2436,7 @@ switch_usb_to_host_mode(struct qpnp_chg_chip *chip)
 		}
 	}
 
+	//ASUS_BSP Eason:  allow charging in host mode CR495760 +++
 	if (!qpnp_chg_is_dc_chg_plugged_in(chip)) {
 		rc = qpnp_chg_force_run_on_batt(chip, 1);
 		if (rc) {
@@ -2229,6 +2444,7 @@ switch_usb_to_host_mode(struct qpnp_chg_chip *chip)
 			return rc;
 		}
 	}
+	//ASUS_BSP Eason:  allow charging in host mode ---
 
 	/* force usb ovp fet off */
 	rc = qpnp_chg_masked_write(chip,
@@ -2289,6 +2505,7 @@ static enum power_supply_property msm_batt_power_props[] = {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_TRIM,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
+	POWER_SUPPLY_PROP_VCHG_LOOP_DBC_BYPASS,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN,
 	POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
@@ -2332,8 +2549,27 @@ qpnp_power_get_property_mains(struct power_supply *psy,
 			return 0;
 
 		val->intval = qpnp_chg_is_dc_chg_plugged_in(chip);
+		//Eason: Factory5060Mode+++
+		#ifdef ASUS_FACTORY_BUILD
+		if( false == g_5060modeCharging)
+		{
+                val->intval = 0;
+                printk("[BAT][Factory][5060][wireless]: set online 0 to show Notcharging icon\n");   
+		}
+		#endif	
+		//Eason: Factory5060Mode---
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		//Eason : force wireless DC path draw 900 +++
+		#ifdef ASUS_FACTORY_BUILD
+		if(1== g_ForceWC900_value)
+		{
+			val->intval = DC_PATH_FORCE_DRAW_CUR * 1000;
+			break;
+		}
+		#endif
+		//Eason : force wireless DC path draw 900 ---
+
 		val->intval = chip->maxinput_dc_ma * 1000;
 		break;
 	default:
@@ -2382,56 +2618,7 @@ get_prop_battery_voltage_now(struct qpnp_chg_chip *chip)
 		return results.physical;
 	}
 }
-#ifdef ASUS_PF500KL_PROJECT
-static int
-power_set_property_mains(struct power_supply *psy,
-				  enum power_supply_property psp,
-				  const union power_supply_propval *val)
-{
-	struct qpnp_chg_chip *chip = container_of(psy, struct qpnp_chg_chip,
-								ac_psy);
 
-	switch (psp) {
-	case POWER_SUPPLY_PROP_PRESENT:
-	case POWER_SUPPLY_PROP_ONLINE:
-		chip->ac_online = val->intval;
-		break;
-	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		chip->current_max = val->intval;
- 		break;
- 	default:
- 		return -EINVAL;
- 	}
-
-	power_supply_changed(&chip->ac_psy);
- 	return 0;
-}
-
-static int
-power_get_property_mains(struct power_supply *psy,
-				  enum power_supply_property psp,
-				  union power_supply_propval *val)
-{
-	struct qpnp_chg_chip *chip = container_of(psy, struct qpnp_chg_chip,
-								ac_psy);
-
-	switch (psp) {
-	case POWER_SUPPLY_PROP_PRESENT:
-	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = 0;
-		if (chip->charging_disabled)
-			return 0;
-		val->intval = chip->ac_online;
-		break;
-	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		val->intval = chip->current_max;
-		break;
-	default:
-		return -EINVAL;
-	}
-	return 0;
-}
-#endif
 #define BATT_PRES_BIT BIT(7)
 static int
 get_prop_batt_present(struct qpnp_chg_chip *chip)
@@ -2519,11 +2706,6 @@ get_prop_batt_status(struct qpnp_chg_chip *chip)
 	int rc;
 	u8 chgr_sts, bat_if_sts;
 
-	if ((qpnp_chg_is_usb_chg_plugged_in(chip) ||
-		qpnp_chg_is_dc_chg_plugged_in(chip)) && chip->chg_done) {
-		return POWER_SUPPLY_STATUS_FULL;
-	}
-
 	rc = qpnp_chg_read(chip, &chgr_sts, INT_RT_STS(chip->chgr_base), 1);
 	if (rc) {
 		pr_err("failed to read interrupt sts %d\n", rc);
@@ -2541,10 +2723,14 @@ get_prop_batt_status(struct qpnp_chg_chip *chip)
 	if (chgr_sts & FAST_CHG_ON_IRQ && bat_if_sts & BAT_FET_ON_IRQ)
 		return POWER_SUPPLY_STATUS_CHARGING;
 
-	/* report full if state of charge is 100 and a charger is connected */
+	/*
+	 * Report full if state of charge is 100 or chg_done is true
+	 * when a charger is connected and boost is disabled
+	 */
 	if ((qpnp_chg_is_usb_chg_plugged_in(chip) ||
-		qpnp_chg_is_dc_chg_plugged_in(chip))
-			&& get_batt_capacity(chip) == 100) {
+		qpnp_chg_is_dc_chg_plugged_in(chip)) &&
+		(chip->chg_done || get_batt_capacity(chip) == 100)
+		&& qpnp_chg_is_boost_en_set(chip) == 0) {
 		return POWER_SUPPLY_STATUS_FULL;
 	}
 
@@ -2599,6 +2785,14 @@ get_prop_charge_full(struct qpnp_chg_chip *chip)
 	return 0;
 }
 
+//ASUS_BSP Eason:fix PM8941 charger FSM soc based(<=99%) don't charge issue+++
+#ifdef CONFIG_PM_8941_CHARGER	
+extern int pm8941_getCapacity(void);
+static int asus_soc;
+#endif
+//ASUS_BSP Eason:fix PM8941 charger FSM soc based(<=99%) don't charge issue---
+
+#define DEFAULT_CAPACITY	50
 static int
 get_prop_capacity(struct qpnp_chg_chip *chip)
 {
@@ -2611,6 +2805,12 @@ get_prop_capacity(struct qpnp_chg_chip *chip)
 	if (chip->use_default_batt_values || !get_prop_batt_present(chip))
 		return DEFAULT_CAPACITY;
 
+	//ASUS_BSP Eason:fix PM8941 charger FSM soc based(<=99%) don't charge issue+++
+#ifdef CONFIG_PM_8941_CHARGER	
+	asus_soc = pm8941_getCapacity();
+#endif
+	//ASUS_BSP Eason:fix PM8941 charger FSM soc based(<=99%) don't charge issue---
+
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
@@ -2622,6 +2822,34 @@ get_prop_capacity(struct qpnp_chg_chip *chip)
 		charger_in = qpnp_chg_is_usb_chg_plugged_in(chip) ||
 			qpnp_chg_is_dc_chg_plugged_in(chip);
 
+//ASUS_BSP Eason:fix PM8941 charger FSM soc based(<=99%) don't charge issue+++
+#ifdef CONFIG_PM_8941_CHARGER
+		printk("[BAT]%s, batS:%d, bmsS:%d, chg_in:%d, cool:%d, warm:%d, resuChg:%d, ChgDis:%d, asus_soc:%d, socRL:%d\n"
+			,__FUNCTION__
+			,battery_status
+			,bms_status
+			,charger_in
+			,chip->bat_is_cool
+			,chip->bat_is_warm
+			,chip->resuming_charging
+			,chip->charging_disabled
+			,asus_soc
+			,chip->soc_resume_limit);
+
+		if (battery_status != POWER_SUPPLY_STATUS_CHARGING
+				/*mark below line, because bms_status is the same of asus own status, may show charging but not real charging
+				*  battery_status = get_prop_batt_status(chip); is PM8941 real charger FSM status
+				*  if battery_status != POWER_SUPPLY_STATUS_CHARGING, then should resume charging
+				*/
+				//&& bms_status != POWER_SUPPLY_STATUS_CHARGING
+				&& charger_in
+				&& !chip->bat_is_cool
+				&& !chip->bat_is_warm
+				&& !chip->resuming_charging
+				&& !chip->charging_disabled
+				&& chip->soc_resume_limit
+				&& asus_soc <= chip->soc_resume_limit) {//change "BMS soc" to "soc showed to user"(asus_soc) judge recharge
+#else
 		if (battery_status != POWER_SUPPLY_STATUS_CHARGING
 				&& bms_status != POWER_SUPPLY_STATUS_CHARGING
 				&& charger_in
@@ -2631,11 +2859,14 @@ get_prop_capacity(struct qpnp_chg_chip *chip)
 				&& !chip->charging_disabled
 				&& chip->soc_resume_limit
 				&& soc <= chip->soc_resume_limit) {
+#endif
+//ASUS_BSP Eason:fix PM8941 charger FSM soc based(<=99%) don't charge issue---
 			pr_debug("resuming charging at %d%% soc\n", soc);
 			chip->resuming_charging = true;
 			qpnp_chg_irq_wake_enable(&chip->chg_fastchg);
 			qpnp_chg_set_appropriate_vbatdet(chip);
 			qpnp_chg_charge_en(chip, !chip->charging_disabled);
+			printk("[BAT][PM8941][CHG_EN]%s:%d\n",__FUNCTION__, !chip->charging_disabled);//ASUS_BSP Eason: check CHG_EN
 		}
 		if (soc == 0) {
 			if (!qpnp_chg_is_usb_chg_plugged_in(chip)
@@ -2651,6 +2882,40 @@ get_prop_capacity(struct qpnp_chg_chip *chip)
 	 * from shutting down unecessarily */
 	return DEFAULT_CAPACITY;
 }
+
+//Eason: choose Capacity type SWGauge/BMS +++ 
+int get_BMS_capacity(void)
+{
+#if 0//Eason: Don't adjust BMS
+       int bms_soc;
+       int adjust_bms_soc;
+       bms_soc = get_prop_capacity(the_chip);
+
+      if(bms_soc>=80)
+       {
+               adjust_bms_soc = bms_soc+2;
+       }else if( (bms_soc<80)&&(bms_soc>=60) )
+       {
+               adjust_bms_soc = bms_soc+1;
+       }else
+       {
+               adjust_bms_soc = bms_soc;
+       }
+       
+       if(adjust_bms_soc>100)
+       {
+               adjust_bms_soc = 100;
+       }else if(adjust_bms_soc<0){
+               adjust_bms_soc = 0;
+       }       
+
+       printk("[BAT][Bms][adjust]:%d,%d\n",bms_soc, adjust_bms_soc);
+
+       return  adjust_bms_soc;
+#endif
+	return get_prop_capacity(the_chip);
+}
+//Eason: choose Capacity type SWGauge/BMS ---
 
 #define DEFAULT_TEMP		250
 #define MAX_TOLERABLE_BATT_TEMP_DDC	680
@@ -2788,10 +3053,38 @@ qpnp_batt_power_get_property(struct power_supply *psy,
 {
 	struct qpnp_chg_chip *chip = container_of(psy, struct qpnp_chg_chip,
 								batt_psy);
+	//ASUS_BSP +++ Josh_Liao "add asus battery driver"
+#ifdef CONFIG_BATTERY_ASUS
+		enum asus_bat_charger_cable charger;
+		int bat_status;
+#endif /* CONFIG_BATTERY_ASUS */
+	//ASUS_BSP --- Josh_Liao "add asus battery driver"
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
-		val->intval = get_prop_batt_status(chip);
+		//ASUS_BSP +++ Josh_Liao "add asus battery driver"
+#ifdef CONFIG_BATTERY_ASUS
+				bat_status = get_prop_batt_status(chip);
+				// set charger here, not in ac/usb irq context
+				if (chip->usb_present) {
+					charger = ASUS_BAT_CHARGER_USB;
+				} else if (chip->dc_present) {
+					charger = ASUS_BAT_CHARGER_AC;
+				} else if (POWER_SUPPLY_STATUS_CHARGING == bat_status) {
+					// special case: inserted in p01
+					charger = ASUS_BAT_CHARGER_OTHER_BAT;
+				} else {
+					charger = ASUS_BAT_CHARGER_NONE;
+				}
+				asus_bat_report_phone_charger(charger);
+		
+				val->intval = asus_bat_report_phone_status(bat_status);
+		
+#else
+				val->intval = get_prop_batt_status(chip);
+#endif /* CONFIG_BATTERY_ASUS */
+		//ASUS_BSP --- Josh_Liao "add asus battery driver"
+
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		val->intval = get_prop_charge_type(chip);
@@ -2803,7 +3096,7 @@ qpnp_batt_power_get_property(struct power_supply *psy,
 		val->intval = get_prop_batt_present(chip);
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
-		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+		val->intval = POWER_SUPPLY_TECHNOLOGY_LIPO;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
 		val->intval = chip->max_voltage_mv * 1000;
@@ -2818,7 +3111,8 @@ qpnp_batt_power_get_property(struct power_supply *psy,
 		val->intval = chip->insertion_ocv_uv;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		val->intval = get_prop_batt_temp(chip);
+		//val->intval = get_prop_batt_temp(chip);
+		val->intval = report_temp;
 		break;
 	case POWER_SUPPLY_PROP_COOL_TEMP:
 		val->intval = chip->cool_bat_decidegc;
@@ -2827,7 +3121,18 @@ qpnp_batt_power_get_property(struct power_supply *psy,
 		val->intval = chip->warm_bat_decidegc;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		val->intval = get_prop_capacity(chip);
+#ifdef CONFIG_BATTERY_ASUS
+		//ASUS_BSP Eason +++ get BMS capacity only in BatteryServiceGauge_OnCapacityReply  get_BMS_capacity(AXC_BatteryService.c)
+		#if 0
+		val->intval = asus_bat_report_phone_capacity(get_prop_batt_capacity(chip));
+		#endif
+		val->intval = asus_bat_report_phone_capacity(100);
+		//ASUS_BSP Eason --- get BMS capacity only in BatteryServiceGauge_OnCapacityReply  get_BMS_capacity(AXC_BatteryService.c)
+		//asus_bat_write_phone_bat_capacity_tofile();
+
+#else
+ 		val->intval = get_prop_capacity(chip);
+#endif /* CONFIG_BATTERY_ASUS */	
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = get_prop_current_now(chip);
@@ -2865,6 +3170,10 @@ qpnp_batt_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_ONLINE:
 		val->intval = get_prop_online(chip);
 		break;
+	case POWER_SUPPLY_PROP_VCHG_LOOP_DBC_BYPASS:
+		val->intval = qpnp_chg_vchg_loop_debouncer_setting_get(chip);
+		break;
+
 	default:
 		return -EINVAL;
 	}
@@ -2903,6 +3212,103 @@ qpnp_chg_bat_if_configure_btc(struct qpnp_chg_chip *chip)
 			chip->bat_if_base + BAT_IF_BTC_CTRL,
 			mask, btc_cfg, 1);
 }
+
+//ASUS_BSP +++ frank_tao "add asus battery driver"
+static struct qpnp_chg_chip *local_chip = NULL;
+//ASUS_BSP --- frank_tao "add asus battery driver"
+
+//ASUS_BSP Lenter +++
+static void api_phone_bat_power_supply_changed(void)
+{
+	power_supply_changed(&local_chip->batt_psy);
+}
+
+static int api_get_prop_batt_present(void)
+{
+	return get_prop_batt_present(local_chip);
+}
+
+static int api_get_prop_batt_capacity(void)
+{
+	return get_prop_capacity(local_chip);
+}
+
+static int api_get_prop_batt_status(void)
+{
+	return get_prop_batt_status(local_chip);
+}
+
+
+static int api_get_prop_charge_type(void)
+{
+	return get_prop_charge_type(local_chip);
+
+}
+
+static int api_get_prop_batt_health(void)
+{
+	return get_prop_batt_health(local_chip);
+}
+
+static int api_get_prop_batt_volt(void)
+{
+	return get_prop_battery_voltage_now(local_chip);
+}
+
+static int api_get_prop_batt_curr(void)
+{
+	return get_prop_current_now(local_chip);
+}
+
+int get_temp_for_ASUSswgauge(void)
+{ 
+	if (the_chip == NULL){
+  		printk("[BAT][SWgauge]%s():the_chip == NULL",__FUNCTION__);
+        return 25;
+	}
+	else
+	{
+
+			return get_prop_batt_temp(the_chip)/10;
+
+	}
+}
+
+int get_voltage_for_ASUSswgauge(void)
+{ 
+  	if (the_chip == NULL){
+ 	 	printk("[BAT][SWgauge]%s():the_chip == NULL",__FUNCTION__);
+		return 3700;
+  	}
+  	else
+  	{
+
+			return get_prop_battery_voltage_now(the_chip)/1000;
+	
+	}		
+}
+
+int get_current_for_ASUSswgauge(void)
+{ 
+  	if (the_chip == NULL){
+  		printk("[BAT][SWgauge]%s():the_chip == NULL",__FUNCTION__);
+		return 500;
+  	}
+  	else
+  	{
+		return get_prop_current_now(the_chip)/1000;
+  	}		
+}
+void asus_bat_status_change(void)
+{
+       power_supply_changed(the_chip->usb_psy);
+}
+
+
+void asus_chg_set_chg_mode_forBatteryservice(enum asus_chg_src Batteryservice_src)
+{
+}
+//ASUS_BSP Lenter ---
 
 #define QPNP_CHG_IBATSAFE_MIN_MA		100
 #define QPNP_CHG_IBATSAFE_MAX_MA		3250
@@ -3024,6 +3430,8 @@ static int qpnp_chg_tchg_max_set(struct qpnp_chg_chip *chip, int minutes)
 	return 0;
 }
 
+//ASUS_BSP Eason_Chang 2161 porting+++
+#if 0
 static void
 qpnp_chg_set_appropriate_battery_current(struct qpnp_chg_chip *chip)
 {
@@ -3042,6 +3450,8 @@ qpnp_chg_set_appropriate_battery_current(struct qpnp_chg_chip *chip)
 	pr_debug("setting %d mA\n", chg_current);
 	qpnp_chg_ibatmax_set(chip, chg_current);
 }
+#endif
+//ASUS_BSP Eason_Chang 2161 porting---
 
 static int
 qpnp_chg_vddsafe_set(struct qpnp_chg_chip *chip, int voltage)
@@ -3094,17 +3504,6 @@ qpnp_chg_trim_ibat(struct qpnp_chg_chip *chip, u8 ibat_trim)
 						IBAT_TRIM_HIGH_LIM))
 				return;
 		}
-
-		if (chip->type == SMBBP) {
-			rc = qpnp_chg_masked_write(chip,
-					chip->buck_base + SEC_ACCESS,
-					0xFF, 0xA5, 1);
-			if (rc) {
-				pr_err("failed to write SEC_ACCESS: %d\n", rc);
-				return;
-			}
-		}
-
 		ibat_trim |= IBAT_TRIM_GOOD_BIT;
 		rc = qpnp_chg_write(chip, &ibat_trim,
 				chip->buck_base + BUCK_CTRL_TRIM3, 1);
@@ -3140,7 +3539,7 @@ qpnp_chg_input_current_settled(struct qpnp_chg_chip *chip)
 	if (!chip->ibat_calibration_enabled)
 		return 0;
 
-	if (chip->type != SMBB && chip->type != SMBBP)
+	if (chip->type != SMBB)
 		return 0;
 
 	rc = qpnp_chg_read(chip, &reg,
@@ -3160,17 +3559,6 @@ qpnp_chg_input_current_settled(struct qpnp_chg_chip *chip)
 		pr_debug("Improper ibat_trim value=%x setting to value=%x\n",
 						ibat_trim, IBAT_TRIM_MEAN);
 		ibat_trim = IBAT_TRIM_MEAN;
-
-		if (chip->type == SMBBP) {
-			rc = qpnp_chg_masked_write(chip,
-					chip->buck_base + SEC_ACCESS,
-					0xFF, 0xA5, 1);
-			if (rc) {
-				pr_err("failed to write SEC_ACCESS: %d\n", rc);
-				return rc;
-			}
-		}
-
 		rc = qpnp_chg_masked_write(chip,
 				chip->buck_base + BUCK_CTRL_TRIM3,
 				IBAT_TRIM_OFFSET_MASK, ibat_trim, 1);
@@ -3275,6 +3663,30 @@ qpnp_boost_vget_uv(struct qpnp_chg_chip *chip)
 	}
 
 	return BOOST_MIN_UV + ((boost_reg - BOOST_MIN) * BOOST_STEP_UV);
+}
+
+static void
+qpnp_chg_set_appropriate_battery_current(struct qpnp_chg_chip *chip)
+{
+	unsigned int chg_current = chip->max_bat_chg_current;
+
+	if (chip->bat_is_cool)
+		chg_current = min(chg_current, chip->cool_bat_chg_ma);
+
+	if (chip->bat_is_warm)
+		chg_current = min(chg_current, chip->warm_bat_chg_ma);
+
+	//ASUS_BSP Eason: notify thermal limit +++
+	//don't do Qualcomm default thermal_mitigation change IBAT_MAX 0x1044
+#if 0
+	if (chip->therm_lvl_sel != 0 && chip->thermal_mitigation)
+		chg_current = min(chg_current,
+			chip->thermal_mitigation[chip->therm_lvl_sel]);
+#endif	
+	//ASUS_BSP Eason: notify thermal limit ---
+
+	pr_debug("setting %d mA\n", chg_current);
+	qpnp_chg_ibatmax_set(chip, chg_current);
 }
 
 static void
@@ -3392,10 +3804,10 @@ static int
 qpnp_chg_regulator_boost_enable(struct regulator_dev *rdev)
 {
 	struct qpnp_chg_chip *chip = rdev_get_drvdata(rdev);
+	int usb_present = qpnp_chg_is_usb_chg_plugged_in(chip);
 	int rc;
 
-	if (qpnp_chg_is_usb_chg_plugged_in(chip) &&
-			(chip->flags & BOOST_FLASH_WA)) {
+	if (usb_present && (chip->flags & BOOST_FLASH_WA)) {
 
 		if (ext_ovp_isns_present && chip->ext_ovp_ic_gpio_enabled) {
 			pr_debug("EXT OVP IC ISNS disabled\n");
@@ -3423,10 +3835,24 @@ qpnp_chg_regulator_boost_enable(struct regulator_dev *rdev)
 		}
 	}
 
-	return qpnp_chg_masked_write(chip,
+	rc = qpnp_chg_masked_write(chip,
 		chip->boost_base + BOOST_ENABLE_CONTROL,
 		BOOST_PWR_EN,
 		BOOST_PWR_EN, 1);
+	if (rc) {
+		pr_err("failed to enable boost rc = %d\n", rc);
+		return rc;
+	}
+	/*
+	 * update battery status when charger is connected and state is full
+	 */
+	if (usb_present && (chip->chg_done
+			|| (get_batt_capacity(chip) == 100)
+			|| (get_prop_batt_status(chip) ==
+			POWER_SUPPLY_STATUS_FULL)))
+		power_supply_changed(&chip->batt_psy);
+
+	return rc;
 }
 
 /* Boost regulator operations */
@@ -3517,6 +3943,20 @@ qpnp_chg_regulator_boost_disable(struct regulator_dev *rdev)
 		usleep(1000);
 
 		qpnp_chg_usb_suspend_enable(chip, 0);
+	}
+
+	/*
+	 * When a charger is connected,if state of charge is not full
+	 * resumeing charging else update battery status
+	 */
+	if (qpnp_chg_is_usb_chg_plugged_in(chip)) {
+		if (get_batt_capacity(chip) < 100 || !chip->chg_done) {
+			chip->chg_done = false;
+			chip->resuming_charging = true;
+			qpnp_chg_set_appropriate_vbatdet(chip);
+		} else if (chip->chg_done) {
+			power_supply_changed(&chip->batt_psy);
+		}
 	}
 
 	if (ext_ovp_isns_present && chip->ext_ovp_ic_gpio_enabled) {
@@ -3723,9 +4163,16 @@ qpnp_eoc_work(struct work_struct *work)
 	int ibat_ma, vbat_mv, rc = 0;
 	u8 batt_sts = 0, buck_sts = 0, chg_sts = 0;
 	bool vbat_lower_than_vbatdet;
-
+	static int test_term_current = 120;
+	if(qpnp_chg_is_dc_chg_plugged_in(chip)){
+		test_term_current = 170;
+	}else{
+		test_term_current = 120;
+	}
 	pm_stay_awake(chip->dev);
+	printk("[BAT][PM8941][pm_stay_awake]%s\n",__FUNCTION__);//ASUS BSP Eason:check pm_stay_awake
 	qpnp_chg_charge_en(chip, !chip->charging_disabled);
+	printk("[BAT][PM8941][CHG_EN][1]%s:%d\n",__FUNCTION__, !chip->charging_disabled);//ASUS_BSP Eason: check CHG_EN
 
 	rc = qpnp_chg_read(chip, &batt_sts, INT_RT_STS(chip->bat_if_base), 1);
 	if (rc) {
@@ -3759,18 +4206,25 @@ qpnp_eoc_work(struct work_struct *work)
 		ibat_ma = get_prop_current_now(chip) / 1000;
 		vbat_mv = get_prop_battery_voltage_now(chip) / 1000;
 
+//ASUS_BSP Eason_Chang: show term_current +++
+#if 0
 		pr_debug("ibat_ma = %d vbat_mv = %d term_current_ma = %d\n",
 				ibat_ma, vbat_mv, chip->term_current);
+#else
+		printk("[BAT][PM8941]ibat_ma = %d vbat_mv = %d term_current_ma = %d\n",
+				ibat_ma, vbat_mv, test_term_current);
+#endif
+//ASUS_BSP Eason_Chang: show term_current ---
 
 		vbat_lower_than_vbatdet = !(chg_sts & VBAT_DET_LOW_IRQ);
 		if (vbat_lower_than_vbatdet && vbat_mv <
 				(chip->max_voltage_mv - chip->resume_delta_mv
-				 - chip->vbatdet_max_err_mv)) {
+				 - VBATDET_MAX_ERR_MV)) {
 			vbat_low_count++;
 			pr_debug("woke up too early vbat_mv = %d, max_mv = %d, resume_mv = %d tolerance_mv = %d low_count = %d\n",
 					vbat_mv, chip->max_voltage_mv,
 					chip->resume_delta_mv,
-					chip->vbatdet_max_err_mv,
+					VBATDET_MAX_ERR_MV,
 					vbat_low_count);
 			if (vbat_low_count >= CONSECUTIVE_COUNT) {
 				pr_debug("woke up too early stopping\n");
@@ -3789,9 +4243,20 @@ qpnp_eoc_work(struct work_struct *work)
 		if (!(buck_sts & VDD_LOOP_IRQ)) {
 			pr_debug("Not in CV\n");
 			count = 0;
-		} else if ((ibat_ma * -1) > chip->term_current) {
+//ASUS_Eason : set iterm current bigger, let pm_stay_awake  period in qpnp_eoc_work shorter+++
+#ifndef CONFIG_PM_8941_CHARGER				
+		} else if ((ibat_ma * -1) > test_term_current) {
 			pr_debug("Not at EOC, battery current too high\n");
 			count = 0;
+#else
+		} else if (((ibat_ma * -1) > test_term_current) && (false == g_EocCurBigger_switch) ){
+			printk("[BAT][PM8941]Not at EOC, bat cur too high, sw:%d\n",g_EocCurBigger_switch);
+			count = 0;
+		} else if (((ibat_ma * -1) > g_EocCurBigger_value) && (true == g_EocCurBigger_switch) ){
+			printk("[BAT][PM8941]Not at EOC, bat cur too high, sw:%d, cur:%d\n",g_EocCurBigger_switch, g_EocCurBigger_value);
+			count = 0;
+#endif		
+//ASUS_Eason : set iterm current bigger, let pm_stay_awake  period in qpnp_eoc_work shorter---
 		} else if (ibat_ma > 0) {
 			pr_debug("Charging but system demand increased\n");
 			count = 0;
@@ -3806,13 +4271,15 @@ qpnp_eoc_work(struct work_struct *work)
 							? "cool" : "warm",
 						qpnp_chg_vddmax_get(chip));
 				}
-				chip->delta_vddmax_mv = 0;
-				qpnp_chg_set_appropriate_vddmax(chip);
-				qpnp_chg_charge_en(chip, 0);
+				if(!qpnp_chg_is_dc_chg_plugged_in(chip)){
+					qpnp_chg_charge_en(chip, 0);
+				}
+				printk("[BAT][PM8941][CHG_EN][2]%s:0\n",__FUNCTION__);//ASUS_BSP Eason: check CHG_EN
 				/* sleep for a second before enabling */
 				msleep(2000);
 				qpnp_chg_charge_en(chip,
 						!chip->charging_disabled);
+				printk("[BAT][PM8941][CHG_EN][3]%s:%d\n",__FUNCTION__, !chip->charging_disabled);//ASUS_BSP Eason: check CHG_EN
 				pr_debug("psy changed batt_psy\n");
 				power_supply_changed(&chip->batt_psy);
 				qpnp_chg_enable_irq(&chip->chg_vbatdet_lo);
@@ -3830,12 +4297,14 @@ qpnp_eoc_work(struct work_struct *work)
 check_again_later:
 	schedule_delayed_work(&chip->eoc_work,
 		msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+	printk("[BAT][PM8941][sche_eoc_work]%s\n",__FUNCTION__);//ASUS BSP Eason:check schedule eoc_work
 	return;
 
 stop_eoc:
 	vbat_low_count = 0;
 	count = 0;
 	pm_relax(chip->dev);
+	printk("[BAT][PM8941][pm_relax]%s\n",__FUNCTION__);//ASUS BSP Eason:check pm_relax
 }
 
 static void
@@ -3860,6 +4329,7 @@ qpnp_chg_insertion_ocv_work(struct work_struct *work)
 	pr_debug("batfet sts = %02x, charge_en = %02x ocv = %d\n",
 			bat_if_sts, charge_en, chip->insertion_ocv_uv);
 	qpnp_chg_charge_en(chip, !chip->charging_disabled);
+	printk("[BAT][PM8941][CHG_EN]%s:%d\n",__FUNCTION__, !chip->charging_disabled);//ASUS_BSP Eason: check CHG_EN
 	pr_debug("psy changed batt_psy\n");
 	power_supply_changed(&chip->batt_psy);
 }
@@ -3892,7 +4362,7 @@ qpnp_chg_adc_notification(enum qpnp_tm_state state, void *ctx)
 			state == ADC_TM_WARM_STATE ? "warm" : "cool");
 
 	if (state == ADC_TM_WARM_STATE) {
-		if (temp >= chip->warm_bat_decidegc) {
+		if (temp > chip->warm_bat_decidegc) {
 			/* Normal to warm */
 			bat_warm = true;
 			bat_cool = false;
@@ -3900,7 +4370,7 @@ qpnp_chg_adc_notification(enum qpnp_tm_state state, void *ctx)
 				chip->warm_bat_decidegc - HYSTERISIS_DECIDEGC;
 			chip->adc_param.state_request =
 				ADC_TM_COOL_THR_ENABLE;
-		} else if (temp >=
+		} else if (temp >
 				chip->cool_bat_decidegc + HYSTERISIS_DECIDEGC){
 			/* Cool to normal */
 			bat_warm = false;
@@ -3912,7 +4382,7 @@ qpnp_chg_adc_notification(enum qpnp_tm_state state, void *ctx)
 					ADC_TM_HIGH_LOW_THR_ENABLE;
 		}
 	} else {
-		if (temp <= chip->cool_bat_decidegc) {
+		if (temp < chip->cool_bat_decidegc) {
 			/* Normal to cool */
 			bat_warm = false;
 			bat_cool = true;
@@ -3920,7 +4390,7 @@ qpnp_chg_adc_notification(enum qpnp_tm_state state, void *ctx)
 				chip->cool_bat_decidegc + HYSTERISIS_DECIDEGC;
 			chip->adc_param.state_request =
 				ADC_TM_WARM_THR_ENABLE;
-		} else if (temp <=
+		} else if (temp <
 				chip->warm_bat_decidegc - HYSTERISIS_DECIDEGC){
 			/* Warm to normal */
 			bat_warm = false;
@@ -4035,7 +4505,7 @@ mutex_unlock:
 	return rc;
 }
 
-#define POWER_STAGE_REDUCE_CHECK_PERIOD_NS      (20LL * NSEC_PER_SEC)
+#define POWER_STAGE_REDUCE_CHECK_PERIOD_SECONDS		20
 #define POWER_STAGE_REDUCE_MAX_VBAT_UV			3900000
 #define POWER_STAGE_REDUCE_MIN_VCHG_UV			4800000
 #define POWER_STAGE_SEL_MASK				0x0F
@@ -4139,7 +4609,7 @@ int get_vbat_averaged(struct qpnp_chg_chip *chip, int sample_count)
 static void
 qpnp_chg_reduce_power_stage(struct qpnp_chg_chip *chip)
 {
-	ktime_t kt;
+	struct timespec ts;
 	bool power_stage_reduced_in_hw = qpnp_chg_is_power_stage_reduced(chip);
 	bool reduce_power_stage = false;
 	int vbat_uv = get_vbat_averaged(chip, 16);
@@ -4199,8 +4669,11 @@ qpnp_chg_reduce_power_stage(struct qpnp_chg_chip *chip)
 	}
 
 	if (usb_present && usb_ma_above_wall) {
-		kt = ns_to_ktime(POWER_STAGE_REDUCE_CHECK_PERIOD_NS);
-		alarm_start_relative(&chip->reduce_power_stage_alarm, kt);
+		getnstimeofday(&ts);
+		ts.tv_sec += POWER_STAGE_REDUCE_CHECK_PERIOD_SECONDS;
+		alarm_start_range(&chip->reduce_power_stage_alarm,
+					timespec_to_ktime(ts),
+					timespec_to_ktime(ts));
 	} else {
 		pr_debug("stopping power stage workaround\n");
 		chip->power_stage_workaround_running = false;
@@ -4235,14 +4708,13 @@ qpnp_chg_reduce_power_stage_work(struct work_struct *work)
 	qpnp_chg_reduce_power_stage(chip);
 }
 
-static enum alarmtimer_restart
-qpnp_chg_reduce_power_stage_callback(struct alarm *alarm, ktime_t now)
+static void
+qpnp_chg_reduce_power_stage_callback(struct alarm *alarm)
 {
 	struct qpnp_chg_chip *chip = container_of(alarm, struct qpnp_chg_chip,
 						reduce_power_stage_alarm);
 
 	schedule_work(&chip->reduce_power_stage_work);
-	return ALARMTIMER_NORESTART;
 }
 
 static int
@@ -4264,6 +4736,17 @@ qpnp_dc_power_set_property(struct power_supply *psy,
 			pr_err("Error setting idcmax property %d\n", rc);
 			return rc;
 		}
+
+		//Eason : force wireless DC path draw 900 +++
+		#ifdef ASUS_FACTORY_BUILD
+		if(1== g_ForceWC900_value)
+		{
+			chip->maxinput_dc_ma = DC_PATH_FORCE_DRAW_CUR;
+			break;
+		}
+		#endif
+		//Eason : force wireless DC path draw 900 ---
+		
 		chip->maxinput_dc_ma = (val->intval / 1000);
 
 		break;
@@ -4301,6 +4784,7 @@ qpnp_batt_power_set_property(struct power_supply *psy,
 		if (chip->charging_disabled) {
 			/* disable charging */
 			qpnp_chg_charge_en(chip, !chip->charging_disabled);
+			printk("[BAT][PM8941][CHG_EN][1]%s:%d\n",__FUNCTION__, !chip->charging_disabled);//ASUS_BSP Eason: check CHG_EN
 			qpnp_chg_force_run_on_batt(chip,
 						chip->charging_disabled);
 		} else {
@@ -4308,9 +4792,16 @@ qpnp_batt_power_set_property(struct power_supply *psy,
 			qpnp_chg_force_run_on_batt(chip,
 					chip->charging_disabled);
 			qpnp_chg_charge_en(chip, !chip->charging_disabled);
+			printk("[BAT][PM8941][CHG_EN][2]%s:%d\n",__FUNCTION__, !chip->charging_disabled);//ASUS_BSP Eason: check CHG_EN
 		}
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
+		//ASUS_BSP Eason: notify thermal limit +++
+		if(A90_EVB0!=g_ASUS_hwID )
+		{
+			notifyThermalLimit( val->intval);
+		}
+		//ASUS_BSP Eason: notify thermal limit ---
 		qpnp_batt_system_temp_level_set(chip, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
@@ -4330,6 +4821,9 @@ qpnp_batt_power_set_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN:
 		qpnp_chg_vinmin_set(chip, val->intval / 1000);
+		break;
+	case POWER_SUPPLY_PROP_VCHG_LOOP_DBC_BYPASS:
+		rc = qpnp_chg_bypass_vchg_loop_debouncer(chip, !!val->intval);
 		break;
 	default:
 		return -EINVAL;
@@ -5191,6 +5685,330 @@ qpnp_charger_read_dt_props(struct qpnp_chg_chip *chip)
 	return rc;
 }
 
+//ASUS_BSP lenter +++
+#ifdef CONFIG_PM_8941_CHARGER
+void pm8941_chg_enable_charging(bool enable)
+{
+	int rc;
+
+	//Eason record CHG_EN +++
+	if(g_PMIC_CHG_EN != enable)
+		printk("[BAT][PM8941]CHG_EN:%d\n",enable);
+
+	g_PMIC_CHG_EN = enable;
+	//Eason record CHG_EN ---
+
+	
+	rc = qpnp_chg_charge_en(the_chip, enable);
+	if (rc) {
+		pr_err("Failed to control charging %d\n", rc);
+	}
+}
+EXPORT_SYMBOL(pm8941_chg_enable_charging);
+
+int pm8941_is_usb_in(void)
+{	
+	return qpnp_chg_is_usb_chg_plugged_in(the_chip);
+}
+EXPORT_SYMBOL(pm8941_is_usb_in);
+
+int pm8941_is_dc_usb_in(void)
+{	
+	return ( qpnp_chg_is_usb_chg_plugged_in(the_chip)||qpnp_chg_is_dc_chg_plugged_in(the_chip) );
+}
+EXPORT_SYMBOL(pm8941_is_dc_usb_in);
+
+void pm8941_chg_usb_suspend_enable(int enable)
+{
+	qpnp_chg_usb_suspend_enable(the_chip, enable);
+}
+EXPORT_SYMBOL(pm8941_chg_usb_suspend_enable);
+
+int pm8941_get_prop_batt_status(void)
+{
+	return get_prop_batt_status(the_chip);
+}
+EXPORT_SYMBOL(pm8941_get_prop_batt_status);
+
+int pm8941_get_prop_batt_temp(void)
+{
+	return get_prop_batt_temp(the_chip);
+}
+EXPORT_SYMBOL(pm8941_get_prop_batt_temp);
+
+int pm8941_get_prop_battery_voltage_now(void)
+{
+	return get_prop_battery_voltage_now(the_chip);
+}
+EXPORT_SYMBOL(pm8941_get_prop_battery_voltage_now);
+//Eason: judge full by PM8941
+bool pm8941_is_full(void)
+{
+	if ((qpnp_chg_is_usb_chg_plugged_in(the_chip) ||
+		qpnp_chg_is_dc_chg_plugged_in(the_chip)) && the_chip->chg_done) {
+		return true;
+	}
+	else{
+		return false;
+	}
+}
+EXPORT_SYMBOL(pm8941_is_full);
+
+//ASUS_BSP Eason_Chang:add WirelessChg soft start+++
+void prepare_WC_soft_start(void)
+{
+	if(NULL == the_chip)
+	{
+		printk("[BAT]%s:not ready\n",__FUNCTION__);
+	}else{
+		pm8941_chg_enable_charging(false);
+		qpnp_chg_idcmax_set(the_chip, 300);
+		printk("[BAT][WC][workAround]%s\n",__FUNCTION__);
+	}
+}
+
+void WC_soft_start(void)
+{
+	if(NULL == the_chip)
+	{
+		printk("[BAT]%s:not ready\n",__FUNCTION__);
+	}else{
+		pm8941_chg_enable_charging(false);
+		qpnp_chg_idcmax_set(the_chip, 300);
+		pm8941_chg_enable_charging(true);
+		msleep(2000);
+		qpnp_chg_idcmax_set(the_chip,500);
+		msleep(2000);
+		qpnp_chg_idcmax_set(the_chip,700);
+		printk("[BAT][WC][workAround]%s\n",__FUNCTION__);
+	}
+}
+
+void set_DCIN_300mA(void)
+{
+	if(NULL == the_chip)
+	{
+		printk("[BAT]%s:not ready\n",__FUNCTION__);
+	}else{
+		qpnp_chg_idcmax_set(the_chip, 300);
+		printk("[BAT][WC][workAround]%s\n",__FUNCTION__);
+	}
+}
+
+//ASUS_BSP Eason_Chang:add WirelessChg soft start---
+#endif
+//ASUS_BSP lenter ---
+
+//Eason : force wireless DC path draw 900 +++
+#ifdef ASUS_FACTORY_BUILD
+static void DoForceWC900mA(void)
+{
+	int rc = 0;
+	
+	if(1==g_ForceWC900_value)
+	{
+		rc = qpnp_chg_idcmax_set(the_chip, 900);
+	}else{
+		rc = qpnp_chg_idcmax_set(the_chip, 700);
+	}
+
+	if (rc) {
+		printk("set DoForceWC current error\n");
+	}
+}
+
+static ssize_t ForceWC900_read_proc(char *page, char **start, off_t off, int count, 
+            	int *eof, void *data)
+{
+	return sprintf(page, "ForceWC900: %d\n", g_ForceWC900_value);
+}
+static ssize_t ForceWC900_write_proc(struct file *filp, const char __user *buff, 
+	            unsigned long len, void *data)
+{
+	int val;
+
+	char messages[256];
+
+	if (len > 256) {
+		len = 256;
+	}
+
+	if (copy_from_user(messages, buff, len)) {
+		return -EFAULT;
+	}
+	
+	val = (int)simple_strtol(messages, NULL, 10);
+	g_ForceWC900_value = val;
+	DoForceWC900mA();
+	power_supply_changed(&the_chip->dc_psy);
+    
+   	 printk("[BAT][SER][ForceWC900]mode:%d\n",g_ForceWC900_value);
+	
+	return len;
+}
+
+void static create_ForceWC900_proc_file(void)
+{
+	struct proc_dir_entry *ForceWC900_proc_file = create_proc_entry("driver/ForceWC900", 0666, NULL);
+
+	if (ForceWC900_proc_file) {
+		ForceWC900_proc_file->read_proc = ForceWC900_read_proc;
+		ForceWC900_proc_file->write_proc = ForceWC900_write_proc;
+	}
+	    else {
+		printk("[BAT][SER] ForceWC900 create failed!\n");
+    }
+
+	return;
+}
+#endif
+//Eason : force wireless DC path draw 900 ---
+
+//ASUS_Eason : force setting BAT CHG_EN 0x1049[7] for BT test+++ 
+#ifdef CONFIG_PM_8941_CHARGER	
+static ssize_t ForceSetCHG_EN_read_proc(char *page, char **start, off_t off, int count, 
+            	int *eof, void *data)
+{
+	return sprintf(page, "ForceSetCHG_EN: %d\n", g_ForceSetCHG_EN_value);
+}
+static ssize_t ForceSetCHG_EN_write_proc(struct file *filp, const char __user *buff, 
+	            unsigned long len, void *data)
+{
+	int val;
+
+	char messages[256];
+
+	if (len > 256) {
+		len = 256;
+	}
+
+	if (copy_from_user(messages, buff, len)) {
+		return -EFAULT;
+	}
+	
+	val = (int)simple_strtol(messages, NULL, 10);
+	g_ForceSetCHG_EN_value = val;
+	if(true == g_ForceSetCHG_EN_value)
+	{
+		qpnp_chg_masked_write(the_chip, the_chip->chgr_base + CHGR_CHG_CTRL,
+			CHGR_CHG_EN,
+			CHGR_CHG_EN, 1);
+	}
+	
+	qpnp_chg_charge_en(the_chip, g_ForceSetCHG_EN_value);
+    
+   	 printk("[BAT][SER][ForceSetCHG_EN]mode:%d\n",g_ForceSetCHG_EN_value);
+	
+	return len;
+}
+
+static void create_ForceSetCHG_EN_proc_file(void)
+{
+	struct proc_dir_entry *ForceSetCHG_EN_proc_file = create_proc_entry("driver/ForceSetCHG_EN", 0666, NULL);
+
+	if (ForceSetCHG_EN_proc_file) {
+		ForceSetCHG_EN_proc_file->read_proc = ForceSetCHG_EN_read_proc;
+		ForceSetCHG_EN_proc_file->write_proc = ForceSetCHG_EN_write_proc;
+	}
+	    else {
+		printk("[BAT][SER] ForceSetCHG_EN create failed!\n");
+    }
+
+	return;
+}
+#endif
+//ASUS_Eason : force setting BAT CHG_EN 0x1049[7] for BT test---
+
+//ASUS_Eason : set iterm current bigger, let pm_stay_awake  period in qpnp_eoc_work shorter+++
+#ifdef CONFIG_PM_8941_CHARGER	
+static ssize_t EocCurBigger_switch_read_proc(char *page, char **start, off_t off, int count, 
+            	int *eof, void *data)
+{
+	return sprintf(page, "EocCurBigger_Switch: %d\n", g_EocCurBigger_switch);
+}
+static ssize_t EocCurBigger_switch_write_proc(struct file *filp, const char __user *buff, 
+	            unsigned long len, void *data)
+{
+	int val;
+
+	char messages[256];
+
+	if (len > 256) {
+		len = 256;
+	}
+
+	if (copy_from_user(messages, buff, len)) {
+		return -EFAULT;
+	}
+	
+	val = (int)simple_strtol(messages, NULL, 10);
+	g_EocCurBigger_switch = val;
+    
+   	 printk("[BAT][SER][EocCurBigger_switch]mode:%d\n",g_EocCurBigger_switch);
+	
+	return len;
+}
+
+static void create_EocCurBigger_switch_proc_file(void)
+{
+	struct proc_dir_entry *EocCurBigger_switch_proc_file = create_proc_entry("driver/EocCurBigger_switch", 0666, NULL);
+
+	if (EocCurBigger_switch_proc_file) {
+		EocCurBigger_switch_proc_file->read_proc = EocCurBigger_switch_read_proc;
+		EocCurBigger_switch_proc_file->write_proc = EocCurBigger_switch_write_proc;
+	}
+	    else {
+		printk("[BAT][SER] EocCurBigger_switch create failed!\n");
+    }
+
+	return;
+}
+
+static ssize_t EocCurBigger_value_read_proc(char *page, char **start, off_t off, int count, 
+            	int *eof, void *data)
+{
+	return sprintf(page, "EocCurBigger_value: %d\n", g_EocCurBigger_value);
+}
+static ssize_t EocCurBigger_value_write_proc(struct file *filp, const char __user *buff, 
+	            unsigned long len, void *data)
+{
+	int val;
+
+	char messages[256];
+
+	if (len > 256) {
+		len = 256;
+	}
+
+	if (copy_from_user(messages, buff, len)) {
+		return -EFAULT;
+	}
+	
+	val = (int)simple_strtol(messages, NULL, 10);
+	g_EocCurBigger_value = val;
+    
+   	 printk("[BAT][SER][EocCurBigger_value]mode:%d\n",g_EocCurBigger_value);
+	
+	return len;
+}
+
+static void create_EocCurBigger_value_proc_file(void)
+{
+	struct proc_dir_entry *EocCurBigger_value_proc_file = create_proc_entry("driver/EocCurBigger_value", 0666, NULL);
+
+	if (EocCurBigger_value_proc_file) {
+		EocCurBigger_value_proc_file->read_proc = EocCurBigger_value_read_proc;
+		EocCurBigger_value_proc_file->write_proc = EocCurBigger_value_write_proc;
+	}
+	    else {
+		printk("[BAT][SER] EocCurBigger_value create failed!\n");
+    }
+
+	return;
+}
+#endif
+//ASUS_Eason : set iterm current bigger, let pm_stay_awake  period in qpnp_eoc_work shorter---
+
 static int __devinit
 qpnp_charger_probe(struct spmi_device *spmi)
 {
@@ -5199,6 +6017,12 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	struct resource *resource;
 	struct spmi_resource *spmi_resource;
 	int rc = 0;
+//ASUS_BSP +++ frank_tao "add asus battery driver"
+#ifdef CONFIG_BATTERY_ASUS
+	struct asus_bat_phone_bat_struct *phone_bat;
+	printk(DBGMSK_BAT_DEBUG "[BAT] %s() +++\n", __FUNCTION__);
+#endif /* CONFIG_BATTERY_ASUS */
+//ASUS_BSP --- frank_tao "add asus battery driver"
 
 	chip = devm_kzalloc(&spmi->dev,
 			sizeof(struct qpnp_chg_chip), GFP_KERNEL);
@@ -5221,7 +6045,7 @@ qpnp_charger_probe(struct spmi_device *spmi)
 
 	mutex_init(&chip->jeita_configure_lock);
 	spin_lock_init(&chip->usbin_health_monitor_lock);
-	alarm_init(&chip->reduce_power_stage_alarm, ALARM_REALTIME,
+	alarm_init(&chip->reduce_power_stage_alarm, ANDROID_ALARM_RTC_WAKEUP,
 			qpnp_chg_reduce_power_stage_callback);
 	INIT_WORK(&chip->reduce_power_stage_work,
 			qpnp_chg_reduce_power_stage_work);
@@ -5237,9 +6061,9 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	rc = qpnp_charger_read_dt_props(chip);
 	if (rc)
 		return rc;
-#ifdef ASUS_PF500KL_PROJECT
-	the_chip = chip;
-#endif
+
+	the_chip = chip;//ASUS_BSP Lenter +	
+
 	if (ext_ovp_isns_present)
 		chip->ext_ovp_ic_gpio_enabled = 0;
 
@@ -5281,8 +6105,7 @@ qpnp_charger_probe(struct spmi_device *spmi)
 				goto fail_chg_enable;
 			}
 
-			if (subtype == SMBB_BAT_IF_SUBTYPE ||
-				subtype == SMBBP_BAT_IF_SUBTYPE) {
+			if (subtype == SMBB_BAT_IF_SUBTYPE) {
 				chip->iadc_dev = qpnp_get_iadc(chip->dev,
 						"chg");
 				if (IS_ERR(chip->iadc_dev)) {
@@ -5447,6 +6270,29 @@ qpnp_charger_probe(struct spmi_device *spmi)
 		chip->batt_psy.num_supplicants =
 				ARRAY_SIZE(pm_batt_supplied_to);
 
+//ASUS_BSP +++ frank_tao "add asus battery driver"
+#ifdef CONFIG_BATTERY_ASUS
+		local_chip = chip;
+		phone_bat = kzalloc(sizeof(struct asus_bat_phone_bat_struct), GFP_KERNEL);
+		if (!phone_bat) {
+			pr_err("[BAT] cannot allocate asus_bat_phone_bat_struct\n");
+			return -ENOMEM;
+		//TODO:  goto and free 
+		}
+		
+		phone_bat->phone_bat_power_supply_changed = api_phone_bat_power_supply_changed;
+		phone_bat->get_prop_bat_present_byhw = api_get_prop_batt_present;
+		phone_bat->get_prop_bat_capacity_byhw = api_get_prop_batt_capacity;
+		phone_bat->get_prop_bat_status_byhw = api_get_prop_batt_status;
+		phone_bat->get_prop_charge_type_byhw = api_get_prop_charge_type;
+		phone_bat->get_prop_batt_health_byhw = api_get_prop_batt_health;
+		phone_bat->get_prop_batt_volt_byhw = api_get_prop_batt_volt;
+		phone_bat->get_prop_batt_curr_byhw = api_get_prop_batt_curr;
+		
+		asus_bat_set_phone_bat(phone_bat);
+#endif /* CONFIG_BATTERY_ASUS */
+//ASUS_BSP --- frank_tao "add asus battery driver"
+
 		rc = power_supply_register(chip->dev, &chip->batt_psy);
 		if (rc < 0) {
 			pr_err("batt failed to register rc = %d\n", rc);
@@ -5466,13 +6312,8 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->aicl_check_work, qpnp_aicl_check_work);
 
 	if (chip->dc_chgpth_base) {
-#ifndef ASUS_PF500KL_PROJECT
-		chip->dc_psy.name = "qpnp-dc";
-		chip->dc_psy.type = POWER_SUPPLY_TYPE_MAINS;
-#else
-		chip->dc_psy.name = "wireless";
-		chip->dc_psy.type = POWER_SUPPLY_TYPE_WIRELESS;
-#endif
+		chip->dc_psy.name = "wireless";//ASUS_BSP Eason_Chang: for Wireless charger
+		chip->dc_psy.type = POWER_SUPPLY_TYPE_WIRELESS;//ASUS_BSP Eason_Chang: for Wireless charger
 		chip->dc_psy.supplied_to = pm_power_supplied_to;
 		chip->dc_psy.num_supplicants = ARRAY_SIZE(pm_power_supplied_to);
 		chip->dc_psy.properties = pm_power_props_mains;
@@ -5488,25 +6329,6 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			goto unregister_batt;
 		}
 	}
-
-#ifdef ASUS_PF500KL_PROJECT
-	chip->ac_psy.name = "ac";
-	chip->ac_psy.type = POWER_SUPPLY_TYPE_MAINS;
-	chip->ac_psy.supplied_to = pm_power_supplied_to;
-	chip->ac_psy.num_supplicants = ARRAY_SIZE(pm_power_supplied_to);
-	chip->ac_psy.properties = pm_power_props_mains;
-	chip->ac_psy.num_properties = ARRAY_SIZE(pm_power_props_mains);
-	chip->ac_psy.set_property = power_set_property_mains;
-	chip->ac_psy.get_property = power_get_property_mains;
-
-	rc = power_supply_register(chip->dev, &chip->ac_psy);
-	if (rc < 0) {
-		pr_err("power_supply_register ac failed rc=%d\n", rc);
-		if (chip->dc_chgpth_base)
-			power_supply_unregister(&chip->dc_psy);
-		goto unregister_batt;
-	}
-#endif
 
 	/* Turn on appropriate workaround flags */
 	rc = qpnp_chg_setup_flags(chip);
@@ -5551,6 +6373,7 @@ qpnp_charger_probe(struct spmi_device *spmi)
 
 	chip->usb_trim_default = qpnp_chg_iusb_trim_get(chip);
 	qpnp_chg_charge_en(chip, !chip->charging_disabled);
+	printk("[BAT][PM8941][CHG_EN]%s:%d\n",__FUNCTION__, !chip->charging_disabled);//ASUS_BSP Eason: check CHG_EN
 	qpnp_chg_force_run_on_batt(chip, chip->charging_disabled);
 	qpnp_chg_set_appropriate_vddmax(chip);
 
@@ -5588,6 +6411,24 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			qpnp_chg_is_dc_chg_plugged_in(chip),
 			get_prop_batt_present(chip),
 			get_prop_batt_health(chip));
+
+	//Eason : force wireless DC path draw 900 +++
+	#ifdef ASUS_FACTORY_BUILD
+	create_ForceWC900_proc_file();
+	#endif
+	//Eason : force wireless DC path draw 900 ---
+	//ASUS_Eason : force setting BAT CHG_EN 0x1049[7] for BT test+++
+	#ifdef CONFIG_PM_8941_CHARGER
+	create_ForceSetCHG_EN_proc_file();
+	#endif
+	//ASUS_Eason : force setting BAT CHG_EN 0x1049[7] for BT test---
+	//ASUS_Eason : set iterm current bigger, let pm_stay_awake  period in qpnp_eoc_work shorter+++
+	#ifdef CONFIG_PM_8941_CHARGER	
+	create_EocCurBigger_switch_proc_file();
+	create_EocCurBigger_value_proc_file();
+	#endif
+	//ASUS_Eason : set iterm current bigger, let pm_stay_awake  period in qpnp_eoc_work shorter---
+	
 	return 0;
 
 unregister_dc_psy:

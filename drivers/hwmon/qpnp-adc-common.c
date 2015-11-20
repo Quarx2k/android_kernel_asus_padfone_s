@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -45,203 +45,89 @@
    their framework which is 0.1DegC. True resolution of 0.1DegC
    will result in the below table size to increase by 10 times */
 static const struct qpnp_vadc_map_pt adcmap_btm_threshold[] = {
-#ifdef CONFIG_MACH_OPPO
-	{-350,	1473},
-	{-340,	1460},
-	{-330,	1447},
-	{-320,	1434},
-	{-310,	1421},
-	{-300,	1408},
-	{-290,	1395},
-	{-280,	1381},
-	{-270,	1368},
-	{-260,	1354},
-	{-250,	1341},
-	{-240,	1327},
-	{-230,	1313},
-	{-220,	1300},
-	{-210,	1286},
-	{-200,	1273},
-	{-190,	1259},
-	{-180,	1246},
-	{-170,	1232},
-	{-160,	1219},
-	{-150,	1206},
-	{-140,	1193},
-	{-130,	1180},
-	{-120,	1173},
-	{-110,	1167},
-	{-100,	1155},
-	{-90,	1142},
-	{-80,	1130},
-	{-70,	1118},
-	{-60,	1106},
-	{-50,	1094},
-	{-40,	1083},
-	{-30,	1072},
-	{-20,	1061},
-	{-10,	1050},
-	{0,	1039},
-	{10,	1029},
-	{20,	1019},
-	{30,	1009},
-	{40,	999},
-	{50,	990},
-	{60,	981},
-	{70,	972},
-	{80,	963},
-	{90,	954},
-	{100,	946},
-	{110,	938},
-	{120,	930},
-	{130,	922},
-	{140,	915},
-	{150,	908},
-	{160,	901},
-	{170,	894},
-	{180,	887},
-	{190,	881},
-	{200,	875},
-	{210,	869},
-	{220,	863},
-	{230,	857},
-	{240,	852},
-	{250,	847},
-	{260,	841},
-	{270,	836},
-	{280,	832},
-	{290,	827},
-	{300,	822},
-	{310,	818},
-	{320,	814},
-	{330,	810},
-	{340,	806},
-	{350,	802},
-	{360,	798},
-	{370,	794},
-	{380,	791},
-	{390,	788},
-	{400,	784},
-	{410,	781},
-	{420,	778},
-	{430,	775},
-	{440,	772},
-	{450,	770},
-	{460,	767},
-	{470,	764},
-	{480,	762},
-	{490,	759},
-	{500,	757},
-	{510,	755},
-	{520,	746},
-	{530,	745},
-	{540,	743},
-	{550,	741},
-	{560,	739},
-	{570,	737},
-	{580,	736},
-	{590,	734},
-	{600,	733},
-	{610,	731},
-	{620,	730},
-	{630,	729},
-	{640,	727},
-	{650,	726},
-	{660,	725},
-	{670,	724},
-	{680,	722},
-	{690,	721},
-	{700,	720},
-	{710,	719},
-	{720,	718},
-	{730,	717},
-	{740,	716},
-	{750,	715}
-#else
-	{-300,	1642},
-	{-200,	1544},
-	{-100,	1414},
-	{0,	1260},
-	{10,	1244},
-	{20,	1228},
-	{30,	1212},
-	{40,	1195},
-	{50,	1179},
-	{60,	1162},
-	{70,	1146},
-	{80,	1129},
-	{90,	1113},
-	{100,	1097},
-	{110,	1080},
-	{120,	1064},
-	{130,	1048},
-	{140,	1032},
-	{150,	1016},
-	{160,	1000},
-	{170,	985},
-	{180,	969},
-	{190,	954},
-	{200,	939},
-	{210,	924},
-	{220,	909},
-	{230,	894},
-	{240,	880},
-	{250,	866},
-	{260,	852},
-	{270,	838},
-	{280,	824},
-	{290,	811},
-	{300,	798},
-	{310,	785},
-	{320,	773},
-	{330,	760},
-	{340,	748},
-	{350,	736},
-	{360,	725},
-	{370,	713},
-	{380,	702},
-	{390,	691},
-	{400,	681},
-	{410,	670},
-	{420,	660},
-	{430,	650},
-	{440,	640},
-	{450,	631},
-	{460,	622},
-	{470,	613},
-	{480,	604},
-	{490,	595},
-	{500,	587},
-	{510,	579},
-	{520,	571},
-	{530,	563},
-	{540,	556},
-	{550,	548},
-	{560,	541},
-	{570,	534},
-	{580,	527},
-	{590,	521},
-	{600,	514},
-	{610,	508},
-	{620,	502},
-	{630,	496},
-	{640,	490},
-	{650,	485},
-	{660,	281},
-	{670,	274},
-	{680,	267},
-	{690,	260},
-	{700,	254},
-	{710,	247},
-	{720,	241},
-	{730,	235},
-	{740,	229},
-	{750,	224},
-	{760,	218},
-	{770,	213},
-	{780,	208},
-	{790,	203}
-#endif
+	{-300,	1604},
+	{-200,	1511},
+	{-100,	1398},
+	{0,	1269},
+	{10,	1256},
+	{20,	1242},
+	{30,	1229},
+	{40,	1215},
+	{50,	1202},
+	{60,	1188},
+	{70,	1175},
+	{80,	1160},
+	{90,	1148},
+	{100,	1133},
+	{110,	1120},
+	{120,	1106},
+	{130,	1094},
+	{140,	1081},
+	{150,	1068},
+	{160,	1054},
+	{170,	1042},
+	{180,	1030},
+	{190,	1018},
+	{200,	1005},
+	{210,	991},
+	{220,	980},
+	{230,	969},
+	{240,	957},
+	{250,	945},
+	{260,	934},
+	{270,	922},
+	{280,	912},
+	{290,	901},
+	{300,	890},
+	{310,	880},
+	{320,	870},
+	{330,	860},
+	{340,	850},
+	{350,	840},
+	{360,	831},
+	{370,	822},
+	{380,	813},
+	{390,	804},
+	{400,	795},
+	{410,	787},
+	{420,	779},
+	{430,	771},
+	{440,	763},
+	{450,	755},
+	{460,	748},
+	{470,	741},
+	{480,	734},
+	{490,	727},
+	{500,	720},
+	{510,	714},
+	{520,	707},
+	{530,	701},
+	{540,	695},
+	{550,	689},
+	{560,	683},
+	{570,	678},
+	{580,	672},
+	{590,	667},
+	{600,	662},
+	{610,	657},
+	{620,	652},
+	{630,	647},
+	{640,	643},
+	{650,	638},
+	{660,	634},
+	{670,	629},
+	{680,	625},
+	{690,	621},
+	{700,	618},
+	{710,	614},
+	{720,	610},
+	{730,	607},
+	{740,	603},
+	{750,	599},
+	{760,	596},
+	{770,	593},
+	{780,	590},
+	{790,	587}
 };
 
 static const struct qpnp_vadc_map_pt adcmap_qrd_btm_threshold[] = {
@@ -928,17 +814,22 @@ int32_t qpnp_adc_scale_default(struct qpnp_vadc_chip *vadc,
 		return -EINVAL;
 
 	scale_voltage = (adc_code -
-		chan_properties->adc_graph[CALIB_ABSOLUTE].adc_gnd)
-		* chan_properties->adc_graph[CALIB_ABSOLUTE].dx;
+		chan_properties->adc_graph[chan_properties->calib_type].adc_gnd)
+		* chan_properties->adc_graph[chan_properties->calib_type].dx;
 	if (scale_voltage < 0) {
 		negative_offset = 1;
 		scale_voltage = -scale_voltage;
 	}
 	do_div(scale_voltage,
-		chan_properties->adc_graph[CALIB_ABSOLUTE].dy);
+		chan_properties->adc_graph[chan_properties->calib_type].dy);
 	if (negative_offset)
 		scale_voltage = -scale_voltage;
-	scale_voltage += chan_properties->adc_graph[CALIB_ABSOLUTE].dx;
+
+	if (chan_properties->calib_type == CALIB_ABSOLUTE)
+		scale_voltage +=
+		chan_properties->adc_graph[chan_properties->calib_type].dx;
+	else
+		scale_voltage *= 1000;
 
 	if (scale_voltage < 0) {
 		if (adc_properties->bipolar) {
@@ -1100,6 +991,92 @@ int32_t qpnp_vadc_check_result(int32_t *data)
 }
 EXPORT_SYMBOL(qpnp_vadc_check_result);
 
+int qpnp_adc_get_revid_version(struct device *dev)
+{
+	struct pmic_revid_data *revid_data;
+	struct device_node *revid_dev_node;
+
+	revid_dev_node = of_parse_phandle(dev->of_node,
+						"qcom,pmic-revid", 0);
+	if (!revid_dev_node) {
+		pr_debug("Missing qcom,pmic-revid property\n");
+		return -EINVAL;
+	}
+
+	revid_data = get_revid_data(revid_dev_node);
+	if (IS_ERR(revid_data)) {
+		pr_debug("revid error rc = %ld\n", PTR_ERR(revid_data));
+		return -EINVAL;
+	}
+
+	if ((revid_data->rev1 == PM8941_V3P1_REV1) &&
+		(revid_data->rev2 == PM8941_V3P1_REV2) &&
+		(revid_data->rev3 == PM8941_V3P1_REV3) &&
+		(revid_data->rev4 == PM8941_V3P1_REV4) &&
+		(revid_data->pmic_type == PM8941_V3P1_TYPE) &&
+		(revid_data->pmic_subtype == PM8941_V3P1_SUBTYPE))
+			return QPNP_REV_ID_8941_3_1;
+	else if ((revid_data->rev1 == PM8941_V3P0_REV1) &&
+		(revid_data->rev2 == PM8941_V3P0_REV2) &&
+		(revid_data->rev3 == PM8941_V3P0_REV3) &&
+		(revid_data->rev4 == PM8941_V3P0_REV4) &&
+		(revid_data->pmic_type == PM8941_V3P0_TYPE) &&
+		(revid_data->pmic_subtype == PM8941_V3P0_SUBTYPE))
+			return QPNP_REV_ID_8941_3_0;
+	else if ((revid_data->rev1 == PM8941_V2P0_REV1) &&
+		(revid_data->rev2 == PM8941_V2P0_REV2) &&
+		(revid_data->rev3 == PM8941_V2P0_REV3) &&
+		(revid_data->rev4 == PM8941_V2P0_REV4) &&
+		(revid_data->pmic_type == PM8941_V2P0_TYPE) &&
+		(revid_data->pmic_subtype == PM8941_V2P0_SUBTYPE))
+			return QPNP_REV_ID_8941_2_0;
+	else if ((revid_data->rev1 == PM8226_V2P2_REV1) &&
+		(revid_data->rev2 == PM8226_V2P2_REV2) &&
+		(revid_data->rev3 == PM8226_V2P2_REV3) &&
+		(revid_data->rev4 == PM8226_V2P2_REV4) &&
+		(revid_data->pmic_type == PM8226_V2P2_TYPE) &&
+		(revid_data->pmic_subtype == PM8226_V2P2_SUBTYPE))
+			return QPNP_REV_ID_8026_2_2;
+	else if ((revid_data->rev1 == PM8226_V2P1_REV1) &&
+		(revid_data->rev2 == PM8226_V2P1_REV2) &&
+		(revid_data->rev3 == PM8226_V2P1_REV3) &&
+		(revid_data->rev4 == PM8226_V2P1_REV4) &&
+		(revid_data->pmic_type == PM8226_V2P1_TYPE) &&
+		(revid_data->pmic_subtype == PM8226_V2P1_SUBTYPE))
+			return QPNP_REV_ID_8026_2_1;
+	else if ((revid_data->rev1 == PM8226_V2P0_REV1) &&
+		(revid_data->rev2 == PM8226_V2P0_REV2) &&
+		(revid_data->rev3 == PM8226_V2P0_REV3) &&
+		(revid_data->rev4 == PM8226_V2P0_REV4) &&
+		(revid_data->pmic_type == PM8226_V2P0_TYPE) &&
+		(revid_data->pmic_subtype == PM8226_V2P0_SUBTYPE))
+			return QPNP_REV_ID_8026_2_0;
+	else if ((revid_data->rev1 == PM8226_V1P0_REV1) &&
+		(revid_data->rev2 == PM8226_V1P0_REV2) &&
+		(revid_data->rev3 == PM8226_V1P0_REV3) &&
+		(revid_data->rev4 == PM8226_V1P0_REV4) &&
+		(revid_data->pmic_type == PM8226_V1P0_TYPE) &&
+		(revid_data->pmic_subtype == PM8226_V1P0_SUBTYPE))
+			return QPNP_REV_ID_8026_1_0;
+	else if ((revid_data->rev1 == PM8110_V1P0_REV1) &&
+		(revid_data->rev2 == PM8110_V1P0_REV2) &&
+		(revid_data->rev3 == PM8110_V1P0_REV3) &&
+		(revid_data->rev4 == PM8110_V1P0_REV4) &&
+		(revid_data->pmic_type == PM8110_V1P0_TYPE) &&
+		(revid_data->pmic_subtype == PM8110_V1P0_SUBTYPE))
+			return QPNP_REV_ID_8110_1_0;
+	else if ((revid_data->rev1 == PM8110_V2P0_REV1) &&
+		(revid_data->rev2 == PM8110_V2P0_REV2) &&
+		(revid_data->rev3 == PM8110_V2P0_REV3) &&
+		(revid_data->rev4 == PM8110_V2P0_REV4) &&
+		(revid_data->pmic_type == PM8110_V2P0_TYPE) &&
+		(revid_data->pmic_subtype == PM8110_V2P0_SUBTYPE))
+			return QPNP_REV_ID_8110_2_0;
+	else
+		return -EINVAL;
+}
+EXPORT_SYMBOL(qpnp_adc_get_revid_version);
+
 int32_t qpnp_adc_get_devicetree_data(struct spmi_device *spmi,
 			struct qpnp_adc_drv *adc_qpnp)
 {
@@ -1151,7 +1128,7 @@ int32_t qpnp_adc_get_devicetree_data(struct spmi_device *spmi,
 
 	for_each_child_of_node(node, child) {
 		int channel_num, scaling, post_scaling, hw_settle_time;
-		int fast_avg_setup, calib_type, rc;
+		int fast_avg_setup, calib_type = 0, rc;
 		const char *calibration_param, *channel_name;
 
 		channel_name = of_get_property(child,
@@ -1172,23 +1149,40 @@ int32_t qpnp_adc_get_devicetree_data(struct spmi_device *spmi,
 			pr_err("Invalid channel decimation property\n");
 			return -EINVAL;
 		}
-		rc = of_property_read_u32(child,
-				"qcom,pre-div-channel-scaling", &scaling);
-		if (rc) {
-			pr_err("Invalid channel scaling property\n");
-			return -EINVAL;
-		}
-		rc = of_property_read_u32(child,
-				"qcom,scale-function", &post_scaling);
-		if (rc) {
-			pr_err("Invalid channel post scaling property\n");
-			return -EINVAL;
-		}
-		rc = of_property_read_u32(child,
+		if (!of_device_is_compatible(node, "qcom,qpnp-iadc")) {
+			rc = of_property_read_u32(child,
 				"qcom,hw-settle-time", &hw_settle_time);
-		if (rc) {
-			pr_err("Invalid channel hw settle time property\n");
-			return -EINVAL;
+			if (rc) {
+				pr_err("Invalid channel hw settle time property\n");
+				return -EINVAL;
+			}
+			rc = of_property_read_u32(child,
+				"qcom,pre-div-channel-scaling", &scaling);
+			if (rc) {
+				pr_err("Invalid channel scaling property\n");
+				return -EINVAL;
+			}
+			rc = of_property_read_u32(child,
+				"qcom,scale-function", &post_scaling);
+			if (rc) {
+				pr_err("Invalid channel post scaling property\n");
+				return -EINVAL;
+			}
+			rc = of_property_read_string(child,
+				"qcom,calibration-type", &calibration_param);
+			if (rc) {
+				pr_err("Invalid calibration type\n");
+				return -EINVAL;
+			}
+			if (!strcmp(calibration_param, "absolute"))
+				calib_type = CALIB_ABSOLUTE;
+			else if (!strcmp(calibration_param, "ratiometric"))
+				calib_type = CALIB_RATIOMETRIC;
+			else {
+				pr_err("%s: Invalid calibration property\n",
+						__func__);
+				return -EINVAL;
+			}
 		}
 		rc = of_property_read_u32(child,
 				"qcom,fast-avg-setup", &fast_avg_setup);
@@ -1196,28 +1190,17 @@ int32_t qpnp_adc_get_devicetree_data(struct spmi_device *spmi,
 			pr_err("Invalid channel fast average setup\n");
 			return -EINVAL;
 		}
-		rc = of_property_read_string(child, "qcom,calibration-type",
-							&calibration_param);
-		if (rc) {
-			pr_err("Invalid calibration type\n");
-			return -EINVAL;
-		}
-		if (!strncmp(calibration_param, "absolute", 8))
-			calib_type = CALIB_ABSOLUTE;
-		else if (!strncmp(calibration_param, "ratiometric", 11))
-			calib_type = CALIB_RATIOMETRIC;
-		else {
-			pr_err("%s: Invalid calibration property\n", __func__);
-			return -EINVAL;
-		}
 		/* Individual channel properties */
 		adc_channel_list[i].name = (char *)channel_name;
 		adc_channel_list[i].channel_num = channel_num;
-		adc_channel_list[i].chan_path_prescaling = scaling;
 		adc_channel_list[i].adc_decimation = decimation;
-		adc_channel_list[i].adc_scale_fn = post_scaling;
-		adc_channel_list[i].hw_settle_time = hw_settle_time;
 		adc_channel_list[i].fast_avg_setup = fast_avg_setup;
+		if (!of_device_is_compatible(node, "qcom,qpnp-iadc")) {
+			adc_channel_list[i].chan_path_prescaling = scaling;
+			adc_channel_list[i].adc_scale_fn = post_scaling;
+			adc_channel_list[i].hw_settle_time = hw_settle_time;
+			adc_channel_list[i].calib_type = calib_type;
+		}
 		i++;
 	}
 

@@ -94,6 +94,11 @@ void set_power_on_alarm(long secs, bool enable)
 }
 
 
+//ASUS BSP Eason_Chang : A86 porting/ +++
+static bool IsRtcReady = false; //ASUS BSP Eason_Chang
+bool g_RTC_update = false; //ASUS BSP Eason_Chang : In suspend have same cap don't update savedTime
+//ASUS BSP Eason_Chang : A86 porting ---
+
 static void update_timer_locked(struct alarm_queue *base, bool head_removed)
 {
 	struct alarm *alarm;
@@ -264,6 +269,9 @@ int alarm_cancel(struct alarm *alarm)
 		cpu_relax();
 	}
 }
+// ASUS_BSP+++ VictorFu "Add Event log"
+extern struct timezone sys_tz;
+// ASUS_BSP--- VictorFu "Add Event log"        
 
 /**
  * alarm_set_rtc - set the kernel and rtc walltime
@@ -276,6 +284,10 @@ int alarm_set_rtc(struct timespec new_time)
 	unsigned long flags;
 	struct rtc_time rtc_new_rtc_time;
 	struct timespec tmp_time;
+    struct rtc_time ori_tm,new_tm;
+    getnstimeofday(&tmp_time);
+    tmp_time.tv_sec -= sys_tz.tz_minuteswest * 60;
+    rtc_time_to_tm(tmp_time.tv_sec, &ori_tm);
 
 	rtc_time_to_tm(new_time.tv_sec, &rtc_new_rtc_time);
 
@@ -321,29 +333,23 @@ int alarm_set_rtc(struct timespec new_time)
 		pr_alarm(ERROR, "alarm_set_rtc: "
 			"Failed to set RTC, time will be lost on reboot\n");
 err:
+            // ASUS_BSP+++ VictorFu "Add Event log"
+            getnstimeofday(&tmp_time);
+            tmp_time.tv_sec -= sys_tz.tz_minuteswest * 60;
+            rtc_time_to_tm(tmp_time.tv_sec, &new_tm);      
 	wake_unlock(&alarm_rtc_wake_lock);
 	mutex_unlock(&alarm_setrtc_mutex);
+
+	//ASUS BSP Eason_Chang : A86 porting +++
+	
+	IsRtcReady = true; //ASUS BSP Eason_Chang
+	g_RTC_update = true; //ASUS BSP Eason_Chang : In suspend have same cap don't update savedTime
+
+	//ASUS BSP Eason_Chang : A86 porting ---
+
 	return ret;
 }
 
-#ifdef CONFIG_MACH_OPPO
-int msmrtc_alarm_read_time(struct rtc_time *tm)
-{
-	int ret=0;
-
-	ret = rtc_read_time(alarm_rtc_dev, tm);
-	if (ret < 0) {
-		pr_alarm(ERROR, "%s: Failed to read RTC time\n", __func__);
-		goto err;
-	}
-
-	return 0;
-err:
-	pr_alarm(ERROR, "%s: rtc alarm will lost!", __func__);
-	return -1;
-}
-EXPORT_SYMBOL(msmrtc_alarm_read_time);
-#endif
 
 void
 alarm_update_timedelta(struct timespec tmp_time, struct timespec new_time)
@@ -367,6 +373,12 @@ alarm_update_timedelta(struct timespec tmp_time, struct timespec new_time)
 	}
 	spin_unlock_irqrestore(&alarm_slock, flags);
 }
+
+//ASUS BSP Eason_Chang : A86 porting +++
+bool reportRtcReady(void){
+    return IsRtcReady;
+}    
+//ASUS BSP Eason_Chang : A86 porting ---
 
 /**
  * alarm_get_elapsed_realtime - get the elapsed real time in ktime_t format
@@ -392,6 +404,7 @@ static enum hrtimer_restart alarm_timer_triggered(struct hrtimer *timer)
 	struct alarm *alarm;
 	unsigned long flags;
 	ktime_t now;
+	struct timespec tmp_time;
 
 	spin_lock_irqsave(&alarm_slock, flags);
 
@@ -417,6 +430,13 @@ static enum hrtimer_restart alarm_timer_triggered(struct hrtimer *timer)
 			alarm->type, alarm->function,
 			ktime_to_ns(alarm->expires),
 			ktime_to_ns(alarm->softexpires));
+		// ASUS_BSP+++ Shawn_Huang "Add debug log for setting alarm "
+		ktime_get_ts(&tmp_time);
+		printk("call alarm, type %d, func %pF, now %ld.%09ld\n",
+			alarm->type, alarm->function,
+			tmp_time.tv_sec, tmp_time.tv_nsec
+			);
+		// ASUS_BSP--- Shawn_Huang "Add debug log for setting alarm "		
 		spin_unlock_irqrestore(&alarm_slock, flags);
 		alarm->function(alarm);
 		spin_lock_irqsave(&alarm_slock, flags);
@@ -436,7 +456,8 @@ static void alarm_triggered_func(void *p)
 	pr_alarm(INT, "rtc alarm triggered\n");
 	wake_lock_timeout(&alarm_rtc_wake_lock, 1 * HZ);
 }
-
+// ASUS_BSP+++ Victor_Fu "Register for noirq callback"           
+#if 0
 static int alarm_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	int                 err = 0;
@@ -541,9 +562,110 @@ static int alarm_resume(struct platform_device *pdev)
 									false);
 	spin_unlock_irqrestore(&alarm_slock, flags);
 
-	set_alarm_time_to_rtc(power_on_alarm);
 	return 0;
 }
+
+#endif
+
+static int alarm_noirq_suspend(struct device *dev)
+{
+	int                 err = 0;
+	unsigned long       flags;
+	struct rtc_wkalrm   rtc_alarm;
+	struct rtc_time     rtc_current_rtc_time;
+	unsigned long       rtc_current_time;
+	unsigned long       rtc_alarm_time;
+	struct timespec     rtc_delta;
+	struct timespec     wall_time;
+	struct alarm_queue *wakeup_queue = NULL;
+	struct alarm_queue *tmp_queue = NULL;
+
+        printk("[Alarm]%s\n", __FUNCTION__);
+    
+	spin_lock_irqsave(&alarm_slock, flags);
+	suspended = true;
+	spin_unlock_irqrestore(&alarm_slock, flags);
+
+	hrtimer_cancel(&alarms[ANDROID_ALARM_RTC_WAKEUP].timer);
+	hrtimer_cancel(&alarms[
+			ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP].timer);
+
+	tmp_queue = &alarms[ANDROID_ALARM_RTC_WAKEUP];
+	if (tmp_queue->first)
+		wakeup_queue = tmp_queue;
+	tmp_queue = &alarms[ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP];
+	if (tmp_queue->first && (!wakeup_queue ||
+				hrtimer_get_expires(&tmp_queue->timer).tv64 <
+				hrtimer_get_expires(&wakeup_queue->timer).tv64))
+		wakeup_queue = tmp_queue;
+	if (wakeup_queue) {
+		rtc_read_time(alarm_rtc_dev, &rtc_current_rtc_time);
+		getnstimeofday(&wall_time);
+		rtc_tm_to_time(&rtc_current_rtc_time, &rtc_current_time);
+		set_normalized_timespec(&rtc_delta,
+					wall_time.tv_sec - rtc_current_time,
+					wall_time.tv_nsec);
+
+		rtc_alarm_time = timespec_sub(ktime_to_timespec(
+			hrtimer_get_expires(&wakeup_queue->timer)),
+			rtc_delta).tv_sec;
+
+		rtc_time_to_tm(rtc_alarm_time, &rtc_alarm.time);
+		rtc_alarm.enabled = 1;
+		rtc_set_alarm(alarm_rtc_dev, &rtc_alarm);
+		rtc_read_time(alarm_rtc_dev, &rtc_current_rtc_time);
+		rtc_tm_to_time(&rtc_current_rtc_time, &rtc_current_time);
+		pr_alarm(SUSPEND,
+			"rtc alarm set at %ld, now %ld, rtc delta %ld.%09ld\n",
+			rtc_alarm_time, rtc_current_time,
+			rtc_delta.tv_sec, rtc_delta.tv_nsec);
+		printk(
+			"[Alarm]rtc alarm set at %ld, now %ld, rtc delta %ld.%09ld\n",
+			rtc_alarm_time, rtc_current_time,
+			rtc_delta.tv_sec, rtc_delta.tv_nsec);
+
+		if (rtc_current_time + 1 >= rtc_alarm_time) {
+			pr_alarm(SUSPEND, "alarm about to go off\n");
+			printk("[Alarm]alarm about to go off\n");
+			memset(&rtc_alarm, 0, sizeof(rtc_alarm));
+			rtc_alarm.enabled = 0;
+			rtc_set_alarm(alarm_rtc_dev, &rtc_alarm);
+
+			spin_lock_irqsave(&alarm_slock, flags);
+			suspended = false;
+			wake_lock_timeout(&alarm_rtc_wake_lock, 2 * HZ);
+			update_timer_locked(&alarms[ANDROID_ALARM_RTC_WAKEUP],
+									false);
+			update_timer_locked(&alarms[
+				ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP], false);
+			err = -EBUSY;
+			spin_unlock_irqrestore(&alarm_slock, flags);
+		}
+	}
+	return err;
+}
+
+static int alarm_noirq_resume(struct device *dev)
+{
+	struct rtc_wkalrm alarm;
+	unsigned long       flags;
+
+         printk("[Alarm]%s\n", __FUNCTION__);
+
+	memset(&alarm, 0, sizeof(alarm));
+	alarm.enabled = 0;
+	rtc_set_alarm(alarm_rtc_dev, &alarm);
+
+	spin_lock_irqsave(&alarm_slock, flags);
+	suspended = false;
+	update_timer_locked(&alarms[ANDROID_ALARM_RTC_WAKEUP], false);
+	update_timer_locked(&alarms[ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP],
+									false);
+	spin_unlock_irqrestore(&alarm_slock, flags);
+
+	return 0;
+}
+// ASUS_BSP--- Victor_Fu "Register for noirq callback"
 
 static int set_alarm_time_to_rtc(const long power_on_time)
 {
@@ -647,12 +769,25 @@ static struct class_interface rtc_alarm_interface = {
 	.add_dev = &rtc_alarm_add_device,
 	.remove_dev = &rtc_alarm_remove_device,
 };
+// ASUS_BSP+++ Victor_Fu "Register for noirq callback"
 
-static struct platform_driver alarm_driver = {
-	.suspend = alarm_suspend,
-	.resume = alarm_resume,
+static const struct dev_pm_ops alarm_driver_pm_ops = {
+    .suspend_noirq  = alarm_noirq_suspend,
+    .resume_noirq   = alarm_noirq_resume,   
+};
+
+// ASUS_BSP--- Victor_Fu "Register for noirq callback"
+
+    // ASUS_BSP+++ Victor_Fu "Register for noirq callback"           
+static struct platform_driver alarm_driver = {    
+	//.suspend = alarm_suspend,
+	//.resume = alarm_resume,
+    // ASUS_BSP--- Victor_Fu "Register for noirq callback"                  
 	.driver = {
-		.name = "alarm"
+		.name = "alarm",
+// ASUS_BSP+++ Victor_Fu "Register for noirq callback"           
+                  .pm	= &alarm_driver_pm_ops,
+// ASUS_BSP--- Victor_Fu "Register for noirq callback"                  
 	}
 };
 
