@@ -3474,7 +3474,7 @@ static ssize_t asus_dwc3_mode_write(struct file *file, const char __user *ubuf,
 	mdwc->ext_xceiv.otg_mode = req_mode;
 	asus_dwc3_mode_switch(req_mode);
 out:
-	return status;
+	return count;
 }
 
 const struct file_operations asus_dwc3_mode_fops = {
@@ -3504,7 +3504,7 @@ static ssize_t asus_dwc3_proc_otg_boot_check_write(struct file *file, const char
 size_t count, loff_t *ppos)
 {
 	queue_work(system_nrt_wq, &check_at_boot);
-	return 0;
+	return count;
 }
 
 const struct file_operations asus_dwc3_proc_otg_boot_check_fops = {
