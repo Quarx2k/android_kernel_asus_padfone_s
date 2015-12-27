@@ -714,7 +714,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	}
 #endif
 	if (ctrl->on_cmds.cmd_cnt)
-		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
+		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);HEAD
 #ifdef ASUS_PF500KL_PROJECT
 #ifdef CONFIG_LEDS_QPNP
 	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
@@ -723,7 +723,6 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	himax_ts_resume();
 #endif
 #endif
-	mdss_livedisplay_update(ctrl, MODE_UPDATE_ALL);
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
 	pr_debug("%s:-\n", __func__);
