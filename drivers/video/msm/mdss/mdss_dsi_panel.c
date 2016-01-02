@@ -714,7 +714,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	}
 #endif
 	if (ctrl->on_cmds.cmd_cnt)
-		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);HEAD
+		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
 #ifdef ASUS_PF500KL_PROJECT
 #ifdef CONFIG_LEDS_QPNP
 	if (g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) {
