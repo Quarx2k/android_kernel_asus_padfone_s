@@ -38,7 +38,7 @@
 #include <mach/clk.h>
 #endif
 #include <linux/switch.h>
-#include <iCatch7002a.h>
+#include "iCatch7002a.h"
 #include <linux/proc_fs.h>
 #include <linux/cred.h>
 #include <linux/security.h>

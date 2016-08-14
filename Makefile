@@ -660,11 +660,11 @@ endif
 ifeq ($(ASUS_BUILD_PROJECT), A91)
         KBUILD_CPPFLAGS += -DASUS_A91_PROJECT=1
 endif
-ifeq ($(ASUS_BUILD_PROJECT), PF500KL)
-        KBUILD_CPPFLAGS += -DASUS_PF500KL_PROJECT=1
-endif
-# jackson : support mutliple project build ---
 
+KBUILD_CPPFLAGS += -DASUS_PF500KL_PROJECT=1
+KBUILD_CPPFLAGS += -DASUS_SHIP_BUILD=1
+
+# jackson : support mutliple project build ---
 # jackson : factory compile option support +++
 ifneq ($(ASUS_FACTORY_BUILD),)
         KBUILD_CPPFLAGS += -DASUS_FACTORY_BUILD=1
