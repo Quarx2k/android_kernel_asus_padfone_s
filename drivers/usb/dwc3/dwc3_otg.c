@@ -25,6 +25,9 @@
 #include "xhci.h"
 
 #define VBUS_REG_CHECK_DELAY	(msecs_to_jiffies(1000))
+
+int dwc3_pm_count = 0;
+
 #define MAX_INVALID_CHRGR_RETRY 3
 static int max_chgr_retry_count = MAX_INVALID_CHRGR_RETRY;
 module_param(max_chgr_retry_count, int, S_IRUGO | S_IWUSR);
@@ -84,9 +87,17 @@ static int dwc3_otg_set_suspend(struct usb_phy *phy, int suspend)
 
 	dotg->host_bus_suspend = suspend;
 	if (suspend) {
-		pm_runtime_put_sync(phy->dev);
+		//ASUS_BSP+++ BennyCheng "fix host cannot enter low power mode due to wrong pm count"
+		while (dwc3_pm_count > 0) {
+			pm_runtime_put_sync(phy->dev);
+			dwc3_pm_count -= 1;
+			printk("[DWC3-PM][dwc3_otg_set_suspend] put_sync:%d,count:%d\n", atomic_read(&phy->dev->power.usage_count), dwc3_pm_count);
+		}
+		//ASUS_BSP--- BennyCheng "fix host cannot enter low power mode due to wrong pm count"
 	} else {
 		pm_runtime_get_noresume(phy->dev);
+		dwc3_pm_count+=1;
+		printk("[DWC3-PM][[dwc3_otg_set_suspend] ] get_noresume:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
 		pm_runtime_resume(phy->dev);
 	}
 
@@ -194,6 +205,20 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 	if (!dwc->xhci)
 		return -EINVAL;
 
+	//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+	if (on) {
+		asus_dwc3_host_mode_prepare();
+	} else {
+		asus_dwc3_host_mode_cleanup();
+	}
+	//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+
+	//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+	asus_dwc3_vbus_out_enable(on, 0);
+	//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	/*
 	if (!dotg->vbus_otg) {
 		dotg->vbus_otg = devm_regulator_get(dwc->dev->parent,
 							"vbus_dwc3");
@@ -204,17 +229,23 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 			return ret;
 		}
 	}
+	*/
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 
 	if (on) {
 		dev_dbg(otg->phy->dev, "%s: turn on host\n", __func__);
 
 		dwc3_otg_notify_host_mode(otg, on);
+		//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+		/*
 		ret = regulator_enable(dotg->vbus_otg);
 		if (ret) {
 			dev_err(otg->phy->dev, "unable to enable vbus_otg\n");
 			dwc3_otg_notify_host_mode(otg, 0);
 			return ret;
 		}
+		*/
+		//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 
 		/*
 		 * This should be revisited for more testing post-silicon.
@@ -246,17 +277,28 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 			return ret;
 		}
 
+
 		/* re-init OTG EVTEN register as XHCI reset clears it */
 		if (ext_xceiv && !ext_xceiv->otg_capability)
 			dwc3_otg_reset(dotg);
 	} else {
 		dev_dbg(otg->phy->dev, "%s: turn off host\n", __func__);
 
+		//ASUS_BSP+++ BennyCheng "avoid to switch none/client mode during LPM"
+		pm_runtime_get_sync(dotg->otg.phy->dev);
+		dwc3_pm_count += 1;
+		printk("[DWC3-PM][start_host] get_sync:%d, count:%d\n", atomic_read(&dotg->otg.phy->dev->power.usage_count), dwc3_pm_count);
+		//ASUS_BSP--- BennyCheng "avoid to switch none/client mode during LPM"
+
+		//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+		/*
 		ret = regulator_disable(dotg->vbus_otg);
 		if (ret) {
 			dev_err(otg->phy->dev, "unable to disable vbus_otg\n");
 			return ret;
 		}
+		*/
+		//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 		dwc3_otg_notify_host_mode(otg, on);
 
 		platform_device_del(dwc->xhci);
@@ -276,6 +318,15 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 		dwc3_post_host_reset_core_init(dwc);
 		if (ext_xceiv && !ext_xceiv->otg_capability)
 			dwc3_otg_reset(dotg);
+
+		//ASUS_BSP+++ BennyCheng "avoid to switch none/client mode during LPM"
+		pm_runtime_put_sync(dotg->otg.phy->dev);
+		dwc3_pm_count -= 1;
+		printk("[DWC3-PM][start_host] put_sync:%d, count:%d\n", atomic_read(&dotg->otg.phy->dev->power.usage_count), dwc3_pm_count);
+
+		/* reset host bus suspend state */
+		dotg->host_bus_suspend = 0;
+		//ASUS_BSP--- BennyCheng "avoid to switch none/client mode during LPM"
 	}
 
 	return 0;
@@ -435,9 +486,11 @@ static void dwc3_ext_event_notify(struct usb_otg *otg,
 	struct usb_phy *phy = dotg->otg.phy;
 	int ret = 0;
 
+	//ASUS_BSP+++ "[USB][NA][Fix] avoid sleeping function called from invalid context"
 	/* Flush processing any pending events before handling new ones */
-	if (init)
-		flush_delayed_work(&dotg->sm_work);
+	//if (init)
+	//	flush_delayed_work(&dotg->sm_work);
+	//ASUS_BSP--- "[USB][NA][Fix] avoid sleeping function called from invalid context"
 
 	if (event == DWC3_EVENT_PHY_RESUME) {
 		if (!pm_runtime_status_suspended(phy->dev)) {
@@ -446,6 +499,8 @@ static void dwc3_ext_event_notify(struct usb_otg *otg,
 			dev_dbg(phy->dev, "ext PHY_RESUME event received\n");
 			/* ext_xceiver would have taken h/w out of LPM by now */
 			ret = pm_runtime_get(phy->dev);
+			dwc3_pm_count+=1;
+			printk("[DWC3-PM][DWC3_EVENT_PHY_RESUME] get:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
 			if ((phy->state == OTG_STATE_A_HOST) &&
 							dotg->host_bus_suspend)
 				dotg->host_bus_suspend = 0;
@@ -463,6 +518,8 @@ static void dwc3_ext_event_notify(struct usb_otg *otg,
 		if (pm_runtime_status_suspended(phy->dev)) {
 			dev_warn(phy->dev, "PHY_STATE event in LPM!!!!\n");
 			ret = pm_runtime_get(phy->dev);
+			dwc3_pm_count+=1;
+			printk("[DWC3-PM][DWC3_EVENT_XCEIV_STATE] get:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
 			if (ret < 0)
 				dev_warn(phy->dev, "pm_runtime_get failed!!\n");
 		}
@@ -489,7 +546,10 @@ static void dwc3_ext_event_notify(struct usb_otg *otg,
 							&dotg->sm_work, 0);
 
 			complete(&dotg->dwc3_xcvr_vbus_init);
-			dev_dbg(phy->dev, "XCVR: BSV init complete\n");
+			//ASUS_BSP+++ BennyCheng "show init status of id & bsv at boot"
+			dev_info(phy->dev, "XCVR: BSV init complete, id: %d, bsv: %d\n",
+				test_bit(ID, &dotg->inputs), test_bit(B_SESS_VLD, &dotg->inputs));
+			//ASUS_BSP--- BennyCheng "show init status of id & bsv at boot"
 			return;
 		}
 
@@ -517,6 +577,10 @@ int dwc3_set_ext_xceiv(struct usb_otg *otg, struct dwc3_ext_xceiv *ext_xceiv)
 
 static void dwc3_otg_notify_host_mode(struct usb_otg *otg, int host_mode)
 {
+//ASUS_BSP+++ BennyCheng "disable qcom default otg power control"
+#ifdef CONFIG_CHARGER_ASUS
+	return;
+#else
 	struct dwc3_otg *dotg = container_of(otg, struct dwc3_otg, otg);
 
 	if (!dotg->psy) {
@@ -528,10 +592,16 @@ static void dwc3_otg_notify_host_mode(struct usb_otg *otg, int host_mode)
 		power_supply_set_scope(dotg->psy, POWER_SUPPLY_SCOPE_SYSTEM);
 	else
 		power_supply_set_scope(dotg->psy, POWER_SUPPLY_SCOPE_DEVICE);
+#endif
+//ASUS_BSP--- BennyCheng "disable qcom default otg power control"
 }
 
 static int dwc3_otg_set_power(struct usb_phy *phy, unsigned mA)
 {
+//ASUS_BSP+++ BennyCheng "disable qcom default otg power control"
+#ifdef CONFIG_CHARGER_ASUS
+	return 0;
+#else
 	static int power_supply_type;
 	struct dwc3_otg *dotg = container_of(phy->otg, struct dwc3_otg, otg);
 
@@ -586,6 +656,8 @@ static int dwc3_otg_set_power(struct usb_phy *phy, unsigned mA)
 psy_error:
 	dev_dbg(phy->dev, "power supply error when setting property\n");
 	return -ENXIO;
+#endif
+//ASUS_BSP--- BennyCheng "disable qcom default otg power control"
 }
 
 /* IRQs which OTG driver is interested in handling */
@@ -679,6 +751,21 @@ void dwc3_otg_init_sm(struct dwc3_otg *dotg)
 	}
 
 	ext_xceiv = dotg->ext_xceiv;
+
+	//ASUS_BSP+++ BennyCheng "init bsv & id state for boot case"
+	if (!ret && ext_xceiv && ext_xceiv->otg_capability) {
+		if (ext_xceiv->bsv) {
+			set_bit(B_SESS_VLD, &dotg->inputs);
+		} else {
+			clear_bit(B_SESS_VLD, &dotg->inputs);
+		}
+
+		ext_xceiv->host_mode = 0;
+		set_bit(ID, &dotg->inputs);
+		printk("[usb_otg] switch to peripheral mode (boot)(bsv: %d)\r\n", ext_xceiv->bsv);
+	}
+	//ASUS_BSP--- BennyCheng "init bsv & id state for boot case"
+
 	dwc3_otg_reset(dotg);
 	if (ext_xceiv && !ext_xceiv->otg_capability) {
 		if (osts & DWC3_OTG_OSTS_CONIDSTS)
@@ -706,6 +793,11 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 	struct dwc3_otg *dotg = container_of(w, struct dwc3_otg, sm_work.work);
 	struct usb_phy *phy = dotg->otg.phy;
 	struct dwc3_charger *charger = dotg->charger;
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+	struct dwc3_ext_xceiv *ext_xceiv = dotg->ext_xceiv;
+#endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
 	bool work = 0;
 	int ret = 0;
 	unsigned long delay = 0;
@@ -713,10 +805,45 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 	pm_runtime_resume(phy->dev);
 	dev_dbg(phy->dev, "%s state\n", otg_state_string(phy->state));
 
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+	if (asus_state_otg == ASUS_OTG_CONNECT) {
+		printk("%s: ASUS_OTG_CONNECT\n",__FUNCTION__);
+		set_bit(B_SESS_VLD, &dotg->inputs);//temp set VBUS to detect Charger
+		asus_dwc3_vbus_out_enable(true, 0);
+	} else if (asus_state_otg == ASUS_OTG_DISCONNECT) {
+		printk("%s: ASUS_OTG_DISCONNECT\n",__FUNCTION__);
+		clear_bit(B_SESS_VLD, &dotg->inputs);
+		asus_state_otg = ASUS_OTG_NONE;
+		asus_dwc3_vbus_out_enable(false, 0);
+		if (asus_state_carkit) {
+			asus_state_carkit=ASUS_CARKIT_OFFLINE;
+			switch_set_state(&asus_switch_otg_carkit, ASUS_CARKIT_OFFLINE);
+		} else if (ext_xceiv->host_mode) {
+			/*
+			* When switching host none mode to peripheral mode, pm_runtime_put_sync() will be called twice in b_idle state.
+			* This would cause runtime pm usage_count to go wrong. To avoid it, call asus_dwc3_mode_switch()
+			* to switch peripheral mode and re-send another sm_work, and skip the sm_work for this time.
+			*/
+			asus_dwc3_mode_switch(DWC3_USB_PERIPHERAL);
+			return;
+		}
+	} else if(asus_state_otg == ASUS_OTG_CARKIT && ext_xceiv->vbus_state){//notify carkit charger
+#ifdef CONFIG_CHARGER_ASUS
+		asus_chg_set_chg_mode(ASUS_CHG_SRC_DC);
+#endif
+		printk("[usb_dwc3] OTG set_chg_mode: Carkit\n");
+	}
+#endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
 	/* Check OTG state */
 	switch (phy->state) {
 	case OTG_STATE_UNDEFINED:
 		dwc3_otg_init_sm(dotg);
+
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+#ifndef CONFIG_CHARGER_ASUS
 		if (!dotg->psy) {
 			dotg->psy = power_supply_get_by_name("usb");
 
@@ -724,6 +851,8 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 				dev_err(phy->dev,
 					 "couldn't get usb power supply\n");
 		}
+#endif
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 
 		/* Switch to A or B-Device according to ID / BSV */
 		if (!test_bit(ID, &dotg->inputs)) {
@@ -738,6 +867,8 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			phy->state = OTG_STATE_B_IDLE;
 			dev_dbg(phy->dev, "No device, trying to suspend\n");
 			pm_runtime_put_sync(phy->dev);
+			dwc3_pm_count-=1;
+			printk("[DWC3-PM][OTG_STATE_UNDEFINED] put_sync:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
 		}
 		break;
 
@@ -761,25 +892,87 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 				/* Has charger been detected? If no detect it */
 				switch (charger->chg_type) {
 				case DWC3_DCP_CHARGER:
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+					if (asus_state_otg == ASUS_OTG_CONNECT) {
+						printk("[usb_dwc3] ASUS_OTG_CARKIT\n");
+						asus_state_otg = ASUS_OTG_CARKIT;
+						asus_state_carkit = ASUS_CARKIT_ONLINE;
+						asus_dwc3_vbus_out_enable(false, 0);
+						switch_set_state(&asus_switch_otg_carkit, ASUS_CARKIT_ONLINE);
+						if(ext_xceiv->vbus_state){//notify carkit charger
+#ifdef CONFIG_CHARGER_ASUS
+							asus_chg_set_chg_mode(ASUS_CHG_SRC_DC);
+#endif
+							printk("[usb_dwc3] OTG set_chg_mode: Carkit\n");
+						}
+					}
+#endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
 				case DWC3_PROPRIETARY_CHARGER:
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+					if(asus_state_otg == ASUS_OTG_CONNECT){
+						printk("[usb_dwc3] ASUS_OTG_HOST (PROPRIETARY)\n");
+						asus_state_otg = ASUS_OTG_HOST;
+						asus_dwc3_mode_switch(DWC3_USB_HOST);
+					}
+#endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
 					dev_dbg(phy->dev, "lpm, DCP charger\n");
 					dwc3_otg_set_power(phy,
 							DWC3_IDEV_CHG_MAX);
-					pm_runtime_put_sync(phy->dev);
+					while(dwc3_pm_count>0){
+						pm_runtime_put_sync(phy->dev);
+						dwc3_pm_count-=1;
+						printk("[DWC3-PM][DWC3_DCP_CHARGER] put_sync:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
+					}
 					break;
 				case DWC3_CDP_CHARGER:
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+					if (asus_state_otg == ASUS_OTG_CONNECT) {
+						printk("[usb_dwc3] ASUS_OTG_HOST (CDP)\n");
+						asus_state_otg = ASUS_OTG_HOST;
+						asus_dwc3_mode_switch(DWC3_USB_HOST);
+					} else {
+						dwc3_otg_set_power(phy,
+								DWC3_IDEV_CHG_MAX);
+						dwc3_otg_start_peripheral(&dotg->otg,
+										1);
+						phy->state = OTG_STATE_B_PERIPHERAL;
+						work = 1;
+					}
+#else
 					dwc3_otg_set_power(phy,
 							DWC3_IDEV_CHG_MAX);
 					dwc3_otg_start_peripheral(&dotg->otg,
 									1);
 					phy->state = OTG_STATE_B_PERIPHERAL;
 					work = 1;
+#endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
 					break;
 				case DWC3_SDP_CHARGER:
-					dwc3_otg_start_peripheral(&dotg->otg,
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_ASUS_CARKIT
+					if (asus_state_otg == ASUS_OTG_CONNECT) {
+						printk("[usb_dwc3] ASUS_OTG_HOST (SDP)\n");
+						asus_state_otg = ASUS_OTG_HOST;
+						asus_dwc3_mode_switch(DWC3_USB_HOST);
+					} else {
+						dwc3_otg_start_peripheral(&dotg->otg,
 									1);
+						phy->state = OTG_STATE_B_PERIPHERAL;
+						work = 1;
+					}
+#else
+					dwc3_otg_start_peripheral(&dotg->otg,
+								1);
 					phy->state = OTG_STATE_B_PERIPHERAL;
 					work = 1;
+#endif
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
 					break;
 				case DWC3_FLOATED_CHARGER:
 					if (dotg->charger_retry_count <
@@ -798,6 +991,8 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 						max_chgr_retry_count) {
 						dwc3_otg_set_power(phy, 0);
 						pm_runtime_put_sync(phy->dev);
+						dwc3_pm_count-=1;
+						printk("[DWC3-PM][DWC3_UNSUPPORTED_CHARGER] put_sync:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
 						break;
 					}
 					charger->start_detection(dotg->charger,
@@ -805,6 +1000,9 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 
 				default:
 					dev_dbg(phy->dev, "chg_det started\n");
+					pm_runtime_get(phy->dev);
+					dwc3_pm_count+=1;
+					printk("[DWC3-PM][B_SESS_VLD] get:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
 					charger->start_detection(charger, true);
 					break;
 				}
@@ -820,6 +1018,8 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 						"unable to start B-device\n");
 					phy->state = OTG_STATE_UNDEFINED;
 					pm_runtime_put_sync(phy->dev);
+					dwc3_pm_count-=1;
+					printk("[DWC3-PM][OTG_STATE_B_IDLE] put_sync2:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
 					return;
 				}
 			}
@@ -830,13 +1030,24 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			dotg->charger_retry_count = 0;
 			dwc3_otg_set_power(phy, 0);
 			dev_dbg(phy->dev, "No device, trying to suspend\n");
-			pm_runtime_put_sync(phy->dev);
+			while(dwc3_pm_count>0){
+				pm_runtime_put_sync(phy->dev);
+				dwc3_pm_count-=1;
+				printk("[DWC3-PM][OTG_STATE_B_IDLE] put_sync:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
+			}
 		}
 		break;
 
 	case OTG_STATE_B_PERIPHERAL:
 		if (!test_bit(B_SESS_VLD, &dotg->inputs) ||
+				//ASUS_BSP+++ BennyCheng "add a condition to switch to host in b_peripheral state"
+#ifdef CONFIG_ASUS_CARKIT
+				!test_bit(ID, &dotg->inputs) ||
+				asus_state_otg == ASUS_OTG_CONNECT) {
+#else
 				!test_bit(ID, &dotg->inputs)) {
+#endif
+				//ASUS_BSP--- BennyCheng "add a condition to switch to host in b_peripheral state"
 			dev_dbg(phy->dev, "!id || !bsv\n");
 			dwc3_otg_start_peripheral(&dotg->otg, 0);
 			phy->state = OTG_STATE_B_IDLE;
@@ -876,6 +1087,8 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 					"unable to start A-device\n");
 				phy->state = OTG_STATE_A_IDLE;
 				pm_runtime_put_sync(phy->dev);
+				dwc3_pm_count-=1;
+				printk("[DWC3-PM][OTG_STATE_A_IDLE] put_sync:%d,count:%d\n",atomic_read(&phy->dev->power.usage_count),dwc3_pm_count);
 				return;
 			}
 		}
@@ -1033,7 +1246,8 @@ int dwc3_otg_init(struct dwc3 *dwc)
 	}
 
 	pm_runtime_get(dwc->dev);
-
+	dwc3_pm_count+=1;
+	printk("[DWC3-PM][dwc3_otg_init] get:%d,count:%d\n",atomic_read(&dwc->dev->power.usage_count),dwc3_pm_count);
 	return 0;
 
 err3:
@@ -1065,6 +1279,8 @@ void dwc3_otg_exit(struct dwc3 *dwc)
 		cancel_delayed_work_sync(&dotg->sm_work);
 		usb_set_transceiver(NULL);
 		pm_runtime_put(dwc->dev);
+		dwc3_pm_count-=1;
+		printk("[DWC3-PM][dwc3_otg_exit] put:%d,count:%d\n",atomic_read(&dwc->dev->power.usage_count),dwc3_pm_count);
 		free_irq(dotg->irq, dotg);
 		kfree(dotg->otg.phy);
 		kfree(dotg);

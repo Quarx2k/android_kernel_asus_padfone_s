@@ -1302,18 +1302,12 @@ int32_t qpnp_iadc_vadc_sync_read(struct qpnp_iadc_chip *iadc,
 	enum qpnp_vadc_channels v_channel, struct qpnp_vadc_result *v_result)
 {
 	int rc = 0, mode_sel = 0, num = 0, rsense_n_ohms = 0, sign = 0;
-	int dt_index = 0;
 	uint16_t raw_data;
 	int32_t rsense_u_ohms = 0;
 	int64_t result_current;
 
 	if (qpnp_iadc_is_valid(iadc) < 0)
 		return -EPROBE_DEFER;
-
-	if ((iadc->adc->calib.gain_raw - iadc->adc->calib.offset_raw) == 0) {
-		pr_err("raw offset errors! run iadc calibration again\n");
-		return -EINVAL;
-	}
 
 	mutex_lock(&iadc->adc->adc_lock);
 
@@ -1329,22 +1323,6 @@ int32_t qpnp_iadc_vadc_sync_read(struct qpnp_iadc_chip *iadc,
 		pr_err("Configuring VADC failed\n");
 		goto fail;
 	}
-
-	while (((enum qpnp_iadc_channels)
-		iadc->adc->adc_channels[dt_index].channel_num
-		!= i_channel) && (dt_index < iadc->max_channels_available))
-		dt_index++;
-
-	if (dt_index >= iadc->max_channels_available) {
-		pr_err("not a valid IADC channel\n");
-		rc = -EINVAL;
-		goto fail;
-	}
-
-	iadc->adc->amux_prop->decimation =
-			iadc->adc->adc_channels[dt_index].adc_decimation;
-	iadc->adc->amux_prop->fast_avg_setup =
-			iadc->adc->adc_channels[dt_index].fast_avg_setup;
 
 	rc = qpnp_iadc_configure(iadc, i_channel, &raw_data, mode_sel);
 	if (rc < 0) {
@@ -1367,11 +1345,6 @@ int32_t qpnp_iadc_vadc_sync_read(struct qpnp_iadc_chip *iadc,
 	result_current = i_result->result_uv;
 	result_current *= QPNP_IADC_NANO_VOLTS_FACTOR;
 	/* Intentional fall through. Process the result w/o comp */
-	if (!rsense_u_ohms) {
-		pr_err("rsense error=%d\n", rsense_u_ohms);
-		goto fail_release_vadc;
-	}
-
 	do_div(result_current, rsense_u_ohms);
 
 	if (sign) {
@@ -1403,6 +1376,7 @@ fail:
 
 	return rc;
 }
+
 EXPORT_SYMBOL(qpnp_iadc_vadc_sync_read);
 
 static ssize_t qpnp_iadc_show(struct device *dev,

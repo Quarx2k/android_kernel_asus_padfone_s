@@ -165,6 +165,24 @@ struct diag_context {
 	/* A list node inside the diag_dev_list */
 	struct list_head list_item;
 };
+//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
+static const char diag_string_interface[] = "Qualcomm HS-USB Diagnostics";
+enum {
+	DIAG_STRING_INTERFACE
+};
+static struct usb_string diag_strings[] = {
+	{DIAG_STRING_INTERFACE,diag_string_interface},
+	{}
+};
+static struct usb_gadget_strings diag_stringtab = {
+	.language = 0x0409,/* en-us */
+	.strings = diag_strings,
+};
+static struct usb_gadget_strings *diag_strings_array[] = {
+	&diag_stringtab,
+	NULL,
+};
+//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
 
 static struct list_head diag_dev_list;
 
@@ -640,7 +658,13 @@ static int diag_function_bind(struct usb_configuration *c,
 	int status = -ENODEV;
 
 	intf_desc.bInterfaceNumber =  usb_interface_id(c, f);
-
+	//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
+	if (diag_strings[DIAG_STRING_INTERFACE].id == 0) {
+		int rc = usb_string_id(c->cdev);
+		diag_strings[DIAG_STRING_INTERFACE].id = rc;
+		intf_desc.iInterface = rc;
+	}
+	//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_bulk_in_desc);
 	if (!ep)
 		goto fail;
@@ -742,6 +766,9 @@ int diag_function_add(struct usb_configuration *c, const char *name,
 	dev->function.unbind = diag_function_unbind;
 	dev->function.set_alt = diag_function_set_alt;
 	dev->function.disable = diag_function_disable;
+	//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
+	dev->function.strings     = diag_strings_array;
+	//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
 	spin_lock_init(&dev->lock);
 	INIT_LIST_HEAD(&dev->read_pool);
 	INIT_LIST_HEAD(&dev->write_pool);

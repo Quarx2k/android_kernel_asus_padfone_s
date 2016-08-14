@@ -139,5 +139,8 @@ config SSM
 	  and modem for key exchange and mode change.
 	  This driver uses Secure Channel Manager interface for trustzone
 	  communication and communicates with modem over SMD channel.
+config ON_SEMI_VIBRATOR
+        bool "on_semi_LC898301 interface"
+        depends on I2C
 
 endmenu

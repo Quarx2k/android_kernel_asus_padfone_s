@@ -765,6 +765,7 @@ struct msm_frame {
 	struct ion_allocation_data ion_alloc;
 	struct ion_fd_data fd_data;
 	int ion_dev_fd;
+	struct exif_cfg JpegExif;    //ASUS_BSP: Darrency_lin ++ camera mini porting
 };
 
 enum msm_st_frame_packing {
@@ -910,6 +911,22 @@ struct msm_stats_buf {
 #define MSM_V4L2_CAM_OP_RAW             (MSM_V4L2_CAM_OP_DEFAULT+5)
 /* camera operation mode for jpeg snapshot - one frame output queue */
 #define MSM_V4L2_CAM_OP_JPEG_CAPTURE    (MSM_V4L2_CAM_OP_DEFAULT+6)
+//ASUS_BSP: Darrency_lin ++ camera mini porting
+/* camera operation mode for video recording - two frame output queues */
+#define MSM_V4L2_CAM_OP_VIDEO_FULL_HD   (MSM_V4L2_CAM_OP_DEFAULT+7)	//ASUS_BSP Stimber "Implement Full HD resolution"
+/* camera operation mode for zsl shapshot - three output queues */
+#define MSM_V4L2_CAM_OP_ZSL_10M   	  (MSM_V4L2_CAM_OP_DEFAULT+8)	//ASUS_BSP Stimber "Implement 10M ZSL resolution"
+/* camera operation mode for video recording - two frame output queues */
+#define MSM_V4L2_CAM_OP_VIDEO_HYBRID   	  (MSM_V4L2_CAM_OP_DEFAULT+9)	//ASUS_BSP Stimber "Implement 6.35M Hybrid resolution"
+/* camera operation mode for video recording - two frame output queues */
+#define MSM_V4L2_CAM_OP_VIDEO_4BIN   	  (MSM_V4L2_CAM_OP_DEFAULT+10)	//ASUS_BSP Stimber "Implement 4x4 binning resolution"
+/* camera operation mode for video recording - two frame output queues */
+#define MSM_V4L2_CAM_OP_FULL_SINGLE_CAPTURE   	  (MSM_V4L2_CAM_OP_DEFAULT+11)	 //ASUS_BSP Stimber "Implement Full Single Capture mode"
+/* camera operation mode for zsl shapshot - three output queues */
+#define MSM_V4L2_CAM_OP_ZSL_BURST_CAPTURE   	  (MSM_V4L2_CAM_OP_DEFAULT+12)		//ASUS_BSP Stimber "Implement Full Burst Capture mode"
+/* camera operation mode for zsl shapshot - three output queues */
+#define MSM_V4L2_CAM_OP_ZSL_10M_BURST_CAPTURE   	  (MSM_V4L2_CAM_OP_DEFAULT+13)		//ASUS_BSP Stimber "Implement 10M Burst Capture mode"
+//ASUS_BSP: Darrency_lin -- camera mini porting
 
 
 #define MSM_V4L2_VID_CAP_TYPE	0
@@ -1038,7 +1055,17 @@ struct msm_snapshot_pp_status {
 #define CAMERA_EFFECT_ACCENT_BLUE       15
 #define CAMERA_EFFECT_ACCENT_GREEN      16
 #define CAMERA_EFFECT_ACCENT_ORANGE     17
-#define CAMERA_EFFECT_MAX               18
+//ASUS_BSP: Darrency_lin ++ camera mini porting
+#define CAMERA_EFFECT_NORMAL     18
+#define CAMERA_EFFECT_AURA         19
+#define CAMERA_EFFECT_VINTAGE    20
+#define CAMERA_EFFECT_VINTAGE2  21
+#define CAMERA_EFFECT_LOMO         22
+#define CAMERA_EFFECT_RED            23
+#define CAMERA_EFFECT_BLUE          24
+#define CAMERA_EFFECT_YELLOW      25
+#define CAMERA_EFFECT_MAX            26
+//ASUS_BSP: Darrency_lin -- camera mini porting
 
 /* QRD */
 #define CAMERA_EFFECT_BW		10
@@ -1296,6 +1323,8 @@ struct sensor_calib_data {
 	uint16_t af_pos_inf;
 };
 
+//ASUS_BSP: Darrency_lin ++ camera mini porting
+#if 0
 enum msm_sensor_resolution_t {
 	MSM_SENSOR_RES_FULL,
 	MSM_SENSOR_RES_QTR,
@@ -1307,6 +1336,8 @@ enum msm_sensor_resolution_t {
 	MSM_SENSOR_RES_7,
 	MSM_SENSOR_INVALID_RES,
 };
+#endif
+//ASUS_BSP: Darrency_lin -- camera mini porting
 
 struct msm_sensor_output_info_t {
 	uint16_t x_output;

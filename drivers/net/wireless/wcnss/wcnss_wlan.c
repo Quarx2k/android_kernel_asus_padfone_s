@@ -58,6 +58,13 @@
 #define WAIT_FOR_CBC_IND     2
 #define IS_CAL_DATA_PRESENT     0
 
+static char *wcnss_ready = NULL;
+module_param(wcnss_ready, charp, S_IRUGO | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+//ASUS_BSP+++ "for wlan wakeup trace"
+int g_wcnss_wlanrx_irq = 0;
+//ASUS_BSP--- "for wlan wakeup trace"
+
 /* module params */
 #define WCNSS_CONFIG_UNSPECIFIED (-1)
 #define UINT32_MAX (0xFFFFFFFFU)
@@ -945,12 +952,14 @@ void wcnss_log_debug_regs_on_bite(void)
 void wcnss_reset_intr(void)
 {
 	if (wcnss_hardware_type() == WCNSS_PRONTO_HW) {
+		pr_info("[wcnss]: wcnss_reset_intr, WCNSS_PRONTO_HW.\n");
 		wcnss_pronto_log_debug_regs();
 		if (wcnss_get_mux_control())
 			wcnss_log_iris_regs();
 		wmb();
 		__raw_writel(1 << 16, penv->fiq_reg);
 	} else {
+		pr_info("[wcnss]: wcnss_reset_intr, WCNSS_RIVA_HW.\n");
 		wcnss_riva_log_debug_regs();
 		wmb();
 		__raw_writel(1 << 24, MSM_APCS_GCC_BASE + 0x8);
@@ -1075,6 +1084,7 @@ static void wcnss_smd_notify_event(void *data, unsigned int event)
 	}
 	switch (event) {
 	case SMD_EVENT_DATA:
+		pr_info("[wcnss]: SMD_EVENT_DATA.\n");
 		len = smd_read_avail(penv->smd_ch);
 		if (len < 0) {
 			pr_err("wcnss: failed to read from smd %d\n", len);
@@ -1084,7 +1094,7 @@ static void wcnss_smd_notify_event(void *data, unsigned int event)
 		break;
 
 	case SMD_EVENT_OPEN:
-		pr_debug("wcnss: opening WCNSS SMD channel :%s",
+		pr_info("[wcnss]: SMD_EVENT_OPEN, opening WCNSS SMD channel :%s",
 				WCNSS_CTRL_CHANNEL);
 		schedule_work(&penv->wcnssctrl_version_work);
 		schedule_work(&penv->wcnss_pm_config_work);
@@ -1094,7 +1104,7 @@ static void wcnss_smd_notify_event(void *data, unsigned int event)
 		break;
 
 	case SMD_EVENT_CLOSE:
-		pr_debug("wcnss: closing WCNSS SMD channel :%s",
+		pr_info("[wcnss]: SMD_EVENT_CLOSE, closing WCNSS SMD channel :%s",
 				WCNSS_CTRL_CHANNEL);
 		penv->nv_downloaded = 0;
 		penv->is_cbc_done = 0;
@@ -1112,12 +1122,19 @@ static void wcnss_post_bootup(struct work_struct *work)
 		return;
 	}
 
-	pr_info("%s: Cancel APPS vote for Iris & WCNSS\n", __func__);
+	pr_info("[wcnss]: %s: Cancel APPS vote for Iris & WCNSS\n", __func__);
+	//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+	ASUSEvtlog("[wcnss]: wcnss_post_bootup, Cancel APPS vote for Iris & Riva.\n");
+	//ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
 	/* Since WCNSS is up, cancel any APPS vote for Iris & WCNSS VREGs  */
 	wcnss_wlan_power(&penv->pdev->dev, &penv->wlan_config,
 		WCNSS_WLAN_SWITCH_OFF, NULL);
 
+	/*--------------------------------------------------*/
+	sprintf((char *)(wcnss_ready), "1");
+	printk("[wcnss]: wcnss_ready=1.\n");
+	/*--------------------------------------------------*/
 }
 
 static int
@@ -1183,7 +1200,7 @@ wcnss_wlan_ctrl_probe(struct platform_device *pdev)
 
 	penv->smd_channel_ready = 1;
 
-	pr_info("%s: SMD ctrl channel up\n", __func__);
+	pr_info("[wcnss]: wcnss_wlan_ctrl_probe, SMD ctrl channel up.\n");
 
 	/* Schedule a work to do any post boot up activity */
 	INIT_DELAYED_WORK(&penv->wcnss_work, wcnss_post_bootup);
@@ -1239,7 +1256,7 @@ wcnss_ctrl_probe(struct platform_device *pdev)
 	ret = smd_named_open_on_edge(WCNSS_CTRL_CHANNEL, SMD_APPS_WCNSS,
 			&penv->smd_ch, penv, wcnss_smd_notify_event);
 	if (ret < 0) {
-		pr_err("wcnss: cannot open the smd command channel %s: %d\n",
+		pr_err("[wcnss]: cannot open the smd command channel %s: %d\n",
 				WCNSS_CTRL_CHANNEL, ret);
 		return -ENODEV;
 	}
@@ -1495,6 +1512,8 @@ EXPORT_SYMBOL(wcnss_resume_notify);
 
 static int wcnss_wlan_suspend(struct device *dev)
 {
+	pr_info("[wcnss]: wcnss_wlan_suspend.\n");
+
 	if (penv && dev && (dev == &penv->pdev->dev) &&
 	    penv->smd_channel_ready &&
 	    penv->pm_ops && penv->pm_ops->suspend)
@@ -1504,6 +1523,8 @@ static int wcnss_wlan_suspend(struct device *dev)
 
 static int wcnss_wlan_resume(struct device *dev)
 {
+	pr_info("[wcnss]: wcnss_wlan_resume.\n");
+
 	if (penv && dev && (dev == &penv->pdev->dev) &&
 	    penv->smd_channel_ready &&
 	    penv->pm_ops && penv->pm_ops->resume)
@@ -1587,12 +1608,12 @@ static int wcnss_smd_tx(void *data, int len)
 
 	ret = smd_write_avail(penv->smd_ch);
 	if (ret < len) {
-		pr_err("wcnss: no space available for smd frame\n");
+		pr_err("[wcnss]: no space available for smd frame\n");
 		return -ENOSPC;
 	}
 	ret = smd_write(penv->smd_ch, data, len);
 	if (ret < len) {
-		pr_err("wcnss: failed to write Command %d", len);
+		pr_err("[wcnss]: failed to write Command %d", len);
 		ret = -ENODEV;
 	}
 	return ret;
@@ -1941,7 +1962,7 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 	case WCNSS_NVBIN_DNLD_RSP:
 		penv->nv_downloaded = true;
 		fw_status = wcnss_fw_status();
-		pr_debug("wcnss: received WCNSS_NVBIN_DNLD_RSP from ccpu %u\n",
+		pr_debug("[wcnss]: received WCNSS_NVBIN_DNLD_RSP from ccpu %u\n",
 			fw_status);
 		if (fw_status != WAIT_FOR_CBC_IND)
 			penv->is_cbc_done = 1;
@@ -1951,12 +1972,12 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 	case WCNSS_CALDATA_DNLD_RSP:
 		penv->nv_downloaded = true;
 		fw_status = wcnss_fw_status();
-		pr_debug("wcnss: received WCNSS_CALDATA_DNLD_RSP from ccpu %u\n",
+		pr_debug("[wcnss]: received WCNSS_CALDATA_DNLD_RSP from ccpu %u\n",
 			fw_status);
 		break;
 	case WCNSS_CBC_COMPLETE_IND:
 		penv->is_cbc_done = 1;
-		pr_debug("wcnss: received WCNSS_CBC_COMPLETE_IND from FW\n");
+		pr_debug("[wcnss]: received WCNSS_CBC_COMPLETE_IND from FW\n");
 		break;
 
 	case WCNSS_CALDATA_UPLD_REQ:
@@ -2115,11 +2136,12 @@ static void wcnss_nvbin_dnld(void)
 
 		retry_count = 0;
 		while ((ret == -ENOSPC) && (retry_count <= 3)) {
-			pr_debug("wcnss: %s: smd tx failed, ENOSPC\n",
-				__func__);
-			pr_debug("fragment: %d, len: %d, TotFragments: %d, retry_count: %d\n",
-				count, dnld_req_msg->hdr.msg_len,
-				total_fragments, retry_count);
+			//pr_debug("wcnss: %s: smd tx failed, ENOSPC\n",
+			//	__func__);
+			//pr_debug("fragment: %d, len: %d, TotFragments: %d, retry_count: %d\n",
+			//	count, dnld_req_msg->hdr.msg_len,
+			//	total_fragments, retry_count);
+			pr_info("[wcnss]: wcnss_nvbin_dnld_req, smd tx retry_count=%d, (%d, %d, %d).\n", retry_count, count, dnld_req_msg->hdr.msg_len, total_fragments);
 
 			/* wait and try again */
 			msleep(20);
@@ -2419,6 +2441,7 @@ wcnss_trigger_config(struct platform_device *pdev)
 	}
 	penv->wcnss_hw_type = (has_pronto_hw) ? WCNSS_PRONTO_HW : WCNSS_RIVA_HW;
 	penv->wlan_config.use_48mhz_xo = has_48mhz_xo;
+	printk("[wcnss]: has_48mhz_xo=%d.\n", penv->wlan_config.use_48mhz_xo);
 	penv->wlan_config.is_pronto_v3 = is_pronto_v3;
 
 	if (WCNSS_CONFIG_UNSPECIFIED == has_autodetect_xo && has_pronto_hw) {
@@ -2471,6 +2494,13 @@ wcnss_trigger_config(struct platform_device *pdev)
 		ret = -ENOENT;
 		goto fail_res;
 	}
+
+	//ASUS_BSP+++ "for wlan wakeup trace"
+	pr_info("[wcnss]: %s=%d.\n", (penv->tx_irq_res->name), (int)(penv->tx_irq_res->start));
+	pr_info("[wcnss]: %s=%d.\n", (penv->rx_irq_res->name), (int)(penv->rx_irq_res->start));
+	g_wcnss_wlanrx_irq = (int)(penv->rx_irq_res->start);
+	//ASUS_BSP--- "for wlan wakeup trace"
+
 	INIT_WORK(&penv->wcnssctrl_rx_work, wcnssctrl_rx_handler);
 	INIT_WORK(&penv->wcnssctrl_version_work, wcnss_send_version_req);
 	INIT_WORK(&penv->wcnss_pm_config_work, wcnss_send_pm_config);
@@ -2484,9 +2514,11 @@ wcnss_trigger_config(struct platform_device *pdev)
 	if (wcnss_hardware_type() == WCNSS_PRONTO_HW) {
 		size = 0x3000;
 		wcnss_phys_addr = MSM_PRONTO_PHYS;
+		pr_info("[wcnss]: PRONTO.\n");
 	} else {
 		wcnss_phys_addr = MSM_RIVA_PHYS;
 		size = SZ_256;
+		pr_info("[wcnss]: RIVA.\n");
 	}
 
 	penv->msm_wcnss_base = ioremap(wcnss_phys_addr, size);
@@ -2504,6 +2536,7 @@ wcnss_trigger_config(struct platform_device *pdev)
 			goto fail_ioremap2;
 		}
 	} else {
+		pr_info("[wcnss]: RIVA, MSM_RIVA_CCU_BASE=0x03200800.\n");
 		penv->pronto_a2xb_base =  ioremap(MSM_PRONTO_A2XB_BASE, SZ_512);
 		if (!penv->pronto_a2xb_base) {
 			ret = -ENOMEM;
@@ -2587,6 +2620,7 @@ wcnss_trigger_config(struct platform_device *pdev)
 				__func__);
 			goto fail_ioremap12;
 		}
+		pr_info("[wcnss]: PRONTO, MSM_PRONTO_A2XB_BASE=0xfb100400.\n");
 	}
 	penv->adc_tm_dev = qpnp_get_adc_tm(&penv->pdev->dev, "wcnss");
 	if (IS_ERR(penv->adc_tm_dev)) {
@@ -2602,9 +2636,20 @@ wcnss_trigger_config(struct platform_device *pdev)
 		penv->pil = subsystem_get(WCNSS_PIL_DEVICE);
 		if (IS_ERR(penv->pil)) {
 			dev_err(&pdev->dev, "Peripheral Loader failed on WCNSS.\n");
+
+			//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+			ASUSEvtlog("[wcnss]: Load WCNSS failed.\n");
+			//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+
 			ret = PTR_ERR(penv->pil);
 			wcnss_disable_pc_add_req();
 			wcnss_pronto_log_debug_regs();
+		}
+		else {
+			printk("[wcnss]: Load WCNSS image ok.\n");
+			//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+			ASUSEvtlog("[wcnss]: Load WCNSS image ok.\n");
+			//ASUS_BSP--- "for /data/log/ASUSEvtlog"
 		}
 	} while (pil_retry++ < WCNSS_MAX_PIL_RETRY && IS_ERR(penv->pil));
 
@@ -2955,6 +3000,8 @@ static int __init wcnss_wlan_init(void)
 {
 	int ret = 0;
 
+        pr_info("[wcnss]: wcnss_wlan_init +.\n");
+
 	platform_driver_register(&wcnss_wlan_driver);
 	platform_driver_register(&wcnss_wlan_ctrl_driver);
 	platform_driver_register(&wcnss_ctrl_driver);
@@ -2965,11 +3012,24 @@ static int __init wcnss_wlan_init(void)
 		pr_err("wcnss: pre-allocation failed\n");
 #endif
 
+    /*--------------------------------------------------*/
+    wcnss_ready = (char *) kmalloc(32, GFP_KERNEL);
+    if( wcnss_ready == NULL ) {
+        printk("[wcnss]: wcnss_ready, malloc(32) fail.\n");
+    }
+    else {
+        memset( wcnss_ready, 0, 32 );
+    }
+    /*--------------------------------------------------*/
+
+	pr_info("[wcnss]: wcnss_wlan_init -.\n");
 	return ret;
 }
 
 static void __exit wcnss_wlan_exit(void)
 {
+	pr_info("[wcnss]: wcnss_wlan_exit +.\n");
+
 	if (penv) {
 		if (penv->pil)
 			subsystem_put(penv->pil);
@@ -2983,6 +3043,8 @@ static void __exit wcnss_wlan_exit(void)
 	platform_driver_unregister(&wcnss_ctrl_driver);
 	platform_driver_unregister(&wcnss_wlan_ctrl_driver);
 	platform_driver_unregister(&wcnss_wlan_driver);
+
+	pr_info("[wcnss]: wcnss_wlan_exit -.\n");
 }
 
 module_init(wcnss_wlan_init);

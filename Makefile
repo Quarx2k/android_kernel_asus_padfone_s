@@ -644,6 +644,53 @@ ifeq ($(shell $(CONFIG_SHELL) $(srctree)/scripts/gcc-goto.sh $(CC)), y)
 	KBUILD_CFLAGS += -DCC_HAVE_ASM_GOTO
 endif
 
+# ASUS_BSP : miniporting : jackson : add ASUS software version support +++
+ifneq ($(BUILD_NUMBER),)
+        KBUILD_CPPFLAGS += -DASUS_SW_VER=\"$(BUILD_NUMBER)\"
+else
+        KBUILD_CPPFLAGS += -DASUS_SW_VER=\"$(ASUS_BUILD_PROJECT)_ENG\"
+endif
+
+# ASUS_BSP : miniporting : jackson : add ASUS software version support ---
+
+# jackson : support mutliple project build +++
+ifeq ($(ASUS_BUILD_PROJECT), A86)
+        KBUILD_CPPFLAGS += -DASUS_A86_PROJECT=1
+endif
+ifeq ($(ASUS_BUILD_PROJECT), A91)
+        KBUILD_CPPFLAGS += -DASUS_A91_PROJECT=1
+endif
+ifeq ($(ASUS_BUILD_PROJECT), PF500KL)
+        KBUILD_CPPFLAGS += -DASUS_PF500KL_PROJECT=1
+endif
+# jackson : support mutliple project build ---
+
+# jackson : factory compile option support +++
+ifneq ($(ASUS_FACTORY_BUILD),)
+        KBUILD_CPPFLAGS += -DASUS_FACTORY_BUILD=1
+endif
+# jackson : factory compile option support ---
+ifeq ($(TARGET_BUILD_VARIANT), user)
+# jackson : add ASUS_SHIP_BUILD for user build variant +++
+        KBUILD_CPPFLAGS += -DASUS_SHIP_BUILD=1
+# jackson : add ASUS_SHIP_BUILD for user build variant ---
+#        KBUILD_CPPFLAGS += -DASUS_DOWNLOAD_MODE_DISABLE=1
+endif
+
+
+# ASUS_BSP : for userdebuf build
+ifeq ($(TARGET_BUILD_VARIANT), userdebug)
+        KBUILD_CPPFLAGS += -DASUS_USERDEBUG_BUILD=1
+#        KBUILD_CPPFLAGS += -DASUS_DOWNLOAD_MODE_DISABLE=1
+endif
+# ASUS_BSP : for userdebug build
+
+# ASUS_BSP : for eng build
+ifeq ($(TARGET_BUILD_VARIANT), eng)
+        KBUILD_CPPFLAGS += -DASUS_ENG_BUILD=1
+endif
+# ASUS_BSP : for eng build
+
 # Add user supplied CPPFLAGS, AFLAGS and CFLAGS as the last assignments
 # But warn user when we do so
 warn-assign = \

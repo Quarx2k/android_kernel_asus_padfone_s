@@ -55,16 +55,14 @@
 		qcom,system-reset;
 		qcom,s3-debounce = <32>;
 
+/*ASUS BSP freddy++  "[A91][key][Fix][Spec] keypad porting->remove qcom power-on driver"
+//for fix wakeup panel have to press powekey 2 times because  powerkey key-code conflict
 		qcom,pon_1 {
 			qcom,pon-type = <0>;
-			qcom,support-reset = <1>;
 			qcom,pull-up = <1>;
-			qcom,s1-timer = <10256>;
-			qcom,s2-timer = <2000>;
-			qcom,s2-type = <1>;
 			linux,code = <116>;
 		};
-
+*/
 		qcom,pon_2 {
 			qcom,pon-type = <1>;
 			qcom,support-reset = <1>;
@@ -1238,14 +1236,16 @@
 		compatible = "qcom,qpnp-regulator";
 		status = "disabled";
 	};
-
-	qcom,vibrator@c000 {
-		compatible = "qcom,qpnp-vibrator";
-		reg = <0xc000 0x100>;
-		label = "vibrator";
-		status = "disabled";
-	};
-
+//ASUS_BSP +++ freddy "[A91][vib][NA][Spec] qcm vibrator porting"
+		qcom,vibrator@c000 {
+			compatible = "qcom,qpnp-vibrator";
+			reg = <0xc000 0x100>;
+			label = "vibrator";
+			status = "okay";
+			qcom,vib-timeout-ms = <15000>;
+			qcom,vib-vtg-level-mV = <3000>;
+		};
+//ASUS_BSP --- freddy "[A91][vib][NA][Spec] qcm vibrator porting"
 	qcom,leds@d000 {
 		compatible = "qcom,leds-qpnp";
 		reg = <0xd000 0x100>;

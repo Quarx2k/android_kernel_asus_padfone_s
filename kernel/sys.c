@@ -88,6 +88,33 @@
 # define SET_TSC_CTL(a)		(-EINVAL)
 #endif
 
+//ASUS BSP Eason_Chang : A86  Pad shutdown need do +++
+#ifdef CONFIG_EEPROM_NUVOTON
+#include <linux/microp_api.h>
+#include <linux/microp.h>
+#include <linux/microp_pin_def.h>
+extern int uP_nuvoton_write_reg(int cmd, void *data);
+#endif
+//ASUS BSP Eason_Chang : A86  Pad shutdown need do ---
+//ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode +++
+extern void UsbSetOtgSwitch(bool switchOtg);
+//ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode ---
+//Hank : Temp monitor set charger default temp threshold+++
+//#ifdef ASUS_A91_PROJECT
+#include <linux/gpio.h>
+extern void setSmb346DefaultHotTempLimit(void);
+//#endif
+#ifdef ASUS_ME771KL_PROJECT
+extern void setSmb345DefaultHotTempLimit(void);
+#endif
+//Hank : Temp monitor set charger default temp threshold---
+extern bool DffsDown;
+extern void setSmb346CC_Curr1250mA_Iterm50(void);
+#define smb346INOK 27 
+extern bool SMB346_INOK_Online;
+extern void limitSmb346chg900(void);
+extern void limitPM8941chg900(void);
+
 /*
  * this is where the system-wide overflow UID and GID are defined, for
  * architectures that now have 32-bit UID/GID but didn't in the past
@@ -408,10 +435,72 @@ EXPORT_SYMBOL_GPL(kernel_halt);
  */
 void kernel_power_off(void)
 {
+	//ASUS BSP Eason_Chang : A86  Pad shutdown need do +++
+#ifdef CONFIG_EEPROM_NUVOTON	
+	unsigned short off=0xAA;
+#endif
+	//ASUS BSP Eason_Chang : A86  Pad shutdown need do ---
 	kernel_shutdown_prepare(SYSTEM_POWER_OFF);
 	if (pm_power_off_prepare)
 		pm_power_off_prepare();
 	disable_nonboot_cpus();
+
+	//Hank: OTG shut down reboot SW workaround +++
+	printk("[BAT]shutdown DisOTG+++\n ");
+	//#ifdef ASUS_A91_PROJECT
+   if(A90_EVB0==g_ASUS_hwID)
+		gpio_direction_output(52, false);
+	//#endif
+	UsbSetOtgSwitch(false);
+	printk("[BAT]shutdown DisOTG---\n ");
+	//Hank: OTG shut down reboot SW workaround ---
+
+	//ASUS BSP Eason_Chang : A86  Pad shutdown need do +++
+#ifdef CONFIG_EEPROM_NUVOTON	
+	if(AX_MicroP_IsP01Connected())
+	{
+		//ASUS BSP Eason: when shutdown force turn off Vbus +++
+		if( P01_CABLE_CHARGER != AX_MicroP_get_USBDetectStatus(Batt_P01))
+		{
+			AX_MicroP_setGPIOOutputPin(OUT_uP_VBUS_EN, 0);
+		}
+		//Hank:Pad mode  poweroff with AC set current 900mA+++
+		else if((A90_EVB0==g_ASUS_hwID))
+		{
+			limitSmb346chg900();
+		}
+		else
+			limitPM8941chg900();	
+		//Hank:Pad mode  poweroff with AC set current 900mA---	
+		//ASUS BSP Eason: when shutdown force turn off Vbus ---	
+		//ASUS_BSP +++ Peter Lu "Trun off scaler"
+		printk("switch_backlight_and_panel off\n");
+		AX_MicroP_setGPIOOutputPin(OUT_uP_LCD_EN, 0);
+		//ASUS_BSP --- Peter Lu
+
+		uP_nuvoton_write_reg(MICROP_SOFTWARE_OFF,  &off);
+		printk("[ChgMode]:P03 power off\n");
+	}
+#endif	
+	//ASUS BSP Eason_Chang : A86  Pad shutdown need do ---
+
+	//Hank:power off set cc current 1250mA+++
+	if(SMB346_INOK_Online &&  (A90_EVB0==g_ASUS_hwID))
+		setSmb346CC_Curr1250mA_Iterm50();	
+	//Hank:power off set cc current 1250mA---
+	
+	//Hank : Temp monitor set charger default temp threshold+++
+	if(DffsDown == true &&  SMB346_INOK_Online &&  (A90_EVB0==g_ASUS_hwID))
+	{
+		//#ifdef ASUS_A91_PROJECT
+		setSmb346DefaultHotTempLimit();
+		//#endif
+		#ifdef ASUS_ME771KL_PROJECT
+		setSmb345DefaultHotTempLimit();
+		#endif
+	}
+	//Hank : Temp monitor set charger default temp threshold---
+
 	syscore_shutdown();
 	printk(KERN_EMERG "Power down.\n");
 	kmsg_dump(KMSG_DUMP_POWEROFF);

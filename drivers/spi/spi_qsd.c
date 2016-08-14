@@ -100,6 +100,7 @@ static inline int msm_spi_request_gpios(struct msm_spi *dd)
 	for (i = 0; i < ARRAY_SIZE(spi_rsrcs); ++i) {
 		if (dd->spi_gpios[i] >= 0) {
 			result = gpio_request(dd->spi_gpios[i], spi_rsrcs[i]);
+			printk("1111Deeo msm_spi_request_gpios [%d] %d %s\n",i,dd->spi_gpios[i],spi_rsrcs[i]);
 			if (result) {
 				dev_err(dd->dev, "%s: gpio_request for pin %d "
 					"failed with error %d\n", __func__,
@@ -107,6 +108,7 @@ static inline int msm_spi_request_gpios(struct msm_spi *dd)
 				goto error;
 			}
 		}
+		printk("2222Deeo msm_spi_request_gpios [%d] %d %s\n",i,dd->spi_gpios[i],spi_rsrcs[i]);
 	}
 	return 0;
 

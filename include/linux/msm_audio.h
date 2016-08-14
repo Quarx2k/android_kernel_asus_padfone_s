@@ -67,6 +67,26 @@
 
 #define AUDIO_SET_SRS_TRUMEDIA_PARAM _IOW(AUDIO_IOCTL_MAGIC, 43, unsigned)
 
+// ASUS_BSP Paul +++
+#define AUDIO_SET_BT_TYPE           _IOW(AUDIO_IOCTL_MAGIC, 60, unsigned)
+#define AUDIO_GET_BT_TYPE           _IOR(AUDIO_IOCTL_MAGIC, 61, unsigned)
+#define AUDIO_SET_OUT_ACDB_ID       _IOW(AUDIO_IOCTL_MAGIC, 62, unsigned)
+#define AUDIO_GET_OUT_ACDB_ID       _IOR(AUDIO_IOCTL_MAGIC, 63, unsigned)
+#define AUDIO_SET_RINGTONE_PROFILE  _IOW(AUDIO_IOCTL_MAGIC, 64, unsigned)
+#define AUDIO_GET_RINGTONE_PROFILE  _IOR(AUDIO_IOCTL_MAGIC, 65, unsigned)
+// ASUS_BSP Paul ---
+
+//Bruno++
+#define AUDIO_SET_RINGBACKTONE_STATE       _IOW(AUDIO_IOCTL_MAGIC, 66, unsigned)
+#define AUDIO_GET_RINGBACKTONE_STATE       _IOR(AUDIO_IOCTL_MAGIC, 67, unsigned)
+#define AUDIO_SET_SKYPE_STATE          _IOR(AUDIO_IOCTL_MAGIC, 68, unsigned)
+#define AUDIO_GET_SKYPE_STATE          _IOR(AUDIO_IOCTL_MAGIC, 69, unsigned)
+#define AUDIO_SET_HAC_mode          _IOR(AUDIO_IOCTL_MAGIC, 70, unsigned)
+#define AUDIO_GET_HAC_mode          _IOR(AUDIO_IOCTL_MAGIC, 71, unsigned)
+#define AUDIO_SET_VR_STATE          _IOR(AUDIO_IOCTL_MAGIC, 78, unsigned)
+#define AUDIO_GET_VR_STATE          _IOR(AUDIO_IOCTL_MAGIC, 79, unsigned)
+//Bruno++
+
 /* Qualcomm extensions */
 #define AUDIO_SET_STREAM_CONFIG   _IOW(AUDIO_IOCTL_MAGIC, 80, \
 				struct msm_audio_stream_config)
@@ -96,6 +116,9 @@
 
 #define AUDIO_REGISTER_ION _IOW(AUDIO_IOCTL_MAGIC, 97, unsigned)
 #define AUDIO_DEREGISTER_ION _IOW(AUDIO_IOCTL_MAGIC, 98, unsigned)
+//Bruno++
+#define AUDIO_SET_INCALL_STATE      _IOW(AUDIO_IOCTL_MAGIC, 99, unsigned)
+//Bruno++
 
 #define	AUDIO_MAX_COMMON_IOCTL_NUM	100
 
@@ -147,6 +170,13 @@
 #define VOC_REC_UPLINK		0x00
 #define VOC_REC_DOWNLINK	0x01
 #define VOC_REC_BOTH		0x02
+
+// ASUS_BSP Paul +++
+#define BT_TYPE_NONE		0
+#define BT_TYPE_HEADSET		1
+#define BT_TYPE_A2DP		2
+#define BT_TYPE_BTPEN		3
+// ASUS_BSP Paul ---
 
 struct msm_audio_config {
 	uint32_t buffer_size;

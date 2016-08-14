@@ -20,8 +20,10 @@
 static inline void led_set_brightness(struct led_classdev *led_cdev,
 					enum led_brightness value)
 {
-	if (value > led_cdev->max_brightness)
-		value = led_cdev->max_brightness;
+//ASUS BSP +++ jacob add for backlight porting
+/*	if (value > led_cdev->max_brightness)
+		value = led_cdev->max_brightness;	*/
+//ASUS BSP ---- jacob add for backlight porting
 	led_cdev->brightness = value;
 	if (!(led_cdev->flags & LED_SUSPENDED))
 		led_cdev->brightness_set(led_cdev, value);

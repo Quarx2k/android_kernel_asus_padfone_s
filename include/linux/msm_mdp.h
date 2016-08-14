@@ -79,12 +79,25 @@
 #define MSMFB_WRITEBACK_SET_MIRRORING_HINT _IOW(MSMFB_IOCTL_MAGIC, 167, \
 						unsigned int)
 #define MSMFB_ASYNC_BLIT              _IOW(MSMFB_IOCTL_MAGIC, 168, unsigned int)
+
+//ASUS_BSP: Louis +++
+#define MSMFB_PADFONE_STATE    _IOR(MSMFB_IOCTL_MAGIC, 174, int)
+#define MSMFB_CAMERA_STS       _IOR(MSMFB_IOCTL_MAGIC, 175, bool)
+//ASUS_BSP: Louis ---
+
 #define MSMFB_OVERLAY_PREPARE		_IOWR(MSMFB_IOCTL_MAGIC, 169, \
 						struct mdp_overlay_list)
 #define MSMFB_LPM_ENABLE        _IOWR(MSMFB_IOCTL_MAGIC, 170, unsigned int)
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
+
+//ASUS_BSP: Louis +++
+#define MSMFB_CE_SET    _IOW(MSMFB_IOCTL_MAGIC, 170, int)
+#define MSMFB_PHONE_HUE_SET   _IOW(MSMFB_IOCTL_MAGIC, 171, int)
+#define MSMFB_PAD_HSIC_SET _IOW(MSMFB_IOCTL_MAGIC, 172, int)
+#define MSMFB_BL_CTRL  _IOW(MSMFB_IOCTL_MAGIC, 173, int)
+//ASUS_BSP: Louis ---
 
 /* HW Revisions for different MDSS targets */
 #define MDSS_GET_MAJOR(rev)		((rev) >> 28)

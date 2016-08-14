@@ -21,6 +21,7 @@
 #include <linux/delay.h>
 #include <mach/msm_bus.h>
 #include <mach/msm_bus_board.h>
+#include <linux/gpio.h>	//+++ ASUS BSP Bernard: to distinguish between phone and pad
 
 struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
 	[MDSS_MDP_CSC_RGB2RGB] = {
@@ -431,6 +432,11 @@ static inline bool pp_sts_is_enabled(u32 sts, int side);
 static inline void pp_sts_set_split_bits(u32 *sts, u32 bits);
 
 static u32 last_sts, last_state;
+//ASUS_BSP: Louis+++
+#ifdef CONFIG_ASUS_HDMI
+extern bool asus_padstation_exist_realtime(void);
+#endif
+//ASUS_BSP: Louis---
 
 inline int linear_map(int in, int *out, int in_max, int out_max)
 {
@@ -1665,6 +1671,7 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 			pgc_config = &mdss_pp_res->pgc_disp_cfg[disp_num];
 			if (pgc_config->flags & MDP_PP_OPS_WRITE) {
 				addr = base + MDSS_MDP_REG_DSPP_GC_BASE;
+			printk("[Display] %s: Update ARGC lut\n", __func__);
 				pp_update_argc_lut(addr, pgc_config);
 			}
 			if (pgc_config->flags & MDP_PP_OPS_DISABLE)
@@ -1790,6 +1797,30 @@ int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl)
 exit:
 	return ret;
 }
+
+//ASUS_BSP: Louis, control on/off for argc setup +++
+void mdss_mdp_pp_argc_setup(struct msm_fb_data_type *mfd, bool bOn)
+{
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+	struct mdss_mdp_ctl *ctl = mdp5_data->ctl;
+	int disp_num;
+
+	if ((!ctl->mfd) || (!mdss_pp_res)) {
+		pr_err("%s: Fail to setup fb%d", __func__, mfd->fbi->node);
+		return;
+	}
+	disp_num = mfd->index;
+	pr_info("%s, fb%d, disp_num=%d\n",__func__, mfd->fbi->node, disp_num);
+	
+	if (bOn)
+		mdss_pp_res->pgc_disp_cfg[disp_num].flags = MDP_PP_OPS_ENABLE;
+	else
+		mdss_pp_res->pgc_disp_cfg[disp_num].flags = MDP_PP_OPS_DISABLE;
+	mdss_pp_res->pp_disp_flags[disp_num] |= PP_FLAGS_DIRTY_PGC;
+	mdss_mdp_pp_setup(ctl);
+}
+EXPORT_SYMBOL(mdss_mdp_pp_argc_setup);
+//ASUS_BSP: Louis, control on/off for argc ---
 
 /*
  * Set dirty and write bits on features that were enabled so they will be
@@ -2629,7 +2660,17 @@ int mdss_mdp_limited_lut_igc_config(struct mdss_mdp_ctl *ctl)
 		return -EINVAL;
 
 	config.len = IGC_LUT_ENTRIES;
-	config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
+	//ASUS_BSP: Louis, "disable igc in pad mode for correct gamma curve 2.2" +++
+	#ifdef CONFIG_ASUS_HDMI
+	if (asus_padstation_exist_realtime()) {
+		config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_DISABLE;
+	} else {
+		config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
+	}
+	#else
+		config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
+	#endif
+	//ASUS_BSP: Louis ---
 	config.block = (ctl->mfd->index) + MDP_LOGICAL_BLOCK_DISP_0;
 	config.c0_c1_data = igc_limited;
 	config.c2_data = igc_limited;
@@ -2740,6 +2781,15 @@ static void pp_update_gc_one_lut(char __iomem *addr,
 		uint8_t num_stages)
 {
 	int i, start_idx, idx;
+	
+    //ASUS_BSP:Louis, "using previous segments to replace RGB 255 stage" +++
+    for (i = 0; i < GC_LUT_SEGMENTS; i++) {
+        if (lut_data[i].x_start == 0xfff) {
+            lut_data[i].slope = lut_data[i-1].slope;
+            lut_data[i].offset = lut_data[i-1].offset;
+        }
+    }
+    //ASUS_BSP:Louis "using previous segments to replace RGB 255 stage" ---
 
 	start_idx = ((readl_relaxed(addr) >> 16) & 0xF) + 1;
 	for (i = start_idx; i < GC_LUT_SEGMENTS; i++) {
@@ -4145,7 +4195,7 @@ static int mdss_ad_init_checks(struct msm_fb_data_type *mfd)
 		return -ENODEV;
 	}
 
-	if (ad_mfd->panel_info->type == DTV_PANEL) {
+    if (ad_mfd->panel_info->type == DTV_PANEL && !(gpio_get_value(75))) { /*+++ ASUS BSP Bernard: to distinguish between phone and pad*/
 		pr_debug("AD not supported on external display\n");
 		return ret;
 	}

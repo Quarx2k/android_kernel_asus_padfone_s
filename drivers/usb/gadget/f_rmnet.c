@@ -216,7 +216,10 @@ static struct usb_descriptor_header *rmnet_ss_function[] = {
 /* String descriptors */
 
 static struct usb_string rmnet_string_defs[] = {
-	[0].s = "RmNet",
+	//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
+	//[0].s = "RmNet",
+	[0].s = "Qualcomm Wireless HS-USB Ethernet Adapter",
+	//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
 	{  } /* end of list */
 };
 
@@ -1203,6 +1206,9 @@ static int frmnet_bind_config(struct usb_configuration *c, unsigned portno)
 			return status;
 		}
 		rmnet_string_defs[0].id = status;
+		//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
+		rmnet_interface_desc.iInterface = status;
+		//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
 	}
 
 	dev = rmnet_ports[portno].port;

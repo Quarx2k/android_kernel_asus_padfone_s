@@ -969,6 +969,8 @@ done:
 
 int get_spk_protection_cfg(struct msm_spk_prot_cfg *prot_cfg)
 {
+	prot_cfg->mode = MSM_SPKR_PROT_DISABLED;
+#if 0
 	int result = 0;
 	pr_debug("%s,\n", __func__);
 
@@ -982,10 +984,11 @@ int get_spk_protection_cfg(struct msm_spk_prot_cfg *prot_cfg)
 		result = -EINVAL;
 	}
 	mutex_unlock(&acdb_data.acdb_mutex);
-
-	return result;
+#endif
+	return 0;
 }
 
+#if 0
 static int get_spk_protection_status(struct msm_spk_prot_status *status)
 {
 	int					result = 0;
@@ -1010,6 +1013,7 @@ static int get_spk_protection_status(struct msm_spk_prot_status *status)
 
 	return result;
 }
+#endif
 
 static int register_vocvol_table(void)
 {
@@ -1248,6 +1252,19 @@ err_done:
 	acdb_data.mem_len = 0;
 	return result;
 }
+
+int gRingtone_state = 0;     //Bruno++
+int g_flag_csvoice_fe_connected = 0;
+int gSKYPE_state = 0;   //Bruno++
+int gLocalRingbackTone_state = 0;   //Bruno++
+int gVR_state = 0;      //Bruno++
+int gHAC_mode;     //ASUS Tim++
+int gdevice_change = 0;  //ASUS Tim++
+int gGarmin_state = 0;    //ASUS Tim++
+int gBluetoothType = 0; // ASUS_BSP Paul +++
+int gOutAcdbId = 0; // ASUS_BSP Paul +++
+int gRingtoneProfile = 0; // ASUS_BSP Paul +++
+
 static long acdb_ioctl(struct file *f,
 		unsigned int cmd, unsigned long arg)
 {
@@ -1256,8 +1273,8 @@ static long acdb_ioctl(struct file *f,
 	int32_t			map_fd;
 	uint32_t		topology;
 	uint32_t		data[MAX_IOCTL_DATA];
-	struct msm_spk_prot_status prot_status;
-	struct msm_spk_prot_status acdb_spk_status;
+	//struct msm_spk_prot_status prot_status;
+	//struct msm_spk_prot_status acdb_spk_status;
 	pr_debug("%s\n", __func__);
 
 	mutex_lock(&acdb_data.acdb_mutex);
@@ -1322,13 +1339,16 @@ static long acdb_ioctl(struct file *f,
 		store_asm_topology(topology);
 		goto done;
 	case AUDIO_SET_SPEAKER_PROT:
+#if 0
 		if (copy_from_user(&acdb_data.spk_prot_cfg, (void *)arg,
 				sizeof(acdb_data.spk_prot_cfg))) {
 			pr_err("%s fail to copy spk_prot_cfg\n", __func__);
 			result = -EFAULT;
 		}
+#endif
 		goto done;
 	case AUDIO_GET_SPEAKER_PROT:
+#if 0
 		/*Indicates calibration was succesfull*/
 		if (acdb_data.spk_prot_cfg.mode == MSM_SPKR_PROT_CALIBRATED) {
 			prot_status.r0 = acdb_data.spk_prot_cfg.r0;
@@ -1355,6 +1375,7 @@ static long acdb_ioctl(struct file *f,
 			sizeof(prot_status))) {
 			pr_err("%s: Failed to update prot_status\n", __func__);
 		}
+#endif
 		goto done;
 	case AUDIO_REGISTER_VOCPROC_VOL_TABLE:
 		result = register_vocvol_table();
@@ -1368,6 +1389,117 @@ static long acdb_ioctl(struct file *f,
 	case AUDIO_SET_HW_DELAY_TX:
 		result = store_hw_delay(TX_CAL, (void *)arg);
 		goto done;
+// ASUS_BSP Paul +++
+	case AUDIO_SET_BT_TYPE:
+		if (copy_from_user(&gBluetoothType, (void *)arg,
+				sizeof(gBluetoothType))) {
+			pr_err("%s: fail to copy gBluetoothType!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_GET_BT_TYPE:
+		if (copy_to_user((void *)arg, &gBluetoothType,
+				sizeof(gBluetoothType))) {
+			pr_err("%s: fail to copy gBluetoothType!!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_SET_OUT_ACDB_ID:
+		if (copy_from_user(&gOutAcdbId, (void *)arg,
+				sizeof(gOutAcdbId))) {
+			pr_err("%s: fail to copy gOutAcdbId!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_GET_OUT_ACDB_ID:
+		if (copy_to_user((void *)arg, &gOutAcdbId,
+				sizeof(gOutAcdbId))) {
+			pr_err("%s: fail to copy gOutAcdbId!!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_SET_RINGTONE_PROFILE:
+		if (copy_from_user(&gRingtoneProfile, (void *)arg,
+				sizeof(gRingtoneProfile))) {
+			pr_err("%s: fail to copy gRingtoneProfile!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_GET_RINGTONE_PROFILE:
+		if (copy_to_user((void *)arg, &gRingtoneProfile,
+				sizeof(gRingtoneProfile))) {
+			pr_err("%s: fail to copy gRingtoneProfile!!\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+// ASUS_BSP Paul ---
+//Bruno++
+    case AUDIO_SET_INCALL_STATE:
+        if (copy_from_user(&g_flag_csvoice_fe_connected, (void *)arg,
+                sizeof(g_flag_csvoice_fe_connected))) {
+            pr_err("%s: fail to copy g_flag_csvoice_fe_connected!\n", __func__);
+            result = -EFAULT;
+        }
+        goto done;
+    case AUDIO_SET_SKYPE_STATE:
+        if (copy_from_user(&gSKYPE_state, (void *)arg,
+                sizeof(gSKYPE_state))) {
+            pr_err("%s: fail to copy gSKYPE_state!\n", __func__);
+            result = -EFAULT;
+        }
+        goto done;
+    case AUDIO_GET_SKYPE_STATE:
+        if (copy_to_user((void *)arg, &gSKYPE_state,
+                sizeof(gSKYPE_state))) {
+            pr_err("%s: fail to copy gSKYPE_state!!\n", __func__);
+            result = -EFAULT;
+        }
+        goto done;
+    case AUDIO_SET_RINGBACKTONE_STATE:
+        if (copy_from_user(&gLocalRingbackTone_state, (void *)arg,
+                sizeof(gLocalRingbackTone_state))) {
+            pr_err("%s: fail to copy gLocalRingbackTone_state!\n", __func__);
+            result = -EFAULT;
+        }
+        goto done;
+    case AUDIO_GET_RINGBACKTONE_STATE:
+        if (copy_to_user((void *)arg, &gLocalRingbackTone_state,
+                sizeof(gLocalRingbackTone_state))) {
+            pr_err("%s: fail to copy gLocalRingbackTone_state!!\n", __func__);
+            result = -EFAULT;
+        }
+        goto done;
+    case AUDIO_SET_VR_STATE:
+        if (copy_from_user(&gVR_state, (void *)arg,
+                sizeof(gVR_state))) {
+            pr_err("%s: fail to copy gVR_state!\n", __func__);
+            result = -EFAULT;
+        }
+        goto done;
+    case AUDIO_GET_VR_STATE:
+        if (copy_to_user((void *)arg, &gVR_state,
+                sizeof(gVR_state))) {
+            pr_err("%s: fail to copy gVR_state!!\n", __func__);
+            result = -EFAULT;
+        }
+        goto done;
+//Bruno++
+//ASUS Tim++
+    case AUDIO_SET_HAC_mode:
+        if (copy_from_user(&gHAC_mode, (void *)arg,
+                sizeof(gHAC_mode))) {
+            pr_err("%s: fail to copy gHAC_mode!\n", __func__);
+            result = -EFAULT;
+        }
+        goto done;
+    case AUDIO_GET_HAC_mode:
+        if (copy_to_user((void *)arg, &gHAC_mode,
+                sizeof(gHAC_mode))) {
+            pr_err("%s: fail to copy gHAC_mode!!\n", __func__);
+            result = -EFAULT;
+        }
+        goto done;
+//ASUS Tim++
 	}
 
 	if (copy_from_user(&size, (void *) arg, sizeof(size))) {

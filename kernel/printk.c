@@ -44,6 +44,9 @@
 #include <linux/poll.h>
 
 #include <asm/uaccess.h>
+//thomas_chu +++
+#include <linux/asus_global.h>
+//thomas_chu ---
 
 #include <mach/msm_rtb.h>
 #define CREATE_TRACE_POINTS
@@ -55,6 +58,12 @@
 void asmlinkage __attribute__((weak)) early_printk(const char *fmt, ...)
 {
 }
+
+// +++ ASUS_BSP : Enable debug LL
+#ifdef        CONFIG_DEBUG_LL
+extern void printascii(char *);
+#endif
+// --- ASUS_BSP : Enable debug LL
 
 /* printk's without a loglevel use this.. */
 #define DEFAULT_MESSAGE_LOGLEVEL CONFIG_DEFAULT_MESSAGE_LOGLEVEL
@@ -287,6 +296,66 @@ static u32 log_next(u32 idx)
 #define LOG_ALIGN 8
 #endif
 
+static char *asus_log_buf = NULL;
+static bool is_logging_to_asus_buffer = false;
+
+static int write_to_asus_log_buffer(const char *text, size_t text_len,
+				bool newline) {
+	static ulong log_write_index = 0; /* the index to write the log in asus log buffer */
+
+	if (is_logging_to_asus_buffer == false)
+		return -3;
+
+	if (!asus_log_buf) {
+		return -1;
+	}
+
+	if (log_write_index >= PRINTK_BUFFER_SLOT_SIZE) {
+		return -2;
+	}
+
+	if (log_write_index + text_len >= PRINTK_BUFFER_SLOT_SIZE) {
+		ulong part1 = PRINTK_BUFFER_SLOT_SIZE - log_write_index;
+		ulong part2 = text_len -part1;
+		memcpy(asus_log_buf+log_write_index, text, part1);
+		memcpy(asus_log_buf, text + part1, part2);
+		log_write_index = part2;
+	} else {
+		memcpy(asus_log_buf+log_write_index, text, text_len);
+		log_write_index += text_len;
+	}
+
+	if (newline) {
+		asus_log_buf[log_write_index++] = '\n';
+		log_write_index = log_write_index % PRINTK_BUFFER_SLOT_SIZE;
+	}
+
+	return text_len;
+}
+
+#if defined(CONFIG_PRINTK_TIME)
+static bool printk_time = 1;
+#else
+static bool printk_time;
+#endif
+module_param_named(time, printk_time, bool, S_IRUGO | S_IWUSR);
+
+// added by jack for printk hh:mm:ss.ns++++++++
+#include <linux/rtc.h>
+extern struct timezone sys_tz;
+extern int asus_rtc_set; 
+static void myrtc_time_to_tm(unsigned long time, struct rtc_time *tm)
+{
+    tm->tm_hour = time / 3600;
+    time -= tm->tm_hour * 3600;
+    tm->tm_hour %= 24;
+    tm->tm_min = time / 60;
+    tm->tm_sec = time - tm->tm_min * 60;
+}
+// added by jack for printk hh:mm:ss.ns -----------
+extern int rtc_ready;
+int boot_after_60sec=0;
+#define TIMEBUF_MAX 128
 /* insert record into the buffer, discard old ones, update heads */
 static void log_store(int facility, int level,
 			const char *dict, u16 dict_len,
@@ -294,9 +363,48 @@ static void log_store(int facility, int level,
 {
 	struct log *msg;
 	u32 size, pad_len;
+	static char timebuf[TIMEBUF_MAX];
+	u32 tlen = 0;
+
+	if (printk_time) {
+		unsigned long long t;
+		unsigned long rem_ns;
+		struct timespec timespec;
+		struct rtc_time tm;
+		
+		t = local_clock();
+		rem_ns = do_div(t, 1000000000);
+		
+		if (boot_after_60sec == 0 && t >= 60)
+			boot_after_60sec = 1;
+
+		if (boot_after_60sec) {
+			getnstimeofday(&timespec);
+			timespec.tv_sec -= sys_tz.tz_minuteswest * 60;
+			myrtc_time_to_tm(timespec.tv_sec, &tm);
+			tlen = snprintf(timebuf, TIMEBUF_MAX, 
+				"[%5lu.%06lu] (CPU:%d-pid:%d:%s) [%02d:%02d:%02d.%09lu] ",
+				(unsigned long)t,
+				rem_ns / 1000,
+				smp_processor_id(),
+				current->pid,
+				current->comm,
+				tm.tm_hour, tm.tm_min, tm.tm_sec, timespec.tv_nsec);
+		} else {
+			tlen = snprintf(timebuf, TIMEBUF_MAX, 
+				"[%5lu.%06lu] (CPU:%d-pid:%d:%s) ",
+				(unsigned long)t,
+				rem_ns / 1000,
+				smp_processor_id(),
+				current->pid,
+				current->comm);
+		}
+		size = sizeof(struct log) + tlen + text_len + dict_len;
+	} else {	
+		size = sizeof(struct log) + text_len + dict_len;
+	}
 
 	/* number of '\0' padding bytes to next message */
-	size = sizeof(struct log) + text_len + dict_len;
 	pad_len = (-size) & (LOG_ALIGN - 1);
 	size += pad_len;
 
@@ -328,14 +436,25 @@ static void log_store(int facility, int level,
 
 	/* fill message */
 	msg = (struct log *)(log_buf + log_next_idx);
-	memcpy(log_text(msg), text, text_len);
-	msg->text_len = text_len;
+	if (printk_time) {
+		memcpy(log_text(msg), timebuf, tlen);
+		memcpy(log_text(msg) + tlen, text, text_len);
+		msg->text_len = tlen + text_len;
+		msg->len = sizeof(struct log) + tlen + text_len + dict_len + pad_len;
+
+		write_to_asus_log_buffer(timebuf, tlen, false);
+		write_to_asus_log_buffer(text, text_len, true);
+	} else {
+		memcpy(log_text(msg), text, text_len);
+		msg->text_len = text_len;
+		msg->len = sizeof(struct log) + text_len + dict_len + pad_len;
+		write_to_asus_log_buffer(text, text_len, true);
+	}
 	memcpy(log_dict(msg), dict, dict_len);
 	msg->dict_len = dict_len;
 	msg->level = (facility << 3) | (level & 7);
 	msg->ts_nsec = local_clock();
 	memset(log_dict(msg) + dict_len, 0, pad_len);
-	msg->len = sizeof(struct log) + text_len + dict_len + pad_len;
 
 	/* insert message */
 	log_next_idx += msg->len;
@@ -578,7 +697,6 @@ static int devkmsg_open(struct inode *inode, struct file *file)
 		return err;
 
 	user = kmalloc(sizeof(struct devkmsg_user), GFP_KERNEL);
-	if (!user)
 		return -ENOMEM;
 
 	mutex_init(&user->lock);
@@ -614,6 +732,10 @@ const struct file_operations kmsg_fops = {
 };
 
 
+
+//jack 
+int suspend_in_progress = 0;
+
 #ifdef CONFIG_KEXEC
 /*
  * This appends the listed symbols to /proc/vmcoreinfo
@@ -636,6 +758,19 @@ void log_buf_kexec_setup(void)
 static unsigned long __initdata new_log_buf_len;
 
 /* save requested log_buf_len since it's too early to process it */
+
+//thomas_chu +++
+struct _asus_global asus_global =
+{
+		.asus_global_magic = ASUS_GLOBAL_MAGIC,
+		.ramdump_enable_magic = ASUS_GLOBAL_RUMDUMP_MAGIC,
+		.kernel_log_addr = __log_buf,
+		.kernel_log_size = __LOG_BUF_LEN,
+//		.kernel_version = ASUS_SW_VER,
+};
+
+//thomas_chu ---
+
 static int __init log_buf_len_setup(char *str)
 {
 	unsigned size = memparse(str, &str);
@@ -779,13 +914,6 @@ static int check_syslog_permissions(int type, bool from_file)
 	}
 	return 0;
 }
-
-#if defined(CONFIG_PRINTK_TIME)
-static bool printk_time = 1;
-#else
-static bool printk_time;
-#endif
-module_param_named(time, printk_time, bool, S_IRUGO | S_IWUSR);
 
 static int syslog_print_line(u32 idx, char *text, size_t size)
 {
@@ -1124,7 +1252,6 @@ static void call_console_drivers(int level, const char *text, size_t len)
 	}
 }
 
-
 /*
  * Zap console related locks when oopsing. Only zap at most once
  * every 10 seconds, to leave time for slow consoles to print a
@@ -1268,17 +1395,17 @@ asmlinkage int vprintk_emit(int facility, int level,
 	lockdep_off();
 	raw_spin_lock(&logbuf_lock);
 	logbuf_cpu = this_cpu;
-
+	/*
 	if (recursion_bug) {
 		static const char recursion_msg[] =
 			"BUG: recent printk recursion!";
 
 		recursion_bug = 0;
 		printed_len += strlen(recursion_msg);
-		/* emit KERN_CRIT message */
+		//emit KERN_CRIT message
 		log_store(0, 2, NULL, 0, recursion_msg, printed_len);
-
 	}
+	*/
 	/*
 	* The printf needs to come first; we need the syslog
 	* prefix which might be passed-in as a parameter.
@@ -1308,6 +1435,12 @@ asmlinkage int vprintk_emit(int facility, int level,
 			break;
 		}
 	}
+
+// +++ ASUS_BSP : Enable debug LL
+#ifdef	CONFIG_DEBUG_LL
+	printascii(text);
+#endif
+// --- ASUS_BSP : Enable debug LL
 
 	if (buflen && (!cont || dict)) {
 		/* no continuation; flush existing buffer */
@@ -1577,6 +1710,8 @@ MODULE_PARM_DESC(console_suspend, "suspend console during suspend"
  */
 void suspend_console(void)
 {
+	ASUSEvtlog("[UTS] System Suspend");
+	suspend_in_progress = 1;
 	if (!console_suspend_enabled)
 		return;
 	printk("Suspending console(s) (use no_console_suspend to debug)\n");
@@ -1587,6 +1722,25 @@ void suspend_console(void)
 
 void resume_console(void)
 {
+	int i;
+	suspend_in_progress = 0;
+	ASUSEvtlog("[UTS] System Resume");
+	//[+++]Add GPIO wakeup information
+	if (pm_pwrcs_ret) {
+		if (gpio_irq_cnt>0) {
+			for (i=0;i<gpio_irq_cnt;i++)
+				ASUSEvtlog("[PM] GPIO triggered: %d", gpio_resume_irq[i]);
+			gpio_irq_cnt=0; //clear log count
+		}
+		if (gic_irq_cnt>0) {
+			for (i=0;i<gic_irq_cnt;i++)
+				ASUSEvtlog("[PM] IRQs triggered: %d", gic_resume_irq[i]);
+			gic_irq_cnt=0;  //clear log count
+		}
+		pm_pwrcs_ret=0;
+	}
+	//[---]Add GPIO wakeup information
+
 	if (!console_suspend_enabled)
 		return;
 	down(&console_sem);
@@ -2302,3 +2456,25 @@ void kmsg_dump(enum kmsg_dump_reason reason)
 	rcu_read_unlock();
 }
 #endif
+
+void printk_buffer_rebase(void)
+{
+/*
+ * This will NOT do real printk buffer rebase.
+ * We just set a flag to let vprintk_emit() also write
+ * kernel log to our remapped buffer.
+ * Then we can save the content of our remapped buffer while rebooting
+ * after the device crash.
+ */
+	asus_log_buf = (char *) PRINTK_BUFFER;
+	if (!asus_log_buf) {
+		printk("%s: asus_log_buf is NULL\n", __func__);
+		return;
+	}
+	memset(asus_log_buf, 0, PRINTK_BUFFER_SLOT_SIZE);
+	is_logging_to_asus_buffer = true;
+}
+EXPORT_SYMBOL(printk_buffer_rebase);
+
+
+

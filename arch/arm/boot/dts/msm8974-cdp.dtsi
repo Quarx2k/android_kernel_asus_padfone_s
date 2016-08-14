@@ -12,7 +12,7 @@
 
 /include/ "msm8974-leds.dtsi"
 /include/ "msm8974-camera-sensor-cdp.dtsi"
-
+///include/ "dsi-panel-asus-1080p-video.dtsi"     // Add for ASUS Display driver
 / {
 	aliases {
 		serial0 = &blsp1_uart1;
@@ -25,12 +25,26 @@
 	};
 
 	qcom,mdss_dsi@fd922800 {
-		qcom,dsi-pref-prim-pan = <&dsi_tosh_720_vid>;
+		//qcom,dsi-pref-prim-pan = <&dsi_tosh_720_vid>;
+		qcom,dsi-pref-prim-pan = <&dsi_sharp_1080_vid>; // Add for ASUS Display driver 
 	};
 
 	qcom,mdss_mdp@fd900000 {
 		qcom,mdss-pref-prim-intf = "dsi";
 	};
+
+	// Add for ASUS Display driver  +++
+/*	qcom,mdss_dsi_asus_1080p_video {
+		status = "ok";
+		//qcom,cont-splash-enabled;
+	};    
+   
+	qcom,mdss_dsi_toshiba_720p_video {
+		status = "disable"; // Add for ASUS Display driver 
+		//qcom,cont-splash-enabled;
+	};
+*/
+	// Add for ASUS Display driver  ---
 
 	qcom,mdss_dsi_orise_720p_video {
 		status = "disable";
@@ -136,6 +150,21 @@
 		};
 	};
 
+// +++ ASUS_BSP : add for ASUS touch 
+	i2c@f9924000 {
+		novatek_nt1103@01 {
+			compatible = "novatek,nt1103-ts";
+			reg = <0x01>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <12 0x2>;
+			/*vdd_ana-supply = <&pm8941_l18>;*/
+			vcc_i2c-supply = <&pm8941_lvs1>;
+			novatek,reset-gpio = <&msmgpio 60 0x00>;
+			novatek,irq-gpio = <&msmgpio 12 0x00>;
+			novatek,panel-coords = <0  0 1080 1920>;
+		};
+	};
+// --- ASUS_BSP : add for ASUS touch 
 	gen-vkeys {
 		compatible = "qcom,gen-vkeys";
 		label = "atmel_mxt_ts";
@@ -755,7 +784,13 @@
 	};
 };
 
+&dsi_sharp_1080_vid {
+       status = "ok"; // Add for ASUS Display driver
+       qcom,cont-splash-enabled;
+};
+
 &dsi_tosh_720_vid {
+       status = "disable"; // Add for ASUS Display driver
        qcom,cont-splash-enabled;
 };
 

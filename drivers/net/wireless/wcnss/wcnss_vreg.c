@@ -26,6 +26,9 @@
 #include <mach/msm_xo.h>
 #include <mach/msm_iomap.h>
 
+//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+#include <linux/asusdebug.h>
+//ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
 static void __iomem *msm_wcnss_base;
 static LIST_HEAD(power_on_lock_list);
@@ -619,26 +622,83 @@ int wcnss_wlan_power(struct device *dev,
 		down(&wcnss_power_on_lock);
 		/* RIVA regulator settings */
 		rc = wcnss_core_vregs_on(dev, hw_type);
-		if (rc)
+		if (rc) {
+			printk("[wcnss]: wcnss_core_vregs_on fail.\n");
+
+			//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+			ASUSEvtlog("[wcnss]: wcnss_core_vregs_on fail.\n");
+			//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+
 			goto fail_wcnss_on;
+		}
+		else {
+			printk("[wcnss]: wcnss_core_vregs_on.\n");
+
+			//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+			ASUSEvtlog("[wcnss]: wcnss_core_vregs_on.\n");
+			//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+        	}
 
 		/* IRIS regulator settings */
 		rc = wcnss_iris_vregs_on(dev, hw_type);
-		if (rc)
+		if (rc) {
+			printk("[wcnss]: wcnss_iris_vregs_on fail.\n");
+
+			//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+			ASUSEvtlog("[wcnss]: wcnss_iris_vregs_on fail.\n");
+			//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+
 			goto fail_iris_on;
+		}
+		else {
+			printk("[wcnss]: wcnss_iris_vregs_on.\n");
+
+			//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+			ASUSEvtlog("[wcnss]: wcnss_iris_vregs_on.\n");
+			//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+        	}
 
 		/* Configure IRIS XO */
 		rc = configure_iris_xo(dev, cfg->use_48mhz_xo,
 				WCNSS_WLAN_SWITCH_ON, iris_xo_set);
-		if (rc)
+		if (rc) {
+			printk("[wcnss]: configure_iris_xo (WCNSS_WLAN_SWITCH_ON) fail.\n");
+
+			//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+			ASUSEvtlog("[wcnss]: configure_iris_xo WCNSS_WLAN_SWITCH_ON fail.\n");
+			//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+
 			goto fail_iris_xo;
+		}
+		else {
+			printk("[wcnss]: configure_iris_xo (WCNSS_WLAN_SWITCH_ON).\n");
+
+			//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+			ASUSEvtlog("[wcnss]: configure_iris_xo WCNSS_WLAN_SWITCH_ON.\n");
+			//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+        	}
+
 		up(&wcnss_power_on_lock);
 
 	} else {
 		configure_iris_xo(dev, cfg->use_48mhz_xo,
 				WCNSS_WLAN_SWITCH_OFF, NULL);
+		printk("[wcnss]: configure_iris_xo (WCNSS_WLAN_SWITCH_OFF).\n");
+		//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+		ASUSEvtlog("[wcnss]: configure_iris_xo WCNSS_WLAN_SWITCH_OFF.\n");
+		//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+
 		wcnss_iris_vregs_off(hw_type);
+		printk("[wcnss]: wcnss_iris_vregs_off.\n");
+		//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+		ASUSEvtlog("[wcnss]: wcnss_iris_vregs_off.\n");
+		//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+
 		wcnss_core_vregs_off(hw_type);
+		printk("[wcnss]: wcnss_core_vregs_off.\n");
+		//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+		ASUSEvtlog("[wcnss]: wcnss_core_vregs_off.\n");
+		//ASUS_BSP--- "for /data/log/ASUSEvtlog"
 	}
 
 	return rc;

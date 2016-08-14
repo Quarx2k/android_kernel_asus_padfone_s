@@ -412,6 +412,15 @@ struct mmc_host {
 	} perf;
 	bool perf_enable;
 #endif
+	unsigned int cd_delay;  //ASUS_BSP +++ Gavin_Chang "card detect config"
+	unsigned int sd_status; //ASUS_BSP +++ Gavin_Chang "sd status for ATD"
+//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPENDTEST
+	bool suspendtest;
+	unsigned int suspendcnt;
+	unsigned int suspend_datasz;
+#endif
+//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
 	struct mmc_ios saved_ios;
 	struct {
 		unsigned long	busy_time_us;

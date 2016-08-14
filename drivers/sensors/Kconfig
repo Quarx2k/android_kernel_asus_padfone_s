@@ -1,5 +1,14 @@
-config SENSORS
-	bool "Sensors Class Support"
-	help
-	  This option enables the sensor sysfs class in /sys/class/sensors.
-	  You'll need this to do anything useful with sensorss. If unsure, say N.
+menu "Sensors driver"
+
+config SENSORS_CM36283
+	bool "PS ALS CM36283 support"
+	default n
+	---help---
+	  ASUS SENSORS folder
+
+config SENSORS_CAP1106
+	bool "CAP1106 support"
+	---help---
+	  ASUS SENSORS folder
+
+endmenu

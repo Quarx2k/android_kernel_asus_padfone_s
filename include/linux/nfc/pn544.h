@@ -66,6 +66,11 @@
 #define PN544_LLC_MAX_DATA	(PN544_MSG_MAX_SIZE - 2)
 #define PN544_LLC_MAX_HCI_SIZE	(PN544_LLC_MAX_DATA - 2)
 
+//+++Porting NFC's kernel+++
+#define PN544_MAGIC	0xE9
+#define PN544_SET_PWR	_IOW(PN544_MAGIC, 0x01, unsigned int)
+//---Porting NFC's kernel---
+
 struct pn544_llc_packet {
 	unsigned char length; /* of rest of packet */
 	unsigned char header;
@@ -92,6 +97,15 @@ struct pn544_nfc_platform_data {
 	int (*test) (void);
 	void (*disable) (void);
 };
+
+//+++Porting NFC's kernel+++
+struct pn544_i2c_platform_data {
+	unsigned int irq_gpio;
+	unsigned int ven_gpio;
+	unsigned int firm_gpio;
+};
+//---Porting NFC's kernel---
+
 #endif /* __KERNEL__ */
 
 #endif /* _PN544_H_ */

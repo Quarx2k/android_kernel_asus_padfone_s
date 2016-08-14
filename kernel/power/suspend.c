@@ -29,6 +29,12 @@
 
 #include "power.h"
 
+//[+++]Debug for active wakelock before entering suspend
+#include <linux/wakelock.h>
+int pmsp_flag = 0;
+bool g_resume_status;
+int pm_stay_unattended_period = 0;
+//[---]Debug for active wakelock before entering suspend
 const char *const pm_states[PM_SUSPEND_MAX] = {
 #ifdef CONFIG_EARLYSUSPEND
 	[PM_SUSPEND_ON]		= "on",
@@ -197,6 +203,22 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 	return error;
 }
 
+//[+++]Debug for active wakelock before entering suspend
+extern void print_active_locks(void);
+void unattended_timer_expired(unsigned long data);
+DEFINE_TIMER(unattended_timer, unattended_timer_expired, 0, 0);
+
+void unattended_timer_expired(unsigned long data)
+{
+	pr_info("[PM]unattended_timer_expired\n");
+    ASUSEvtlog("[PM]unattended_timer_expired\n");
+    pmsp_flag=1;
+	//for dump cpuinfo purpose, it needs 30mins to timeout
+	pm_stay_unattended_period += PM_UNATTENDED_TIMEOUT;
+    print_active_locks();
+	mod_timer(&unattended_timer, jiffies + msecs_to_jiffies(PM_UNATTENDED_TIMEOUT));
+}
+//[---]Debug for active wakelock before entering suspend
 /**
  * suspend_devices_and_enter - Suspend devices and enter system sleep state.
  * @state: System sleep state to enter.
@@ -215,6 +237,12 @@ int suspend_devices_and_enter(suspend_state_t state)
 		if (error)
 			goto Close;
 	}
+	//[+++]Debug for active wakelock before entering suspend
+    pr_info("[PM]unattended_timer: del_timer\n");
+    del_timer ( &unattended_timer );
+	//reset period
+	pm_stay_unattended_period = 0;
+	//[---]Debug for active wakelock before entering suspend
 	suspend_console();
 	suspend_test_start();
 	error = dpm_suspend_start(PMSG_SUSPEND);
@@ -236,6 +264,11 @@ int suspend_devices_and_enter(suspend_state_t state)
 	dpm_resume_end(PMSG_RESUME);
 	suspend_test_finish("resume devices");
 	resume_console();
+	//[+++]Debug for active wakelock before entering suspend
+    pr_info("[PM]unattended_timer: mod_timer\n");
+    mod_timer(&unattended_timer, jiffies + msecs_to_jiffies(PM_UNATTENDED_TIMEOUT));
+    g_resume_status = true;
+	//[---]Debug for active wakelock before entering suspend
  Close:
 	if (suspend_ops->end)
 		suspend_ops->end();
@@ -279,11 +312,12 @@ static int enter_state(suspend_state_t state)
 	if (!mutex_trylock(&pm_mutex))
 		return -EBUSY;
 
-	printk(KERN_INFO "PM: Syncing filesystems ... ");
+	printk(KERN_INFO "[PM] enter_state: Syncing filesystems ...\n");
 	sys_sync();
+	printk("[PM] Syncing done.\n");
 	printk("done.\n");
 
-	pr_debug("PM: Preparing system for %s sleep\n", pm_states[state]);
+	printk("[PM] enter_state: Preparing system for %s sleep\n", pm_states[state]);
 	error = suspend_prepare();
 	if (error)
 		goto Unlock;
@@ -291,13 +325,13 @@ static int enter_state(suspend_state_t state)
 	if (suspend_test(TEST_FREEZER))
 		goto Finish;
 
-	pr_debug("PM: Entering %s sleep\n", pm_states[state]);
+	printk("[PM] enter_state: suspend devices, entering %s sleep\n", pm_states[state]);
 	pm_restrict_gfp_mask();
 	error = suspend_devices_and_enter(state);
 	pm_restore_gfp_mask();
 
  Finish:
-	pr_debug("PM: Finishing wakeup.\n");
+	printk("[PM] enter_state: Finishing wakeup.\n");
 	suspend_finish();
  Unlock:
 	mutex_unlock(&pm_mutex);

@@ -103,6 +103,7 @@
 		mdss_fb0: qcom,mdss_fb_primary {
 			cell-index = <0>;
 			compatible = "qcom,mdss-fb";
+			qcom,memory-reservation-size = <0x1000000>;  /* Louis: reserve 16 MB for FB */
 			qcom,memblock-reserve = <0x03200000 0x01E00000>;
 		};
 
@@ -125,22 +126,26 @@
 			<0xfd922b00 0x2b0>,
 			<0xfdf30000 0x108>;
 		reg-names = "dsi_ctrl", "dsi_phy", "mmss_misc_phys";
-		vdd-supply = <&pm8941_l22>;
+		/*vdd-supply = <&pm8941_l22>;*/     /* +++ ASUS_BSP : Louis: do not use l22 */
 		vddio-supply = <&pm8941_l12>;
 		vdda-supply = <&pm8941_l2>;
 		qcom,mdss-fb-map = <&mdss_fb0>;
+
 		qcom,mdss-mdp = <&mdss_mdp>;
-		qcom,platform-reset-gpio = <&pm8941_gpios 19 0>;
-		qcom,platform-enable-gpio = <&msmgpio 58 0>;
+		qcom,platform-reset-gpio = <&msmgpio 47 1>;	//ASUS_BSP: Louis +++
+		//qcom,platform-enable-gpio = <&msmgpio 58 1>;	//ASUS_BSP: Louis +++
+
 		qcom,platform-te-gpio = <&msmgpio 12 0>;
+
 		qcom,platform-strength-ctrl = [ff 06];
 		qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];
 		qcom,platform-regulator-settings = [07 09 03 00 20 00 01];
 		qcom,platform-lane-config = [00 00 00 00 00 00 00 01 97
-			00 00 00 00 00 00 00 01 97
-			00 00 00 00 00 00 00 01 97
-			00 00 00 00 00 00 00 01 97
+			00 00 00 00 05 00 00 01 97
+			00 00 00 00 0a 00 00 01 97
+			00 00 00 00 0f 00 00 01 97
 			00 c0 00 00 00 00 00 01 bb];
+		/*	//ASUS_BSP: Louis +++
 		qcom,platform-supply-entry1 {
 				qcom,supply-name = "vdd";
 				qcom,supply-min-voltage = <3000000>;
@@ -152,6 +157,7 @@
 				qcom,supply-pre-off-sleep = <0>;
 				qcom,supply-post-off-sleep = <0>;
 		};
+		*/	//ASUS_BSP: Louis ---
 		qcom,platform-supply-entry2 {
 				qcom,supply-name = "vddio";
 				qcom,supply-min-voltage = <1800000>;
@@ -159,7 +165,7 @@
 				qcom,supply-enable-load = <100000>;
 				qcom,supply-disable-load = <100>;
 				qcom,supply-pre-on-sleep = <0>;
-				qcom,supply-post-on-sleep = <20>;
+				qcom,supply-post-on-sleep = <150>; //ASUS BSP Display
 				qcom,supply-pre-off-sleep = <0>;
 				qcom,supply-post-off-sleep = <0>;
 		};
@@ -184,7 +190,7 @@
 			<0xfd923100 0x2b0>,
 			<0xfdf30000 0x108>;
 		reg-names = "dsi_ctrl", "dsi_phy", "mmss_misc_phys";
-		vdd-supply = <&pm8941_l22>;
+		/*vdd-supply = <&pm8941_l22>;*/     /* +++ ASUS_BSP : Louis: do not use l22 */
 		vddio-supply = <&pm8941_l12>;
 		vdda-supply = <&pm8941_l2>;
 		qcom,mdss-fb-map = <&mdss_fb0>;
@@ -193,9 +199,9 @@
 		qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];
 		qcom,platform-regulator-settings = [07 09 03 00 20 00 01];
 		qcom,platform-lane-config = [00 00 00 00 00 00 00 01 97
-			00 00 00 00 00 00 00 01 97
-			00 00 00 00 00 00 00 01 97
-			00 00 00 00 00 00 00 01 97
+			00 00 00 00 05 00 00 01 97
+			00 00 00 00 0a 00 00 01 97
+			00 00 00 00 0f 00 00 01 97
 			00 c0 00 00 00 00 00 01 bb];
 		qcom,platform-supply-entry1 {
 				qcom,supply-name = "vdd";
@@ -248,7 +254,11 @@
 		qcom,hdmi-tx-min-voltage-level = <0 0 1800000 1800000>;
 		qcom,hdmi-tx-max-voltage-level = <0 0 1800000 1800000>;
 		qcom,hdmi-tx-peak-current = <0 0 300000 0>;
-
+//ASUS BSP wei +++
+		interrupt-parent = <&msmgpio>;
+		interrupts = <75 0>;
+		qcom,hdmi-tx-paddetect = <&msmgpio 75 0>;
+//ASUS BSP wei ---
 		qcom,hdmi-tx-cec = <&msmgpio 31 0>;
 		qcom,hdmi-tx-ddc-clk = <&msmgpio 32 0>;
 		qcom,hdmi-tx-ddc-data = <&msmgpio 33 0>;

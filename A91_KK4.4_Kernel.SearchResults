@@ -1,0 +1,4 @@
+---- ASUSEvtlog Matches (3 in 1 files) ----
+Dwc3-msm.c (drivers\usb\dwc3):	ASUSEvtlog("[USB] set_chg_mode: USB\n");
+Dwc3-msm.c (drivers\usb\dwc3):		ASUSEvtlog("[USB] set_chg_mode: UNKNOWN\n");
+Dwc3-msm.c (drivers\usb\dwc3):		ASUSEvtlog("[USB] set_chg_mode: NONE\n");

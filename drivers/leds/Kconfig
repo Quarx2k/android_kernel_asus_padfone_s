@@ -578,4 +578,13 @@ config LEDS_TRIGGER_SLEEP
 comment "iptables trigger is under Netfilter config (LED target)"
 	depends on LEDS_TRIGGERS
 
+config A86_BACKLIGHT
+	tristate "Enable backlight driver"
+	help
+		According to LCD trigger backlight driver.
+
+config P05_NOVATEK_CM
+	tristate "Enable P05 color adjustment driver"
+	help
+	  According to i2c trigger p05 HSIC driver.
 endif # NEW_LEDS

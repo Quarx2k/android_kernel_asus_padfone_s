@@ -6,6 +6,10 @@
 #include <linux/vmalloc.h>
 #include <linux/reboot.h>
 
+//ASUS_BSP lenter+++
+#include <linux/jiffies.h>
+//ASUS_BSP lenter---
+
 /*
  *	Notifier list for kernel code which wants to be called
  *	at shutdown. This is used to stop any idling DMA operations
@@ -325,6 +329,83 @@ int blocking_notifier_call_chain(struct blocking_notifier_head *nh,
 	return __blocking_notifier_call_chain(nh, val, v, -1, NULL);
 }
 EXPORT_SYMBOL_GPL(blocking_notifier_call_chain);
+
+
+//ASUS_BSP lenter+++
+static int __kprobes notifier_call_chain_timeinfo(struct notifier_block **nl,
+					unsigned long val, void *v,
+					int nr_to_call,	int *nr_calls, unsigned short debugPrint)
+{
+	int ret = NOTIFY_DONE;
+	struct notifier_block *nb, *next_nb;
+       uint32_t st_jiffies=0;
+
+	nb = rcu_dereference_raw(*nl);
+
+	while (nb && nr_to_call) {
+		next_nb = rcu_dereference_raw(nb->next);
+
+#ifdef CONFIG_DEBUG_NOTIFIERS
+		if (unlikely(!func_ptr_is_kernel_text(nb->notifier_call))) {
+			WARN(1, "Invalid notifier called!");
+			nb = next_nb;
+			continue;
+		}
+#endif
+
+              if(debugPrint && NULL!=v && strcmp((const char*)v, "microp")==0){
+                        pr_debug("[MICROP] CB[%lu] ++\r\n", val);
+                        st_jiffies=jiffies;
+              }
+              
+		ret = nb->notifier_call(nb, val, v);
+
+              if(debugPrint && NULL!=v && strcmp((const char*)v, "microp")==0){
+                        pr_debug("[MICROP] CB[%lu] --, take %lu jiffies\r\n" , val, jiffies - st_jiffies);
+              }
+              
+
+		if (nr_calls)
+			(*nr_calls)++;
+
+		if ((ret & NOTIFY_STOP_MASK) == NOTIFY_STOP_MASK)
+			break;
+		nb = next_nb;
+		nr_to_call--;
+	}
+	return ret;
+}
+
+
+
+int __blocking_notifier_call_chain_timeinfo(struct blocking_notifier_head *nh,
+				   unsigned long val, void *v,
+				   int nr_to_call, int *nr_calls, unsigned short debugPrint)
+{
+	int ret = NOTIFY_DONE;
+
+	/*
+	 * We check the head outside the lock, but if this access is
+	 * racy then it does not matter what the result of the test
+	 * is, we re-check the list after having taken the lock anyway:
+	 */
+	if (rcu_dereference_raw(nh->head)) {
+		down_read(&nh->rwsem);
+		ret = notifier_call_chain_timeinfo(&nh->head, val, v, nr_to_call,
+					nr_calls, debugPrint);
+		up_read(&nh->rwsem);
+	}
+	return ret;
+}
+EXPORT_SYMBOL_GPL(__blocking_notifier_call_chain_timeinfo);
+
+int blocking_notifier_call_chain_timeinfo(struct blocking_notifier_head *nh,
+		unsigned long val, void *v, unsigned short debugPrint)
+{
+	return __blocking_notifier_call_chain_timeinfo(nh, val, v, -1, NULL, debugPrint);
+}
+EXPORT_SYMBOL_GPL(blocking_notifier_call_chain_timeinfo);
+//ASUS_BSP lenter---
 
 /*
  *	Raw notifier chain routines.  There is no protection;

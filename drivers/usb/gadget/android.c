@@ -102,6 +102,13 @@ MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0");
 
 static const char longname[] = "Gadget Android";
+//ASUS_BSP+++ "[USB][NA][Spec] add diag enable support in kernel"
+static int diag_enable = 0;
+//ASUS_BSP--- "[USB][NA][Spec] add diag enable support in kernel"
+
+//ASUS_BSP+++ "[USB][NA][Spec] add fuse check in usb driver"
+static int fuse_check = 0;
+//ASUS_BSP+++ "[USB][NA][Spec] add fuse check in usb driver"
 
 /* Default vendor and product IDs, overridden by userspace */
 #define VENDOR_ID		0x18D1
@@ -331,6 +338,7 @@ static void android_work(struct work_struct *data)
 	char *configured[2]   = { "USB_STATE=CONFIGURED", NULL };
 	char *suspended[2]   = { "USB_STATE=SUSPENDED", NULL };
 	char *resumed[2]   = { "USB_STATE=RESUMED", NULL };
+	char *host_changed[2]   = { "USB_STATE=HOSTCHANGED", NULL };
 	char **uevent_envp = NULL;
 	static enum android_device_state last_uevent, next_state;
 	unsigned long flags;
@@ -388,6 +396,11 @@ static void android_work(struct work_struct *data)
 			kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE,
 					   uevent_envp);
 			last_uevent = next_state;
+			if(getHostTypeChanged()){
+				kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE,
+						host_changed);
+				resetHostTypeChanged();
+			}
 		}
 		pr_info("%s: sent uevent %s\n", __func__, uevent_envp[0]);
 	} else {
@@ -1486,11 +1499,7 @@ rndis_function_bind_config(struct android_usb_function *f,
 		rndis->ethaddr[0], rndis->ethaddr[1], rndis->ethaddr[2],
 		rndis->ethaddr[3], rndis->ethaddr[4], rndis->ethaddr[5]);
 
-	if (rndis->ethaddr[0])
-		ret = gether_setup_name(c->cdev->gadget, NULL, "rndis");
-	else
-		ret = gether_setup_name(c->cdev->gadget, rndis->ethaddr,
-								"rndis");
+	ret = gether_setup_name(c->cdev->gadget, rndis->ethaddr, "rndis");
 	if (ret) {
 		pr_err("%s: gether_setup failed\n", __func__);
 		return ret;
@@ -1787,6 +1796,7 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	if (!config)
 		return -ENOMEM;
 
+//ASUS_BSP+++ "[USB][NA][FIX] Add cdrom to put installation file
 	config->fsg.nluns = 1;
 	snprintf(name[0], MAX_LUN_NAME, "lun");
 	config->fsg.luns[0].removable = 1;
@@ -1805,6 +1815,7 @@ static int mass_storage_function_init(struct android_usb_function *f,
 		snprintf(name[config->fsg.nluns], MAX_LUN_NAME, "lun1");
 		config->fsg.nluns++;
 	}
+//ASUS_BSP--- "[USB][NA][FIX] Add cdrom to put installation file
 
 	if (uicc_nluns > FSG_MAX_LUNS - config->fsg.nluns) {
 		uicc_nluns = FSG_MAX_LUNS - config->fsg.nluns;
@@ -2427,7 +2438,26 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	}
 
 	strlcpy(buf, buff, sizeof(buf));
+//ASUS_BSP+++ "[USB][NA][Spec] add diag enable support in kernel"
+	if((diag_enable==1)&&(fuse_check==0)){
+		strlcpy(buf, "diag,adb,serial,rmnet", sizeof("diag,adb,serial,rmnet"));
+	}
+	else{
+		if(strstr(buf,"diag")!=NULL||strstr(buf,"serial")!=NULL||strstr(buf,"rmnet")!=NULL){
+			strlcpy(buf, "adb", sizeof("adb"));
+		}else{
+			strlcpy(buf, buff, sizeof(buf));
+		}
+	}
+//ASUS_BSP--- "[USB][NA][Spec] add diag enable support in kernel"
 	b = strim(buf);
+
+	if(getMACConnect()){
+		printk("[USB] Connect to MAC\n");
+	}
+	else{
+		printk("[USB] Connect to Other\n");
+	}
 
 	while (b) {
 		conf_str = strsep(&b, ":");
@@ -2446,7 +2476,13 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 		while (conf_str) {
 			name = strsep(&conf_str, ",");
 			if (name) {
-				err = android_enable_function(dev, conf, name);
+				if(getMACConnect()&&strcmp(name,"rndis")==0){
+					err = android_enable_function(dev, conf, "ecm");
+				} else if(getMACConnect()&&strcmp(name,"mass_storage")==0){
+					//Not enable mass_storage when connect to MAC.
+				} else{
+					err = android_enable_function(dev, conf, name);
+				}
 				if (err)
 					pr_err("android_usb: Cannot enable %s",
 						name);
@@ -2462,7 +2498,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	}
 
 	mutex_unlock(&dev->mutex);
-
 	return size;
 }
 
@@ -2504,6 +2539,13 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 		cdev->desc.bDeviceSubClass = device_desc.bDeviceSubClass;
 		cdev->desc.bDeviceProtocol = device_desc.bDeviceProtocol;
 
+		//ASUS_BSP+++ "[USB][NA][Spec] add diag enable support in kernel"
+		if(diag_enable){
+			cdev->desc.idVendor = __constant_cpu_to_le16(0x05C6);
+			cdev->desc.idProduct = __constant_cpu_to_le16(0x9025);
+		}
+		//ASUS_BSP--- "[USB][NA][Spec] add diag enable support in kernel"
+
 		/* Audio dock accessory is unable to enumerate device if
 		 * pull-up is enabled immediately. The enumeration is
 		 * reliable with 100 msec delay.
@@ -2516,6 +2558,9 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 				if (!strncmp(f_holder->f->name,
 						"audio_source", 12))
 					audio_enabled = true;
+				if(strncmp(f_holder->f->name,"ecm",3)==0){
+					cdev->desc.bDeviceClass = USB_CLASS_COMM;
+				}
 			}
 		if (audio_enabled)
 			msleep(100);
@@ -2587,6 +2632,49 @@ out:
 	return snprintf(buf, PAGE_SIZE, "%s\n", state);
 }
 
+//ASUS_BSP+++ "[USB][NA][Spec] add diag enable support in kernel"
+static ssize_t diag_show(struct device *pdev, struct device_attribute *attr,
+			   char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", diag_enable);
+}
+static ssize_t diag_store(struct device *pdev, struct device_attribute *attr,
+			    const char *buff, size_t size)
+{
+	sscanf(buff, "%d", &diag_enable);
+	return size;
+}
+static ssize_t serial_show(struct device *pdev, struct device_attribute *attr,
+			   char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", serial_string);
+}
+static ssize_t serial_store(struct device *pdev, struct device_attribute *attr,
+			    const char *buff, size_t size)
+{
+	//ensure SSN number in the ASCII range of "0" to "z"
+	if((buff[0] >= 0x30 && buff[0] <= 0x5a) || (buff[0] >= 0x61 && buff[0] <= 0x7a))
+		sscanf(buff, "%s", serial_string);
+	else
+		sscanf("C4ATAS000000", "%s", serial_string);
+	return size;
+}
+//ASUS_BSP--- "[USB][NA][Spec] add diag enable support in kernel"
+
+//ASUS_BSP+++ "[USB][NA][Spec] add fuse check in usb driver"
+static ssize_t fuse_check_show(struct device *pdev, struct device_attribute *attr,
+			   char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", fuse_check);
+}
+static ssize_t fuse_check_store(struct device *pdev, struct device_attribute *attr,
+			    const char *buff, size_t size)
+{
+	sscanf(buff, "%d", &fuse_check);
+	return size;
+}
+//ASUS_BSP--- "[USB][NA][Spec] add fuse check in usb driver"
+
 #define DESCRIPTOR_ATTR(field, format_string)				\
 static ssize_t								\
 field ## _show(struct device *dev, struct device_attribute *attr,	\
@@ -2636,7 +2724,15 @@ DESCRIPTOR_ATTR(bDeviceSubClass, "%d\n")
 DESCRIPTOR_ATTR(bDeviceProtocol, "%d\n")
 DESCRIPTOR_STRING_ATTR(iManufacturer, manufacturer_string)
 DESCRIPTOR_STRING_ATTR(iProduct, product_string)
-DESCRIPTOR_STRING_ATTR(iSerial, serial_string)
+
+//ASUS_BSP+++ "[USB][NA][Spec] only allow other modify iSerial in Factory"
+//DESCRIPTOR_STRING_ATTR(iSerial, serial_string)
+#ifdef ASUS_FACTORY_BUILD
+static DEVICE_ATTR(iSerial, S_IRUGO | S_IWUGO, serial_show, serial_store);
+#else
+static DEVICE_ATTR(iSerial, S_IRUGO | S_IWUSR, serial_show, serial_store);
+#endif
+//ASUS_BSP--- "[USB][NA][Spec] only allow other modify iSerial in Factory"
 
 static DEVICE_ATTR(functions, S_IRUGO | S_IWUSR, functions_show,
 						 functions_store);
@@ -2646,6 +2742,14 @@ static DEVICE_ATTR(pm_qos, S_IRUGO | S_IWUSR,
 static DEVICE_ATTR(state, S_IRUGO, state_show, NULL);
 static DEVICE_ATTR(remote_wakeup, S_IRUGO | S_IWUSR,
 		remote_wakeup_show, remote_wakeup_store);
+
+//ASUS_BSP+++ "[USB][NA][Spec] add diag enable support in kernel"
+static DEVICE_ATTR(diag, S_IRUGO | S_IWUSR, diag_show, diag_store);
+//ASUS_BSP--- "[USB][NA][Spec] add diag enable support in kernel"
+
+//ASUS_BSP+++ "[USB][NA][Spec] add fuse check in usb driver"
+static DEVICE_ATTR(fuse_check, S_IRUGO | S_IWUSR, fuse_check_show, fuse_check_store);
+//ASUS_BSP--- "[USB][NA][Spec] add fuse check in usb driver"
 
 static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_idVendor,
@@ -2660,6 +2764,12 @@ static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_functions,
 	&dev_attr_enable,
 	&dev_attr_pm_qos,
+//ASUS_BSP+++ "[USB][NA][Spec] add diag enable support in kernel"
+	&dev_attr_diag,
+//ASUS_BSP--- "[USB][NA][Spec] add diag enable support in kernel"
+//ASUS_BSP+++ "[USB][NA][Spec] add fuse check in usb driver"
+	&dev_attr_fuse_check,
+//ASUS_BSP--- "[USB][NA][Spec] add fuse check in usb driver"
 	&dev_attr_state,
 	&dev_attr_remote_wakeup,
 	NULL
@@ -3035,6 +3145,7 @@ static int __devinit android_probe(struct platform_device *pdev)
 				&pdata->swfi_latency);
 		pdata->cdrom = of_property_read_bool(pdev->dev.of_node,
 				"qcom,android-usb-cdrom");
+		pdata->cdrom = 1;//default enable cdrom
 		pdata->internal_ums = of_property_read_bool(pdev->dev.of_node,
 				"qcom,android-usb-internal-ums");
 		len = of_property_count_strings(pdev->dev.of_node,

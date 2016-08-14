@@ -151,6 +151,20 @@ static struct gpiomux_setting recovery_config = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 
+// ASUS_BSP +++ Peter_Lu "For I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+#include <linux/microp_api.h>
+#endif
+#define I2C_BLSP1_QUP5_BUS6			6
+#define QUP_I2C_BUS_ARB_LOST			1U << 4
+static int i2c_qup_pm_resume_runtime(struct device *device);
+static int i2c_qup_pm_suspend_runtime(struct device *device);
+// Force Pad I2C bus without suspend when long time without used
+#ifdef CONFIG_EEPROM_NUVOTON
+static bool I2C_BUS6_SUSPENDING = false;
+#endif
+// ASUS_BSP ---
+
 /**
  * qup_i2c_clk_path_vote: data to use bus scaling driver for clock path vote
  *
@@ -658,6 +672,20 @@ static int qup_i2c_poll_clock_ready(struct qup_i2c_dev *dev)
 		clk_state, op_flgs);
 	return -ETIMEDOUT;
 }
+
+// ASUS_BSP +++ Peter_Lu "For Pad I2C error check gpio status issue"
+static inline void qup_i2c_check_gpios(struct qup_i2c_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(i2c_rsrcs); ++i) {
+		if (dev->i2c_gpios[i] >= 0)	{
+			dev_dbg(dev->dev, "[i2c] I2C_bus6 %s gpio value : %d\r\n",
+				i2c_rsrcs[i], gpio_get_value(dev->i2c_gpios[i]));
+		}
+	}
+}
+// ASUS_BSP ---
 
 #ifdef DEBUG
 static void qup_verify_fifo(struct qup_i2c_dev *dev, uint32_t val,
@@ -1302,6 +1330,11 @@ timeout_err:
 		disable_irq(dev->in_irq);
 		disable_irq(dev->out_irq);
 	}
+// ASUS_BSP +++ Peter_Lu "For Pad I2C error reset issue"
+	if (adap->nr == I2C_BLSP1_QUP5_BUS6)	{
+		qup_i2c_check_gpios(dev);
+	}
+// ASUS_BSP --- 
 	dev->complete = NULL;
 	dev->msg = NULL;
 	dev->pos = 0;
@@ -1682,6 +1715,12 @@ blsp_core_init:
 			of_i2c_register_devices(&dev->adapter);
 		}
 
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+		if( dev->adapter.nr == I2C_BLSP1_QUP5_BUS6 )	{
+			i2c_qup_pm_resume_runtime(&pdev->dev);
+			msleep(10);
+			i2c_qup_pm_suspend_runtime(&pdev->dev);
+		}
 		pm_runtime_set_autosuspend_delay(&pdev->dev, MSEC_PER_SEC);
 		pm_runtime_use_autosuspend(&pdev->dev);
 		pm_runtime_enable(&pdev->dev);
@@ -1778,8 +1817,22 @@ static int i2c_qup_pm_suspend_runtime(struct device *device)
 {
 	struct platform_device *pdev = to_platform_device(device);
 	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+	if( (dev->adapter.nr == I2C_BLSP1_QUP5_BUS6) && !I2C_BUS6_SUSPENDING && AX_MicroP_IsP01Connected() )
+	{
+		printk("[i2c] Device not suspend, Without turn off Bus6!\r\n");
+		return -EAGAIN;
+	}else	{
+#endif
+// ASUS_BSP ---
 	dev_dbg(device, "pm_runtime: suspending...\n");
 	i2c_qup_pm_suspend(dev);
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+	}
+#endif
+// ASUS_BSP ---
 	return 0;
 }
 
@@ -1787,6 +1840,7 @@ static int i2c_qup_pm_resume_runtime(struct device *device)
 {
 	struct platform_device *pdev = to_platform_device(device);
 	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
+	printk("[i2c] i2c_qup_pm_resume_runtime; Resume bus : %d\r\n", dev->adapter.nr);	
 	dev_dbg(device, "pm_runtime: resuming...\n");
 	i2c_qup_pm_resume(dev);
 	return 0;
@@ -1798,6 +1852,15 @@ static int i2c_qup_pm_suspend_sys(struct device *device)
 	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
 	/* Acquire mutex to ensure current transaction is over */
 	mutex_lock(&dev->mlock);
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON	
+	if( dev->adapter.nr == I2C_BLSP1_QUP5_BUS6 )	{
+		printk("pad i2c suspending...\r\n");
+		I2C_BUS6_SUSPENDING = true;
+		AX_MicroP_Bus_Suspending(1);
+	}
+#endif
+// ASUS_BSP ---
 	dev->pwr_state = MSM_I2C_SYS_SUSPENDING;
 	mutex_unlock(&dev->mlock);
 	if (!pm_runtime_enabled(device) || !pm_runtime_suspended(device)) {
@@ -1825,6 +1888,15 @@ static int i2c_qup_pm_resume_sys(struct device *device)
 	 */
 	dev_dbg(device, "system resume\n");
 	dev->pwr_state = MSM_I2C_PM_SUSPENDED;
+// ASUS_BSP +++ Peter_Lu "For Pad I2C suspend/resume issue"
+#ifdef CONFIG_EEPROM_NUVOTON
+	if( dev->adapter.nr == I2C_BLSP1_QUP5_BUS6 )	{
+		printk("pad i2c resuming...\r\n");
+		I2C_BUS6_SUSPENDING = false;
+		AX_MicroP_Bus_Suspending(0);
+	}
+#endif
+// ASUS_BSP ---
 	return 0;
 }
 #endif /* CONFIG_PM */

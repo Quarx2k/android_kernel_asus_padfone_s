@@ -35,7 +35,7 @@
 # include "mutex.h"
 # include <asm/mutex.h>
 #endif
-
+extern struct mutex fake_mutex;
 void
 __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 {
@@ -44,7 +44,10 @@ __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 	INIT_LIST_HEAD(&lock->wait_list);
 	mutex_clear_owner(lock);
 
-	debug_mutex_init(lock, name, key);
+    //added by jack
+    lock->name = name;
+	//removed by jack
+	//debug_mutex_init(lock, name, key);
 }
 
 EXPORT_SYMBOL(__mutex_init);
@@ -121,6 +124,7 @@ void __sched mutex_unlock(struct mutex *lock)
 	 */
 	mutex_clear_owner(lock);
 #endif
+    mutex_clear_owner(lock); //added by jack for debugging mutex deadlock
 	__mutex_fastpath_unlock(&lock->count, __mutex_unlock_slowpath);
 }
 
@@ -240,7 +244,9 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 
 		/* didn't get the lock, go to sleep: */
 		spin_unlock_mutex(&lock->wait_lock, flags);
+		task_thread_info(task)->pWaitingMutex = lock;
 		schedule_preempt_disabled();
+		task_thread_info(task)->pWaitingMutex = &fake_mutex;
 		spin_lock_mutex(&lock->wait_lock, flags);
 	}
 

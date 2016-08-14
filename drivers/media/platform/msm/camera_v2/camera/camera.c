@@ -236,6 +236,9 @@ static int camera_v4l2_qbuf(struct file *filep, void *fh,
 	return ret;
 }
 
+#ifdef CONFIG_MT9M114
+extern void iCatch_get_exif(struct exif_cfg *exif); //ASUS_BSP LiJen "[A86][Camera][NA][Others]implement EXIF in kernel"
+#endif
 static int camera_v4l2_dqbuf(struct file *filep, void *fh,
 	struct v4l2_buffer *pb)
 {
@@ -243,11 +246,22 @@ static int camera_v4l2_dqbuf(struct file *filep, void *fh,
 	struct msm_session *session;
 	struct camera_v4l2_private *sp = fh_to_private(fh);
 		struct msm_video_device *pvdev = video_drvdata(filep);
+#ifdef CONFIG_MT9M114        
+       struct exif_cfg JpegExif; //ASUS_BSP LiJen "[A86][Camera][NA][Others]implement EXIF in kernel"
+#endif       
 	unsigned int session_id = pvdev->vdev->num;
 	session = msm_session_find(session_id);
 	if (WARN_ON(!session))
 		return -EIO;
 	mutex_lock(&session->lock);
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]implement EXIF in kernel"
+       //Fill EXIF information
+#ifdef CONFIG_MT9M114
+       memset(&JpegExif,  0,  sizeof(struct exif_cfg));
+       iCatch_get_exif(&JpegExif);
+       memcpy(&(pb->JpegExif), &JpegExif, sizeof(struct exif_cfg));
+#endif       
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]implement EXIF in kernel"    
 	ret = vb2_dqbuf(&sp->vb2_q, pb, filep->f_flags & O_NONBLOCK);
 	mutex_unlock(&session->lock);
 	return ret;
@@ -526,6 +540,18 @@ static void camera_v4l2_vb2_q_release(struct file *filep)
 	vb2_queue_release(&sp->vb2_q);
 }
 
+//ASUS_BSP +++ Stimber
+#ifdef CONFIG_ASUS_CAMERA_STS
+static bool g_is_camera_open = false;
+
+bool get_camera_status(void)
+{
+    return g_is_camera_open;
+}
+EXPORT_SYMBOL(get_camera_status);
+#endif
+//ASUS_BSP --- Stimber
+
 static int camera_v4l2_open(struct file *filep)
 {
 	int rc = 0;
@@ -580,6 +606,12 @@ static int camera_v4l2_open(struct file *filep)
 					__func__, __LINE__, rc);
 			goto post_fail;
 		}
+//ASUS_BSP +++ Stimber
+#ifdef CONFIG_ASUS_CAMERA_STS
+	      g_is_camera_open = true;
+             pr_info("%s: Camera[%d] status(%d)\n",__func__, pvdev->vdev->num, get_camera_status()); 
+#endif
+//ASUS_BSP --- Stimber        
 	} else {
 		rc = msm_create_command_ack_q(pvdev->vdev->num,
 			atomic_read(&pvdev->stream_cnt));
@@ -652,6 +684,12 @@ static int camera_v4l2_close(struct file *filep)
 		pm_relax(&pvdev->vdev->dev);
 		atomic_set(&pvdev->stream_cnt, 0);
 
+//ASUS_BSP +++ Stimber
+#ifdef CONFIG_ASUS_CAMERA_STS
+              g_is_camera_open = false;
+              pr_info("%s: Camera[%d] status(%d)\n",__func__, pvdev->vdev->num, get_camera_status());
+#endif
+//ASUS_BSP --- Stimber
 	} else {
 		camera_pack_event(filep, MSM_CAMERA_SET_PARM,
 			MSM_CAMERA_PRIV_DEL_STREAM, -1, &event);

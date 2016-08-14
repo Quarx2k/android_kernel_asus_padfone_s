@@ -44,6 +44,32 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 #include "sdio_ops.h"
+#include "mmc_config.h"
+
+/*ASUS_BSP Deeo: add for debug mask +++ */
+/* Debug levels */
+#define NO_DEBUG       0
+#define DEBUG_POWER     1
+#define DEBUG_INFO  2
+#define DEBUG_VERBOSE 5
+#define DEBUG_RAW      8
+#define DEBUG_TRACE   10
+
+static int debug = DEBUG_INFO;
+static int w_cmd_count=0;
+static int r_cmd_count=0;
+
+module_param(debug, int, 0644);
+MODULE_PARM_DESC(debug, "Activate debugging output");
+
+module_param(w_cmd_count, int, 0644);
+MODULE_PARM_DESC(w_cmd_count, "Activate debugging output");
+
+module_param(r_cmd_count, int, 0644);
+MODULE_PARM_DESC(r_cmd_count, "Activate debugging output");
+
+#define mmc_debug(level, ...) do { if (debug >= (level)) pr_info(__VA_ARGS__); } while (0)
+/*ASUS_BSP Deeo: add for debug mask --- */
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/mmc.h>
@@ -285,6 +311,177 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 
 EXPORT_SYMBOL(mmc_request_done);
 
+//ASUS_BSP +++ Gavin_Chang "mmc cmd statistics"
+#define INAND_CMD38_ARG_EXT_CSD  113
+#define INAND_CMD38_ARG_ERASE    0x00
+#define INAND_CMD38_ARG_TRIM     0x01
+#define INAND_CMD38_ARG_SECERASE 0x80
+#define INAND_CMD38_ARG_SECTRIM1 0x81
+#define INAND_CMD38_ARG_SECTRIM2 0x88
+
+/**
+ *	mmc_do_cmd_stats - do mmc command statistics
+ *	@card: MMC card to do command statistics
+ *	@mrq: MMC request which request
+ *
+ */
+void mmc_do_cmd_stats(struct mmc_card	*card, struct mmc_request *mrq)
+{
+	u32 set;
+	u32 index;
+	u32 value;
+
+	if (!card || !card->cmd_stats || !mmc_card_mmc(card) || !card->cmd_stats->enabled) {
+		pr_debug("%s, not do cmd statistics\n", __func__);
+		return;
+	}
+
+	if (mrq->cmd->opcode > 60)
+		pr_err("%s: unknown cmd:%u", mmc_hostname(card->host), mrq->cmd->opcode );
+
+	if (mrq->sbc) {
+		card->cmd_stats->cmd_cnt[mrq->sbc->opcode]++;
+		if (MMC_SET_BLOCK_COUNT == mrq->sbc->opcode) {
+			if (mrq->sbc->arg & (1 << 29))
+				card->cmd_stats->do_data_tag_cnt++;
+				
+			if (mrq->sbc->arg & (1 << 31))
+				card->cmd_stats->do_rel_wr_cnt++;
+		}
+
+	}
+
+	card->cmd_stats->cmd_cnt[mrq->cmd->opcode]++;
+
+	if (mrq->stop) {
+		card->cmd_stats->cmd_cnt[mrq->stop->opcode]++;
+	}
+
+	if (MMC_READ_MULTIPLE_BLOCK == mrq->cmd->opcode || MMC_READ_SINGLE_BLOCK == mrq->cmd->opcode) {
+		if (mrq->data)
+			card->cmd_stats->rdata_sz += (mrq->data->blocks * mrq->data->blksz);
+	}
+
+	if (MMC_WRITE_MULTIPLE_BLOCK == mrq->cmd->opcode || MMC_WRITE_BLOCK == mrq->cmd->opcode) {
+		if (mrq->data)
+			card->cmd_stats->wdata_sz += (mrq->data->blocks * mrq->data->blksz);
+	}
+
+	if ( (MMC_STOP_TRANSMISSION == mrq->cmd->opcode || MMC_SEND_STATUS == mrq->cmd->opcode) && 
+	    (mrq->cmd->arg & 1)) {
+		card->cmd_stats->hpi_cnt++;
+	}	
+
+	if (MMC_ERASE == mrq->cmd->opcode) {
+		if (mrq->cmd->arg == MMC_ERASE_ARG)
+			card->cmd_stats->erase_cnt++;
+		else if (mrq->cmd->arg == MMC_TRIM_ARG)
+			card->cmd_stats->trim_cnt++;
+		else if (mrq->cmd->arg == MMC_DISCARD_ARG)
+			card->cmd_stats->discard_cnt++;
+	}
+
+	if (MMC_SWITCH == mrq->cmd->opcode) {
+		set = mrq->cmd->arg & 0x000000ff;
+		if (set == EXT_CSD_CMD_SET_NORMAL) {
+			index = (mrq->cmd->arg & 0x00ff0000) >> 16;
+			value = (mrq->cmd->arg & 0x0000ff00) >> 8;
+
+			switch (index) {
+			case EXT_CSD_FLUSH_CACHE:
+				card->cmd_stats->flush_cache_cnt++;
+				break;
+			case EXT_CSD_CACHE_CTRL:
+				if (value)
+					card->cmd_stats->cache_on_cnt++;
+				else
+					card->cmd_stats->cache_off_cnt++;
+				break;
+			case EXT_CSD_POWER_OFF_NOTIFICATION:
+				if (value == EXT_CSD_POWER_ON)
+					card->cmd_stats->pwr_on_cnt++;
+				else if (value == EXT_CSD_POWER_OFF_SHORT)
+					card->cmd_stats->pwr_off_short_cnt++;
+				else if (value == EXT_CSD_POWER_OFF_LONG)
+					card->cmd_stats->pwr_off_long_cnt++;
+				break;
+			case EXT_CSD_BKOPS_START:
+				card->cmd_stats->bkops_start_cnt++;	
+				break;
+			case EXT_CSD_SANITIZE_START:
+				card->cmd_stats->sanitize_cnt++;	
+				break;
+			case EXT_CSD_BOOT_WP:
+				card->cmd_stats->boot_wp_cnt++;
+				break;
+			case EXT_CSD_PART_CONFIG:
+				card->cmd_stats->part_cfg_cnt++;
+				break;
+			case EXT_CSD_POWER_CLASS:
+				card->cmd_stats->pwr_cls_cnt++;
+				break;
+			case EXT_CSD_BUS_WIDTH:
+				card->cmd_stats->bus_width_cnt++;
+				break;
+			case EXT_CSD_HS_TIMING:
+				card->cmd_stats->hs_timing_cnt++;
+				break;
+			case EXT_CSD_ERASE_GROUP_DEF:
+				card->cmd_stats->erase_grp_def_cnt++;
+				break;
+			case EXT_CSD_HPI_MGMT:
+				card->cmd_stats->hpi_mgmt_cnt++;
+				break;
+			case EXT_CSD_EXP_EVENTS_CTRL:
+				card->cmd_stats->exp_events_ctrl_cnt++;
+				break;
+			case INAND_CMD38_ARG_EXT_CSD:
+				if (value == INAND_CMD38_ARG_TRIM)
+					card->cmd_stats->cmd38_trim_cnt++;
+				else if (value == INAND_CMD38_ARG_ERASE)
+					card->cmd_stats->cmd38_erase_cnt++;
+				else if (value == INAND_CMD38_ARG_SECTRIM1)
+					card->cmd_stats->cmd38_sectrim1_cnt++;
+				else if (value == INAND_CMD38_ARG_SECERASE)
+					card->cmd_stats->cmd38_secerase_cnt++;				
+				else if (value == INAND_CMD38_ARG_SECTRIM2)
+					card->cmd_stats->cmd38_sectrim2_cnt++;
+				break;
+			case EXT_CSD_BKOPS_EN:
+				card->cmd_stats->bkops_en_cnt++;
+				break;
+			default:
+				break;
+			}
+
+		}
+	}
+
+
+}
+//ASUS_BSP --- Gavin_Chang "mmc cmd statistics"
+
+//ASUS_BSP Deeo : parse cmd for CPU boost +++
+void mmc_cmd_parse(struct mmc_host *host, struct mmc_request *mrq)
+{
+	if (strcmp(mmc_hostname(host),"mmc1"))
+		return;
+
+	mmc_debug(DEBUG_VERBOSE,"%s: starting CMD%u arg %08x flags %08x\n",
+		 mmc_hostname(host), mrq->cmd->opcode,
+		 mrq->cmd->arg, mrq->cmd->flags);
+
+	if (mrq->cmd->opcode == 18)  {
+		kobject_uevent(&host->class_dev.kobj, KOBJ_CHANGE);
+		r_cmd_count++;
+	}
+	if (mrq->cmd->opcode == 25) {
+		kobject_uevent(&host->class_dev.kobj, KOBJ_CHANGE);
+		w_cmd_count++;
+	}
+}
+//ASUS_BSP Deeo : parse cmd for CPU boost ---
+
 static void
 mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 {
@@ -292,6 +489,11 @@ mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 	unsigned int i, sz;
 	struct scatterlist *sg;
 #endif
+
+//ASUS_BSP +++ Gavin_Chang "mmc cmd statistics"
+	mmc_do_cmd_stats(host->card, mrq);
+//ASUS_BSP --- Gavin_Chang "mmc cmd statistics"
+	mmc_cmd_parse(host, mrq);	//ASUS_BSP Deeo : parse cmd for CPU boost +++
 
 	if (mrq->sbc) {
 		pr_debug("<%s: starting CMD%u arg %08x flags %08x>\n",
@@ -2471,9 +2673,15 @@ EXPORT_SYMBOL(mmc_can_erase);
 
 int mmc_can_trim(struct mmc_card *card)
 {
-	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_GB_CL_EN)
-		return 1;
-	return 0;
+//ASUS_BSP Gavin_Chang +++ turn off trim
+	if(MMC_CONFIG_SETTING_TRIM){
+		if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_GB_CL_EN)
+			return 1;
+		return 0;
+		}
+	else
+		return 0;
+//ASUS_BSP Gavin_Chang --- turn off trim
 }
 EXPORT_SYMBOL(mmc_can_trim);
 
@@ -2483,27 +2691,45 @@ int mmc_can_discard(struct mmc_card *card)
 	 * As there's no way to detect the discard support bit at v4.5
 	 * use the s/w feature support filed.
 	 */
-	if (card->ext_csd.feature_support & MMC_DISCARD_FEATURE)
-		return 1;
-	return 0;
+//ASUS_BSP Gavin_Chang +++ turn off discard
+	if(MMC_CONFIG_SETTING_DISCARD){
+		if (card->ext_csd.feature_support & MMC_DISCARD_FEATURE)
+			return 1;
+		return 0;
+	}
+	else
+		return 0;
+//ASUS_BSP Gavin_Chang --- turn off discard
 }
 EXPORT_SYMBOL(mmc_can_discard);
 
 int mmc_can_sanitize(struct mmc_card *card)
 {
-	if (!mmc_can_trim(card) && !mmc_can_erase(card))
+//ASUS_BSP Gavin_Chang +++ turn off sanitize
+	if(MMC_CONFIG_SETTING_SANITIZE){
+		if (!mmc_can_trim(card) && !mmc_can_erase(card))
+			return 0;
+		if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_SANITIZE)
+			return 1;
 		return 0;
-	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_SANITIZE)
-		return 1;
-	return 0;
+	}
+	else
+		return 0;
+//ASUS_BSP Gavin_Chang --- turn off sanitize
 }
 EXPORT_SYMBOL(mmc_can_sanitize);
 
 int mmc_can_secure_erase_trim(struct mmc_card *card)
 {
-	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_ER_EN)
-		return 1;
-	return 0;
+//ASUS_BSP Gavin_Chang +++ turn off trim
+	if(MMC_CONFIG_SETTING_TRIM){
+		if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_ER_EN)
+			return 1;
+		return 0;
+	}
+	else
+		return 0;
+//ASUS_BSP Gavin_Chang --- turn off trim
 }
 EXPORT_SYMBOL(mmc_can_secure_erase_trim);
 
@@ -3401,10 +3627,13 @@ EXPORT_SYMBOL(mmc_card_sleep);
 int mmc_card_can_sleep(struct mmc_host *host)
 {
 	struct mmc_card *card = host->card;
-
-	if (card && mmc_card_mmc(card) && card->ext_csd.rev >= 3)
-		return 1;
-	return 0;
+	if(MMC_CONFIG_SETTING_SLEEP){
+		if (card && mmc_card_mmc(card) && card->ext_csd.rev >= 3)
+			return 1;
+		return 0;
+	}
+	else
+		return 0;
 }
 EXPORT_SYMBOL(mmc_card_can_sleep);
 

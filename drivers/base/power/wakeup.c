@@ -17,6 +17,10 @@
 #include <trace/events/power.h>
 
 #include "power.h"
+//[+++]Debug for active wakelock before entering suspend
+void print_active_locks(void);
+extern bool g_resume_status;
+//[---]Debug for active wakelock before entering suspend
 
 /*
  * If set, the suspend/hibernate code will abort transitions to a sleep state
@@ -699,7 +703,13 @@ bool pm_get_wakeup_count(unsigned int *count, bool block)
 			split_counters(&cnt, &inpr);
 			if (inpr == 0 || signal_pending(current))
 				break;
-
+			//[+++]Debug for active wakelock before entering suspend
+            if (!g_resume_status){
+				printk("[PM] try to suspend wakelock\n");
+				ASUSEvtlog("[PM] try to suspend wakelock\n");
+				print_active_locks();
+            }
+			//[---]Debug for active wakelock before entering suspend
 			schedule();
 		}
 		finish_wait(&wakeup_count_wait_queue, &wait);
@@ -835,6 +845,45 @@ static int wakeup_sources_stats_show(struct seq_file *m, void *unused)
 	return 0;
 }
 
+//[+++]Debug for active wakelock before entering suspend
+extern int pmsp_flag;
+extern int pm_stay_unattended_period;
+extern void pmsp_print(void);
+extern void print_pm_cpuinfo(void);   //dump cpuinfo
+void print_active_locks(void)
+{
+    struct wakeup_source *ws;
+	int wl_active_cnt = 0;
+
+    //rcu_read_lock();
+    list_for_each_entry_rcu(ws, &wakeup_sources, entry)
+        if (ws->active){
+			wl_active_cnt++;
+            printk("[PM]active wake lock %s\n", ws->name);
+            ASUSEvtlog("[PM] active wake lock: %s\n", ws->name);
+            if (pmsp_flag == 1) {
+                if(strncmp(ws->name, "PowerManagerService", strlen("PowerManagerService")) == 0)
+					pmsp_print();
+				//dump cpuinfo
+				printk("[PM] pm_stay_unattended_period: %d\n", pm_stay_unattended_period);
+				if( pm_stay_unattended_period >= PM_UNATTENDED_TIMEOUT*3 ) {
+					pm_stay_unattended_period = 0;
+					print_pm_cpuinfo();
+                }
+			}
+            pmsp_flag = 0;
+        }
+
+		if (wl_active_cnt == 0){
+        printk("[PM]all wakelock are inactive\n");
+        ASUSEvtlog("[PM] all wakelock are inactive\n");
+        }
+
+    //rcu_read_unlock();
+    return;
+}
+EXPORT_SYMBOL(print_active_locks);
+//[---]Debug for active wakelock before entering suspend
 static int wakeup_sources_stats_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, wakeup_sources_stats_show, NULL);

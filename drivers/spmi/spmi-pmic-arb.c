@@ -130,6 +130,49 @@ struct spmi_pmic_arb_dev {
 	u32			prev_prtcl_irq_stat;
 };
 
+//ASUS_BSP Eason read PM8941 register value+++
+void __iomem *g_pmic_base;
+static DEFINE_SPINLOCK(asus_pmic_read_slock);
+#define PM8941_ARB_CHANNEL 0
+
+u32 asus_pmic_arb_read(int offset)
+{
+unsigned long flags;
+u8 opc;
+u32 cmd;
+u32 offset_write;
+u32 offset_read;
+u32 val;
+uint8_t sid;
+uint16_t addr;
+u8 bc;
+
+sid = (offset >> 16) & 0xF;
+addr = offset & 0xFFFF;
+
+opc = PMIC_ARB_OP_EXT_READL; 
+bc = 0;//len-1
+
+cmd = (opc << 27) | ((sid & 0xf) << 20) | (addr << 4) | (bc & 0x7);
+
+	spin_lock_irqsave(&asus_pmic_read_slock, flags);
+
+	offset_write = PMIC_ARB_CMD(PM8941_ARB_CHANNEL);
+	writel_relaxed(cmd, g_pmic_base + offset_write);
+
+	udelay(100);//delay in pmic_arb_wait_for_done
+
+	offset_read = PMIC_ARB_RDATA0(PM8941_ARB_CHANNEL);
+	val =  readl_relaxed(g_pmic_base + offset_read);
+
+	pr_debug("[BAT][PM8941]offset 0x%x, val 0x%x, BASE 0x%p\n", offset, val, g_pmic_base);
+
+	spin_unlock_irqrestore(&asus_pmic_read_slock, flags);
+
+	return val;
+}
+//ASUS_BSP Eason read PM8941 register value---
+
 static struct spmi_pmic_arb_dev *the_pmic_arb;
 
 static u32 pmic_arb_read(struct spmi_pmic_arb_dev *dev, u32 offset)
@@ -733,6 +776,9 @@ static int __devinit spmi_pmic_arb_probe(struct platform_device *pdev)
 
 	pmic_arb->base = devm_ioremap(&pdev->dev,
 					mem_res->start, resource_size(mem_res));
+	//ASUS_BSP Eason read PM8941 register value+++
+	g_pmic_base = pmic_arb->base;
+	//ASUS_BSP Eason read PM8941 register value---
 	if (!pmic_arb->base) {
 		dev_err(&pdev->dev, "ioremap of 'base' failed\n");
 		return -ENOMEM;

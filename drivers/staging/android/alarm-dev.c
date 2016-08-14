@@ -103,7 +103,7 @@ static void devalarm_cancel(struct devalarm *alrm)
 		hrtimer_cancel(&alrm->u.hrt);
 }
 
-
+int rtc_ready;
 static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int rv = 0;
@@ -213,6 +213,11 @@ from_old_alarm_set:
 		spin_unlock_irqrestore(&alarm_slock, flags);
 		if (rv < 0)
 			goto err1;
+		if (rtc_ready == 0) {
+			rtc_ready = 1;
+			printk("%s: ANDROID_ALARM_SET_RTC=0x%08x\n",
+				__func__, ANDROID_ALARM_SET_RTC);
+		}
 		break;
 	case ANDROID_ALARM_GET_TIME(0):
 		switch (alarm_type) {

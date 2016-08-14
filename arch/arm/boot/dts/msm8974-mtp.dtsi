@@ -586,12 +586,17 @@
 		qcom,master-en = <1>;
 	};
 
-	gpio@d700 { /* GPIO 24 */
-		qcom,mode = <1>;          /* QPNP_PIN_MODE_DIG_OUT */
-		qcom,out-strength = <1>;  /* QPNP_PIN_OUT_STRENGTH_LOW */
-		qcom,src-sel = <2>;       /* QPNP_PIN_SEL_FUNC_1  */
+	//+++Porting NFC's kernel:config NFC' firmware download pin+++
+ 	gpio@d700 { /* GPIO 24 */
+		qcom,mode = <1>;		/* QPNP_PIN_MODE_DIG_OUT */
+		qcom,output-type = <0>;		/* QPNP_PIN_OUT_BUF_CMOS */
+		qcom,pull = <5>;		/* QPNP_PIN_PULL_NO */
+		qcom,vin-sel = <2>;		/* QPNP_PIN_VIN2 */
+		qcom,out-strength = <2>;	/* QPNP_PIN_OUT_STRENGTH_MED */
+		qcom,src-sel = <0>;		/* QPNP_PIN_SEL_FUNC_CONSTANT */
 		qcom,master-en = <1>;
-	};
+ 	};
+	//---Porting NFC's kernel:config NFC' firmware download pin---
 
 	gpio@d800 { /* GPIO 25 */
 		qcom,mode = <1>;          /* QPNP_PIN_MODE_DIG_OUT */

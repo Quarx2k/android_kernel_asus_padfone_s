@@ -159,6 +159,25 @@ static struct usb_descriptor_header *ss_adb_descs[] = {
 static void adb_ready_callback(void);
 static void adb_closed_callback(void);
 
+//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
+static const char adb_string_interface[] = "ASUS Android Composite ADB Interface";
+enum {
+	ADB_STRING_INTERFACE
+};
+static struct usb_string adb_strings[] = {
+	{ADB_STRING_INTERFACE, adb_string_interface},
+	{}
+};
+static struct usb_gadget_strings adb_stringtab = {
+	.language = 0x0409, /* en-us */
+	.strings = adb_strings,
+};
+static struct usb_gadget_strings *adb_strings_array[] = {
+	&adb_stringtab,
+	NULL,
+};
+//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
+
 /* temporary variable used between adb_open() and adb_gadget_bind() */
 static struct adb_dev *_adb_dev;
 
@@ -239,8 +258,10 @@ static void adb_complete_in(struct usb_ep *ep, struct usb_request *req)
 {
 	struct adb_dev *dev = _adb_dev;
 
-	if (req->status != 0)
+	if (req->status != 0){
+		printk("adb_complete_in: req->status(%d)\n",req->status);
 		atomic_set(&dev->error, 1);
+	}
 
 	adb_req_put(dev, &dev->tx_idle, req);
 
@@ -252,8 +273,10 @@ static void adb_complete_out(struct usb_ep *ep, struct usb_request *req)
 	struct adb_dev *dev = _adb_dev;
 
 	dev->rx_done = 1;
-	if (req->status != 0 && req->status != -ECONNRESET)
+	if (req->status != 0 && req->status != -ECONNRESET){
+		printk("adb_complete_out: req->status(%d)\n",req->status);
 		atomic_set(&dev->error, 1);
+	}
 
 	wake_up(&dev->read_wq);
 }
@@ -545,7 +568,13 @@ adb_function_bind(struct usb_configuration *c, struct usb_function *f)
 	if (id < 0)
 		return id;
 	adb_interface_desc.bInterfaceNumber = id;
-
+	//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
+	if (adb_strings[ADB_STRING_INTERFACE].id == 0) {
+		int rc = usb_string_id(c->cdev);
+		adb_strings[ADB_STRING_INTERFACE].id = rc;
+		adb_interface_desc.iInterface = rc;
+	}
+	//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
 	/* allocate endpoints */
 	ret = adb_create_bulk_endpoints(dev, &adb_fullspeed_in_desc,
 			&adb_fullspeed_out_desc);
@@ -674,6 +703,9 @@ static int adb_bind_config(struct usb_configuration *c)
 	dev->function.unbind = adb_function_unbind;
 	dev->function.set_alt = adb_function_set_alt;
 	dev->function.disable = adb_function_disable;
+	//ASUS_BSP+++ "[USB][NA][Other] Add readable function name"
+	dev->function.strings     = adb_strings_array;
+	//ASUS_BSP--- "[USB][NA][Other] Add readable function name"
 
 	return usb_add_function(c, &dev->function);
 }

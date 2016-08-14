@@ -184,13 +184,283 @@ int uvc_queue_buffer(struct uvc_video_queue *queue, struct v4l2_buffer *buf)
 	return ret;
 }
 
+//ASUS_BSP+++ Patrick "[A68][USB Cam][NA][Others] Using dequeue with timeout"
+#define call_memop(q, op, args...)					\
+	(((q)->mem_ops->op) ?						\
+		((q)->mem_ops->op(args)) : 0)
+
+#define call_qop(q, op, args...)					\
+	(((q)->ops->op) ? ((q)->ops->op(args)) : 0)
+
+#define V4L2_BUFFER_STATE_FLAGS	(V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_QUEUED | \
+				 V4L2_BUF_FLAG_DONE | V4L2_BUF_FLAG_ERROR | \
+				 V4L2_BUF_FLAG_PREPARED)
+
+#define UVC_Q_WAITON_TIMEOUT 1000
+#define UVC_DQ_TIMEOUT_COUNT 5
+
+int Deque_Timeout_Count = 0;
+
+static int uvc_from_vb2_verify_planes_array(struct vb2_buffer *vb, const struct v4l2_buffer *b)
+{
+	/* Is memory for copying plane information present? */
+	if (NULL == b->m.planes) {
+		printk("uvc_from_vb2_verify_planes_array: Multi-planar buffer passed but "
+			   "planes array not provided\n");
+		return -EINVAL;
+	}
+
+	if (b->length < vb->num_planes || b->length > VIDEO_MAX_PLANES) {
+		printk("uvc_from_vb2_verify_planes_array: Incorrect planes array length, "
+			   "expected %d, got %d\n", vb->num_planes, b->length);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static bool uvc_from_vb2_buffer_in_use(struct vb2_queue *q, struct vb2_buffer *vb)
+{
+	unsigned int plane;
+	for (plane = 0; plane < vb->num_planes; ++plane) {
+		void *mem_priv = vb->planes[plane].mem_priv;
+		/*
+		 * If num_users() has not been provided, call_memop
+		 * will return 0, apparently nobody cares about this
+		 * case anyway. If num_users() returns more than 1,
+		 * we are not the only user of the plane's memory.
+		 */
+		if (mem_priv && call_memop(q, num_users, mem_priv) > 1)
+			return true;
+	}
+	return false;
+}
+
+static int uvc_from_vb2_fill_v4l2_buffer(struct vb2_buffer *vb, struct v4l2_buffer *b)
+{
+	struct vb2_queue *q = vb->vb2_queue;
+	int ret;
+
+	/* Copy back data such as timestamp, flags, input, etc. */
+	memcpy(b, &vb->v4l2_buf, offsetof(struct v4l2_buffer, m));
+	b->input = vb->v4l2_buf.input;
+	b->reserved = vb->v4l2_buf.reserved;
+
+	if (V4L2_TYPE_IS_MULTIPLANAR(q->type)) {
+		ret = uvc_from_vb2_verify_planes_array(vb, b);
+		if (ret)
+			return ret;
+
+		/*
+		 * Fill in plane-related data if userspace provided an array
+		 * for it. The memory and size is verified above.
+		 */
+		memcpy(b->m.planes, vb->v4l2_planes,
+			b->length * sizeof(struct v4l2_plane));
+	} else {
+		/*
+		 * We use length and offset in v4l2_planes array even for
+		 * single-planar buffers, but userspace does not.
+		 */
+		b->length = vb->v4l2_planes[0].length;
+		b->bytesused = vb->v4l2_planes[0].bytesused;
+		if (q->memory == V4L2_MEMORY_MMAP)
+			b->m.offset = vb->v4l2_planes[0].m.mem_offset;
+		else if (q->memory == V4L2_MEMORY_USERPTR)
+			b->m.userptr = vb->v4l2_planes[0].m.userptr;
+	}
+
+	/*
+	 * Clear any buffer state related flags.
+	 */
+	b->flags &= ~V4L2_BUFFER_STATE_FLAGS;
+
+	switch (vb->state) {
+	case VB2_BUF_STATE_QUEUED:
+	case VB2_BUF_STATE_ACTIVE:
+		b->flags |= V4L2_BUF_FLAG_QUEUED;
+		break;
+	case VB2_BUF_STATE_ERROR:
+		b->flags |= V4L2_BUF_FLAG_ERROR;
+		/* fall through */
+	case VB2_BUF_STATE_DONE:
+		b->flags |= V4L2_BUF_FLAG_DONE;
+		break;
+	case VB2_BUF_STATE_PREPARED:
+		b->flags |= V4L2_BUF_FLAG_PREPARED;
+		break;
+	case VB2_BUF_STATE_DEQUEUED:
+		/* nothing */
+		break;
+	}
+
+	if (uvc_from_vb2_buffer_in_use(q, vb))
+		b->flags |= V4L2_BUF_FLAG_MAPPED;
+
+	return 0;
+}
+
+static int uvc_from_vb2_wait_for_done_vb(struct vb2_queue *q, int nonblocking)
+{
+	/*
+	 * All operations on vb_done_list are performed under done_lock
+	 * spinlock protection. However, buffers may be removed from
+	 * it and returned to userspace only while holding both driver's
+	 * lock and the done_lock spinlock. Thus we can be sure that as
+	 * long as we hold the driver's lock, the list will remain not
+	 * empty if list_empty() check succeeds.
+	 */
+
+	for (;;) {
+		int ret;
+
+		if (!q->streaming) {
+//			printk("uvc_from_vb2_wait_for_done_vb: Streaming off, will not wait for buffers\n");
+			return -EINVAL;
+		}
+
+		if (!list_empty(&q->done_list)) {
+			/*
+			 * Found a buffer that we were waiting for.
+			 */
+			break;
+		}
+
+		if (nonblocking) {
+//			printk("uvc_from_vb2_wait_for_done_vb: Nonblocking and no buffers to dequeue, "
+//								"will not wait\n");
+			return -EAGAIN;
+		}
+
+		/*
+		 * We are streaming and blocking, wait for another buffer to
+		 * become ready or for streamoff. Driver's lock is released to
+		 * allow streamoff or qbuf to be called while waiting.
+		 */
+		call_qop(q, wait_prepare, q);
+
+		/*
+		 * All locks have been released, it is safe to sleep now.
+		 */
+		ret = wait_event_interruptible_timeout(q->done_wq,
+				!list_empty(&q->done_list) || !q->streaming,
+				UVC_Q_WAITON_TIMEOUT);
+
+		/*
+		 * We need to reevaluate both conditions again after reacquiring
+		 * the locks or return an error if one occurred.
+		 */
+		call_qop(q, wait_finish, q);
+		if (ret==0) {
+//			printk("uvc_from_vb2_wait_for_done_vb: X, timeout\n");
+
+			if(Deque_Timeout_Count > UVC_DQ_TIMEOUT_COUNT) {
+//				printk("uvc_from_vb2_wait_for_done_vb: Deque_Timeout_Count=%d > UVC_DQ_TIMEOUT_COUNT\n", Deque_Timeout_Count);
+
+				return -EBUSY;
+			}
+
+			Deque_Timeout_Count++;
+
+			return -ETIME;
+		} else if (ret<0) {
+//			printk("uvc_from_vb2_wait_for_done_vb: X, ret<0 =%d---\n", ret);
+			return ret;
+		}
+	}
+	return 0;
+}
+
+static int uvc_from_vb2_get_done_vb(struct vb2_queue *q, struct vb2_buffer **vb,
+				int nonblocking)
+{
+	unsigned long flags;
+	int ret;
+
+	/*
+	 * Wait for at least one buffer to become available on the done_list.
+	 */
+	ret = uvc_from_vb2_wait_for_done_vb(q, nonblocking);
+
+	if (ret)
+		return ret;
+
+	/*
+	 * Driver's lock has been held since we last verified that done_list
+	 * is not empty, so no need for another list_empty(done_list) check.
+	 */
+	spin_lock_irqsave(&q->done_lock, flags);
+	*vb = list_first_entry(&q->done_list, struct vb2_buffer, done_entry);
+	list_del(&(*vb)->done_entry);
+	spin_unlock_irqrestore(&q->done_lock, flags);
+
+	return 0;
+}
+
+int uvc_from_vb2_dqbuf(struct vb2_queue *q, struct v4l2_buffer *b, bool nonblocking)
+{
+	struct vb2_buffer *vb = NULL;
+	int ret;
+
+	if (q->fileio) {
+		printk("uvc_from_vb2_dqbuf: file io in progress\n");
+		return -EBUSY;
+	}
+
+	if (b->type != q->type) {
+		printk("uvc_from_vb2_dqbuf: invalid buffer type\n");
+		return -EINVAL;
+	}
+
+	ret = uvc_from_vb2_get_done_vb(q, &vb, nonblocking);
+	if (ret < 0) {
+		if(ret==-ETIME) {
+//			printk("uvc_from_vb2_dqbuf: after vb2_wait_for_done_vb, ret=%d---\n", ret);
+			return 0;
+		} else {
+//			printk("uvc_from_vb2_dqbuf: error getting next done buffer\n");
+			return ret;
+		}
+	}
+
+	ret = call_qop(q, buf_finish, vb);
+	if (ret) {
+		printk("uvc_from_vb2_dqbuf: buffer finish failed\n");
+		return ret;
+	}
+
+	switch (vb->state) {
+	case VB2_BUF_STATE_DONE:
+//		printk("uvc_from_vb2_dqbuf: Returning done buffer\n");
+		Deque_Timeout_Count = 0;
+		break;
+	case VB2_BUF_STATE_ERROR:
+		printk("uvc_from_vb2_dqbuf: Returning done buffer with errors\n");
+		break;
+	default:
+		printk("uvc_from_vb2_dqbuf: Invalid buffer state\n");
+		return -EINVAL;
+	}
+
+	/* Fill buffer information for the userspace */
+	uvc_from_vb2_fill_v4l2_buffer(vb, b);
+	/* Remove from videobuf queue */
+	list_del(&vb->queued_entry);
+
+//	printk("uvc_from_vb2_dqbuf: dqbuf of buffer %d, with state %d\n",
+//			vb->v4l2_buf.index, vb->state);
+
+	vb->state = VB2_BUF_STATE_DEQUEUED;
+	return 0;
+}
+//ASUS_BSP--- Patrick "[A68][Camera][NA][Others] Using dequeue with timeout"
 int uvc_dequeue_buffer(struct uvc_video_queue *queue, struct v4l2_buffer *buf,
 		       int nonblocking)
 {
 	int ret;
 
 	mutex_lock(&queue->mutex);
-	ret = vb2_dqbuf(&queue->queue, buf, nonblocking);
+	ret = uvc_from_vb2_dqbuf(&queue->queue, buf, nonblocking); //ASUS_BSP Patrick "[A68][Camera][NA][Others] Using dequeue with timeout"
 	mutex_unlock(&queue->mutex);
 
 	return ret;
@@ -355,6 +625,7 @@ struct uvc_buffer *uvc_queue_next_buffer(struct uvc_video_queue *queue,
 	if ((queue->flags & UVC_QUEUE_DROP_CORRUPTED) && buf->error) {
 		buf->error = 0;
 		buf->state = UVC_BUF_STATE_QUEUED;
+		buf->bytesused = 0;								//ASUS_BSP Patrick "[A91][USB Cam][NA][Other]uvcvideo buffer error handling"
 		vb2_set_plane_payload(&buf->buf, 0, 0);
 		return buf;
 	}

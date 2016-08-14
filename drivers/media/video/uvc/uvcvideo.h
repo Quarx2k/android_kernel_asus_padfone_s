@@ -101,7 +101,7 @@
 #define DRIVER_VERSION		"1.1.1"
 
 /* Number of isochronous URBs. */
-#define UVC_URBS		5
+#define UVC_URBS		32//5   //ASUS Jay enlarge to 32 to avoid failed to resubmit video URB(-27)
 /* Maximum number of packets per URB. */
 #define UVC_MAX_PACKETS		32
 /* Maximum number of video buffers. */

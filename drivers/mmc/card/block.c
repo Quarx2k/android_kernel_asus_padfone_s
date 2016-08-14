@@ -1283,6 +1283,13 @@ static int mmc_blk_issue_discard_rq(struct mmc_queue *mq, struct request *req)
 	if (card->ext_csd.bkops_en)
 		card->bkops_info.sectors_changed += blk_rq_sectors(req);
 
+//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPEND_TEST
+	if (card->host->suspendtest)
+		card->sectors_changed += blk_rq_sectors(req);
+#endif
+//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
+
 	if (mmc_can_discard(card))
 		arg = MMC_DISCARD_ARG;
 	else if (mmc_can_trim(card))
@@ -2213,6 +2220,12 @@ static u8 mmc_blk_prep_packed_list(struct mmc_queue *mq, struct request *req)
 			if (card->ext_csd.bkops_en)
 				card->bkops_info.sectors_changed +=
 					blk_rq_sectors(next);
+//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPENDTEST
+			if (card->host->suspendtest)
+				card->sectors_changed += blk_rq_sectors(next);
+#endif
+//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
 		}
 		list_add_tail(&next->queuelist, &mq->mqrq_cur->packed_list);
 		cur = next;
@@ -2455,6 +2468,12 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 	if (rqc) {
 		if ((card->ext_csd.bkops_en) && (rq_data_dir(rqc) == WRITE))
 			card->bkops_info.sectors_changed += blk_rq_sectors(rqc);
+//ASUS_BSP +++ Gavin_Chang "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPENDTEST
+		if ((card->host->suspendtest) && (rq_data_dir(rqc) == WRITE))
+			card->sectors_changed += blk_rq_sectors(rqc);
+#endif
+//ASUS_BSP --- Gavin_Chang "mmc suspend stress test"
 		reqs = mmc_blk_prep_packed_list(mq, rqc);
 	}
 
@@ -2716,7 +2735,6 @@ out:
 	 *   (all existing requests completed or reinserted to the block layer)
 	 */
 	if ((!req && !(test_bit(MMC_QUEUE_NEW_REQUEST, &mq->flags))) ||
-			(cmd_flags & MMC_REQ_SPECIAL_MASK) ||
 			((test_bit(MMC_QUEUE_URGENT_REQUEST, &mq->flags)) &&
 			 !(cmd_flags & MMC_REQ_NOREINSERT_MASK))) {
 		if (mmc_card_need_bkops(card))

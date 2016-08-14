@@ -64,7 +64,7 @@
 #include <linux/compiler.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
-
+#include <media/asus_cam_intf_type.h> //ASUS_BSP: Darrency_lin ++ camera mini porting
 /*
  * Common stuff for both V4L1 and V4L2
  * Moved from videodev.h
@@ -680,6 +680,7 @@ struct v4l2_buffer {
 	__u32			length;
 	__u32			input;
 	__u32			reserved;
+	struct exif_cfg JpegExif;   //ASUS_BSP: Darrency_lin ++ camera mini porting
 };
 
 /*  Flags for 'flags' field */

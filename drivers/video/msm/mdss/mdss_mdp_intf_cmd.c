@@ -28,6 +28,7 @@
 #define STOP_TIMEOUT(hz) msecs_to_jiffies((1000 / hz) * (VSYNC_EXPIRE_TICK + 2))
 #define ULPS_ENTER_TIME msecs_to_jiffies(100)
 
+extern struct mdss_panel_data *g_mdss_pdata; //ASUS_BSP: Louis +++
 struct mdss_mdp_cmd_ctx {
 	struct mdss_mdp_ctl *ctl;
 	u32 pp_num;
@@ -689,6 +690,53 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 
 	return 0;
 }
+
+//ASUS_BSP: Louis +++
+void asus_mdss_mdp_clk_ctl(bool enable)
+{
+    unsigned long flags;
+    struct mdss_mdp_cmd_ctx *ctx;
+
+    if (g_mdss_pdata->panel_info.type != MIPI_CMD_PANEL) {
+        return;
+    }
+
+    ctx = &mdss_mdp_cmd_ctx_list[0];
+
+    mutex_lock(&ctx->clk_mtx);
+
+    if (enable) {
+        if (!ctx->clk_enabled) {
+            printk("[Display] %s: Current expire tick(%d)\n", __func__, ctx->rdptr_enabled);
+
+            ctx->clk_enabled = 1;
+            mdss_mdp_ctl_intf_event
+                (ctx->ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)1);
+            mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+
+            spin_lock_irqsave(&ctx->clk_lock, flags);
+            mdss_mdp_irq_enable(MDSS_MDP_IRQ_PING_PONG_RD_PTR, ctx->pp_num);
+            spin_unlock_irqrestore(&ctx->clk_lock, flags);
+            ctx->rdptr_enabled = 5;     //turn off clk after 5 vsync
+            printk("[Display] %s: MDP CLK: ON\n", __func__);
+        }
+    } else {
+        if (ctx->clk_enabled && !ctx->rdptr_enabled) {  //do not turn off if expire tick != 0
+            mdss_mdp_irq_disable_nosync
+                (MDSS_MDP_IRQ_PING_PONG_RD_PTR, ctx->pp_num);
+
+            ctx->clk_enabled = 0;
+            mdss_mdp_ctl_intf_event
+                (ctx->ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)0);
+            mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+            printk("[Display] %s: MDP CLK: OFF\n", __func__);
+        }
+    }
+
+    mutex_unlock(&ctx->clk_mtx);
+}
+EXPORT_SYMBOL(asus_mdss_mdp_clk_ctl);
+//ASUS_BSP: Louis ---
 
 int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl)
 {

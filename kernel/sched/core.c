@@ -84,7 +84,9 @@
 
 #include "sched.h"
 #include "../workqueue_sched.h"
-
+#include <linux/asus_global.h>
+extern struct _asus_global asus_global;
+extern struct completion fake_completion;
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
@@ -3278,7 +3280,29 @@ need_resched:
 		rq->nr_switches++;
 		rq->curr = next;
 		++*switch_count;
-
+        //[CR] Save CPU prev/next task pointers into asus global
+	switch (cpu){
+		case 0:
+	            asus_global.pprev_cpu0 = prev;
+          	    asus_global.pnext_cpu0 = next;
+ 		    break;
+		case 1:
+	            asus_global.pprev_cpu1 = prev;
+          	    asus_global.pnext_cpu1 = next;
+ 		    break;
+		case 2:
+	            asus_global.pprev_cpu2 = prev;
+          	    asus_global.pnext_cpu2 = next;
+ 		    break;
+		case 3:
+	            asus_global.pprev_cpu3 = prev;
+          	    asus_global.pnext_cpu3 = next;
+ 		    break;
+		case 4:
+	            asus_global.pprev_cpu0 = prev;
+          	    asus_global.pnext_cpu0 = next;
+ 		    break;
+	}
 		context_switch(rq, prev, next); /* unlocks the rq */
 		/*
 		 * The context switch have flipped the stack from under us
@@ -3598,6 +3622,7 @@ do_wait_for_common(struct completion *x, long timeout, int state, int iowait)
 
 		__add_wait_queue_tail_exclusive(&x->wait, &wait);
 		do {
+			 task_thread_info(current)->pWaitingCompletion = x;
 			if (signal_pending_state(state, current)) {
 				timeout = -ERESTARTSYS;
 				break;
@@ -3610,6 +3635,7 @@ do_wait_for_common(struct completion *x, long timeout, int state, int iowait)
 				timeout = schedule_timeout(timeout);
 			spin_lock_irq(&x->wait.lock);
 		} while (!x->done && timeout);
+		task_thread_info(current)->pWaitingCompletion = &fake_completion;
 		__remove_wait_queue(&x->wait, &wait);
 		if (!x->done)
 			return timeout;

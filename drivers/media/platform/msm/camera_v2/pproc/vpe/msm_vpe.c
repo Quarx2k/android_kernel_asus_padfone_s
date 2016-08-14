@@ -410,7 +410,7 @@ void vpe_release_ion_client(struct kref *ref)
 static int vpe_init_mem(struct vpe_device *vpe_dev)
 {
 	kref_init(&vpe_dev->refcount);
-	kref_get(&vpe_dev->refcount);
+	//kref_get(&vpe_dev->refcount); //LiJen: Fix cpp ion client doesn't close when close camera
 	vpe_dev->client = msm_ion_client_create(-1, "vpe");
 
 	if (!vpe_dev->client) {
@@ -1380,8 +1380,6 @@ static long msm_vpe_subdev_ioctl(struct v4l2_subdev *sd,
 				process_frame,
 				sizeof(struct msm_vpe_frame_info_t))) {
 					mutex_unlock(&vpe_dev->mutex);
-					kfree(process_frame);
-					kfree(event_qcmd);
 					return -EINVAL;
 		}
 

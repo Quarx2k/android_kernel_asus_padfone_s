@@ -383,11 +383,15 @@ static suspend_state_t decode_state(const char *buf, size_t n)
 	return PM_SUSPEND_ON;
 }
 
+//Add a timer to trigger wakelock debug
+extern struct timer_list unattended_timer;
+extern int pm_stay_unattended_period;
 static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 			   const char *buf, size_t n)
 {
 	suspend_state_t state;
 	int error;
+	printk("[Kernel] state_store: %s\n", buf);
 
 	error = pm_autosleep_lock();
 	if (error)
@@ -399,8 +403,22 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 	}
 
 	state = decode_state(buf, n);
-	if (state < PM_SUSPEND_MAX)
+	if (state < PM_SUSPEND_MAX) {
+		printk("[PM] going to pm_suspend: %d\n", state);
+
+		if (state == PM_SUSPEND_ON) {
+			pr_info("[PM]unattended_timer: del_timer (state_store ON)\n");
+			del_timer(&unattended_timer);
+			pm_stay_unattended_period =0;
+		}
+		else {
+			//Add a timer to trigger wakelock debug
+			pr_info("[PM]unattended_timer: mod_timer (state_store Mem)\n");
+			mod_timer(&unattended_timer, jiffies + msecs_to_jiffies(PM_UNATTENDED_TIMEOUT));
+			//[---]Debug for active wakelock before entering suspend
+		}
 		error = pm_suspend(state);
+	}
 	else if (state == PM_SUSPEND_MAX)
 		error = hibernate();
 	else
@@ -408,11 +426,49 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
  out:
 	pm_autosleep_unlock();
+	printk("[Kernel] --state_store: %s\n", buf);
 	return error ? error : n;
 }
 
 power_attr(state);
+char unattended_timer_stats[20]="Undefined";
+/*+++ asus: add code to trigger unattended timer */
+static ssize_t unattended_timer_show(struct kobject *kobj, struct kobj_attribute *attr,
+			  char *buf)
+{
+	pr_info("[PM]unattended_timer : unattended_timer_show. buf : %s \n", buf);
+	strcpy(buf, unattended_timer_stats);
+	return sizeof(buf);
+}
 
+static ssize_t unattended_timer_store(struct kobject *kobj, struct kobj_attribute *attr,
+			   const char *buf, size_t n)
+{
+	int error;
+	pr_info("[PM]unattended_timer : unattended_timer_store. buf : %s \n", buf);
+	//Add a timer to trigger wakelock debug
+
+	if (strcmp(buf, "pre-mem")==0) {
+		pr_info("[PM]unattended_timer: mod_timer (unattended_timer_store pre-mem)\n");
+		mod_timer(&unattended_timer, jiffies + msecs_to_jiffies(PM_UNATTENDED_TIMEOUT));
+		strcpy(unattended_timer_stats, buf);
+		error = n;
+	} else if (strcmp(buf, "on")==0) {
+		pr_info("[PM]unattended_timer: del_timer (unattended_timer_store On)\n");
+		del_timer(&unattended_timer);
+		strcpy(unattended_timer_stats, buf);
+		error = n;
+	} else {
+		pr_info("[PM]unattended_timer: No Match. buf:%s, size:%d \n", buf, (int)n);
+		strcpy(unattended_timer_stats, "Undefined");
+		error = -EINVAL;
+	}
+
+	return error;
+}
+
+power_attr(unattended_timer);
+/*--- asus: add code to trigger unattended timer */
 #ifdef CONFIG_PM_SLEEP
 /*
  * The 'wakeup_count' attribute, along with the functions defined in
@@ -509,6 +565,7 @@ static ssize_t autosleep_store(struct kobject *kobj,
 {
 	suspend_state_t state = decode_state(buf, n);
 	int error;
+	printk("[Kernel] autosleep_store: %s\n", buf);
 
 	if (state == PM_SUSPEND_ON
 	    && strcmp(buf, "off") && strcmp(buf, "off\n"))
@@ -608,6 +665,8 @@ power_attr(wake_unlock);
 
 static struct attribute *g[] = {
 	&state_attr.attr,
+//asus - add for unattended timer triggering
+	&unattended_timer_attr.attr,
 #ifdef CONFIG_PM_TRACE
 	&pm_trace_attr.attr,
 	&pm_trace_dev_match_attr.attr,

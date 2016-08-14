@@ -228,7 +228,7 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
 
 static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
-	struct task_struct *tsk;
+	struct task_struct *tsk,*tsk_check;
 	struct task_struct *selected = NULL;
 	int rem = 0;
 	int tasksize;
@@ -287,8 +287,44 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		return rem;
 	}
 	selected_oom_score_adj = min_score_adj;
-
 	rcu_read_lock();
+	if (selected_oom_score_adj < 50){
+		for_each_process(tsk_check) {
+			struct task_struct *C;
+			int check_score_adj;
+			if (tsk_check->flags & PF_KTHREAD)
+				continue;
+
+			/* if task no longer has any memory ignore it */
+			if (test_task_flag(tsk_check, TIF_MM_RELEASED))
+				continue;
+
+			if (time_before_eq(jiffies, lowmem_deathpending_timeout)) {
+				if (test_task_flag(tsk_check, TIF_MEMDIE)) {
+					rcu_read_unlock();
+					/* give the system time to free up the memory */
+					msleep_interruptible(20);
+					mutex_unlock(&scan_mutex);
+					return 0;
+				}
+			}
+
+			C = find_lock_task_mm(tsk_check);
+			if (!C)
+				continue;
+
+			check_score_adj = C->signal->oom_score_adj;
+			if (check_score_adj > 200) {
+				selected_oom_score_adj = 200;
+				min_score_adj = 200;
+				task_unlock(C);
+				break;
+			}
+			else
+				task_unlock(C);
+
+		}
+	}
 	for_each_process(tsk) {
 		struct task_struct *p;
 		int oom_score_adj;
@@ -319,6 +355,13 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			task_unlock(p);
 			continue;
 		}
+		
+		if(strstr(p->comm,"launcher") != NULL && min_score_adj > 600){
+			task_unlock(p);
+			//printk("lowmemorykiller: Don't kill launcher when min_socre_adj > 600");
+			continue;
+		}
+		
 		tasksize = get_mm_rss(p->mm);
 		task_unlock(p);
 		if (tasksize <= 0)
@@ -326,13 +369,15 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		if (selected) {
 			if (oom_score_adj < selected_oom_score_adj)
 				continue;
-			if (oom_score_adj == selected_oom_score_adj &&
-			    tasksize <= selected_tasksize)
+//			if (oom_score_adj == selected_oom_score_adj &&
+//			    tasksize <= selected_tasksize)
+//				continue;
+			if (tasksize <= selected_tasksize)
 				continue;
 		}
 		selected = p;
 		selected_tasksize = tasksize;
-		selected_oom_score_adj = oom_score_adj;
+		//selected_oom_score_adj = oom_score_adj;
 		lowmem_print(2, "select %d (%s), adj %d, size %d, to kill\n",
 			     p->pid, p->comm, oom_score_adj, tasksize);
 	}

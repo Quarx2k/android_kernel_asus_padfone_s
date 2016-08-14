@@ -149,6 +149,7 @@ typedef void (*ctor_fn_t)(void);
 extern int do_one_initcall(initcall_t fn);
 extern char __initdata boot_command_line[];
 extern char *saved_command_line;
+extern char bootimage_command_line[];	//+++ ASUS_BSP : Add for parse cmdline info to proc/bootinfo
 extern unsigned int reset_devices;
 
 /* used by init/main.c */

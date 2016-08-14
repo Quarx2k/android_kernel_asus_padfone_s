@@ -104,6 +104,14 @@ struct pwm_period_config {
 struct pwm_duty_cycles {
 	int *duty_pcts;
 	int num_duty_pcts;
+	//ASUS BSP Deeo : add for dual duty_pcts +++
+	int *breahte_pcts;
+	int num_breathe_pcts;
+	int breathe_start_idx;
+	int *flash_pcts;
+	int num_flash_pcts;
+	int blink_start_idx;
+	//ASUS BSP Deeo : add for dual duty_pcts ---
 	int duty_ms;
 	int start_idx;
 };

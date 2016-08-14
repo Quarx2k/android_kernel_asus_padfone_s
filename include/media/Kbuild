@@ -16,3 +16,6 @@ header-y += msmb_isp.h
 header-y += msmb_ispif.h
 header-y += msmb_generic_buf_mgr.h
 header-y += msmb_pproc.h
+
+#ASUS_BSP: Darrency_lin ++ camera mini porting
+header-y += asus_cam_intf_type.h

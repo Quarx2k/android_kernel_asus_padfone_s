@@ -768,12 +768,13 @@ int msm_jpeg_start(struct msm_jpeg_device *pgmn_dev, void * __user arg)
 	for (i = 0; i < 2; i++)
 		kfree(buf_out_free[i]);
 
-	pgmn_dev->state = MSM_JPEG_EXECUTING;
+    pgmn_dev->state = MSM_JPEG_EXECUTING;	//ASUS_BSP Stimber @2014/01/15
+
 	JPEG_DBG_HIGH("%s:%d] START\n", __func__, __LINE__);
 	wmb();
 	rc = msm_jpeg_ioctl_hw_cmds(pgmn_dev, arg);
 	wmb();
-
+	//pgmn_dev->state = MSM_JPEG_EXECUTING;	//ASUS_BSP Stimber @2014/01/15
 	JPEG_DBG("%s:%d]", __func__, __LINE__);
 	return rc;
 }
@@ -784,7 +785,7 @@ int msm_jpeg_ioctl_reset(struct msm_jpeg_device *pgmn_dev,
 	int rc;
 	struct msm_jpeg_ctrl_cmd ctrl_cmd;
 
-	JPEG_DBG("%s:%d] Enter\n", __func__, __LINE__);
+	JPEG_DBG("%s:%d] Enter - state (%d)\n", __func__, __LINE__, pgmn_dev->state);	//ASUS_BSP Stimber @2014/01/15
 
 	if (pgmn_dev->state == MSM_JPEG_INIT) {
 		if (copy_from_user(&ctrl_cmd, arg, sizeof(ctrl_cmd))) {

@@ -47,6 +47,8 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev)
 			ctrl_pdata->power_data.num_vreg, 1);
 }
 
+//ASUS_BSP: Louis for miniporting +++
+#if 0
 static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 {
 	int ret;
@@ -105,6 +107,212 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 error:
 	return ret;
 }
+#endif
+//ASUS_BSP: Louis for miniporting ---
+
+//ASUS_BSP: Louis for miniporting +++
+#include <linux/gpio.h>
+static int mdss_panel_power = false;
+struct mdss_panel_data *g_mdss_pdata;
+extern int A91_lcd_id;
+
+//#ifdef ASUS_A91_PROJECT
+static int a90_mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
+{
+    int ret;
+    static int bl_en = 2, stb2_en = 48, stb1_en = 54;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return -EINVAL;
+	}
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+	
+    printk("%s: enable(%d) ++\n", __func__, enable);
+			
+    if (!mdss_panel_power) {
+
+        if (g_ASUS_hwID == A90_EVB0) {
+            ret = gpio_request(bl_en, "bl_en");
+            if (ret) {
+                pr_err("request gpio %d failed, ret=%d\n",bl_en, ret);
+                return -ENODEV;
+            }
+        }
+
+        ret = gpio_request(stb1_en, "STB1_EN");
+        if (ret) {
+            pr_err("request gpio %d failed, ret=%d\n",stb1_en, ret);
+            return -ENODEV;
+        }
+
+        ret = gpio_request(stb2_en, "STB2_EN");
+        if (ret) {
+            pr_err("request gpio %d failed, ret=%d\n",stb2_en, ret);
+            return -ENODEV;
+        }
+
+        g_mdss_pdata = pdata;
+    }
+
+    if (enable) {
+		
+		ret = msm_dss_enable_vreg(
+			ctrl_pdata->power_data.vreg_config,
+			ctrl_pdata->power_data.num_vreg, 1);
+		if (ret) {
+			pr_err("%s:Failed to enable vregs.rc=%d\n",
+				__func__, ret);
+			return ret;
+		}
+
+		gpio_set_value(stb2_en, 1);     //AVDD +5V
+		msleep(10);
+		gpio_set_value(stb1_en, 1);     //AVDD -5V
+        msleep(5);
+		
+		if (!pdata->panel_info.mipi.lp11_init) {
+			ret = mdss_dsi_panel_reset(pdata, 1);
+			if (ret) {
+				pr_err("%s: Panel reset failed. rc=%d\n",
+						__func__, ret);
+				if (msm_dss_enable_vreg(
+				ctrl_pdata->power_data.vreg_config,
+				ctrl_pdata->power_data.num_vreg, 0))
+					pr_err("Disable vregs failed\n");
+				return ret;
+			}
+		}
+
+        if (g_ASUS_hwID == A90_EVB0) {
+		    gpio_set_value(bl_en, 1);
+        }
+		wmb();
+
+		mdss_panel_power = true;
+    }
+	else {
+
+		ret = mdss_dsi_panel_reset(pdata, 0);
+		if (ret) {
+			pr_err("%s: Panel reset failed. rc=%d\n",
+					__func__, ret);
+			return ret;
+		}
+		
+        if (g_ASUS_hwID == A90_EVB0) {
+		    gpio_set_value(bl_en, 0);
+        }
+
+		udelay(5);
+
+		gpio_set_value_cansleep(stb2_en, 0);
+		gpio_set_value_cansleep(stb1_en, 0);
+		msleep(35);
+		
+		ret = msm_dss_enable_vreg(
+			ctrl_pdata->power_data.vreg_config,
+			ctrl_pdata->power_data.num_vreg, 0);
+		if (ret) {
+			pr_err("%s: Failed to disable vregs.rc=%d\n",
+				__func__, ret);
+		}
+    }
+    printk("%s: enable(%d) --\n", __func__, enable);
+
+    return 0;
+}
+//#endif
+
+#ifdef ASUS_ME771KL_PROJECT
+static int me771_mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
+{
+    int ret;
+    static int LED_ON = 24, EN_VREG_LCD_V3P3 = 117;
+    struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+    if (pdata == NULL) {
+        pr_err("%s: Invalid input data\n", __func__);
+        return -EINVAL;
+    }
+
+    ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+                panel_data);
+
+    printk("%s: enable(%d) ++\n", __func__, enable);
+
+    if (!mdss_panel_power) {
+
+        ret = gpio_request(LED_ON, "LED_ON");
+        if (ret) {
+            pr_err("request gpio 24 failed, ret=%d\n", ret);
+            return -ENODEV;
+        }
+
+        ret = gpio_request(EN_VREG_LCD_V3P3, "EN_VREG_LCD_V3P3");
+        if (ret) {
+            pr_err("request gpio 117 failed, ret=%d\n", ret);
+            return -ENODEV;
+        }
+
+        g_mdss_pdata = pdata;
+    }
+
+    if (enable) {
+
+        ret = msm_dss_enable_vreg(
+        ctrl_pdata->power_data.vreg_config,
+        ctrl_pdata->power_data.num_vreg, 1);
+        if (ret) {
+            pr_err("%s:Failed to enable vregs.rc=%d\n",
+                __func__, ret);
+                return ret;
+        }
+
+        if (!pdata->panel_info.panel_power_on) {
+            mdss_dsi_panel_reset(pdata, 1);
+        }
+
+        gpio_set_value(EN_VREG_LCD_V3P3, 1);
+
+        msleep(20);
+        gpio_set_value(LED_ON, 1);
+
+        mdss_panel_power = true;
+
+    } else {
+
+        ret = msm_dss_enable_vreg(
+            ctrl_pdata->power_data.vreg_config,
+            ctrl_pdata->power_data.num_vreg, 0);
+        if (ret) {
+            pr_err("%s: Failed to disable vregs.rc=%d\n",
+                __func__, ret);
+        }
+
+        gpio_set_value(EN_VREG_LCD_V3P3, 0);
+        msleep(10);
+        gpio_set_value(LED_ON, 0);
+        msleep(5);
+    }
+    printk("%s: enable(%d) --\n", __func__, enable);
+
+    return 0;
+}
+#endif
+//ASUS_BSP: Louis for miniporting ---
+
+//ASUS_BSP:Louis "add panel power off sequence when kernel power off +++
+void a86_mdss_dsi_panel_power_off(void)
+{
+    if (mdss_panel_power) {
+        a90_mdss_dsi_panel_power_on(g_mdss_pdata, 0);
+    }
+}
+//ASUS_BSP:Louis "add panel power off sequence when kernel power off ---
 
 static void mdss_dsi_put_dt_vreg_data(struct device *dev,
 	struct dss_module_power *module_power)
@@ -335,7 +543,14 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata)
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
 
-	ret = mdss_dsi_panel_power_on(pdata, 0);
+    //ASUS_BSP: Louis, for display porting +++
+	//ret = mdss_dsi_panel_power_on(pdata, 0);
+//#ifdef ASUS_A91_PROJECT
+    ret = a90_mdss_dsi_panel_power_on(pdata,0);
+//#elif defined ASUS_ME771KL_PROJECT
+//    ret = me771_mdss_dsi_panel_power_on(pdata,0);
+//#endif
+    //ASUS_BSP: Louis for display porting ---
 	if (ret) {
 		mutex_unlock(&ctrl_pdata->mutex);
 		pr_err("%s: Panel power off failed\n", __func__);
@@ -679,8 +894,15 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 
 	pinfo = &pdata->panel_info;
 	mipi = &pdata->panel_info.mipi;
-
+	
+//ASUS_BSP: Louis for a86 miniporting +++
+#if 0
 	ret = mdss_dsi_panel_power_on(pdata, 1);
+#else
+    ret = a90_mdss_dsi_panel_power_on(pdata, 1);
+#endif
+//ASUS_BSP: Louis for a86 miniporting ---
+	
 	if (ret) {
 		pr_err("%s:Panel power on failed. rc=%d\n", __func__, ret);
 		return ret;
@@ -690,7 +912,13 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	if (ret) {
 		pr_err("%s: failed to enable bus clocks. rc=%d\n", __func__,
 			ret);
-		ret = mdss_dsi_panel_power_on(pdata, 0);
+		//ASUS_BSP: Louis for a86 miniporting +++
+		#if 0
+			ret = mdss_dsi_panel_power_on(pdata, 0);
+		#else
+		    ret = a90_mdss_dsi_panel_power_on(pdata, 0);
+		#endif
+		//ASUS_BSP: Louis for a86 miniporting ---
 		if (ret) {
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
@@ -867,8 +1095,13 @@ int mdss_dsi_cont_splash_on(struct mdss_panel_data *pdata)
 	pr_debug("%s+: ctrl=%p ndx=%d\n", __func__,
 				ctrl_pdata, ctrl_pdata->ndx);
 
-	WARN((ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT),
-		"Incorrect Ctrl state=0x%x\n", ctrl_pdata->ctrl_state);
+    //ASUS_BSP: Louis, cmd mode splash won't unblank panel in bootup, don't need to check panel state +++
+    if (!(pdata->panel_info.type == MIPI_CMD_PANEL 
+                && pdata->panel_info.panel_power_on == 1)) {
+	    WARN((ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT),
+		    "Incorrect Ctrl state=0x%x\n", ctrl_pdata->ctrl_state);
+    }
+    //ASUS_BSP: Louis ---
 
 	mdss_dsi_sw_reset(pdata);
 	mdss_dsi_host_init(pdata);
@@ -1274,6 +1507,8 @@ static int __devinit mdss_dsi_ctrl_probe(struct platform_device *pdev)
 
 	cmd_cfg_cont_splash = mdss_panel_get_boot_cfg() ? true : false;
 
+    printk("[Display] cmd_cfg_cont_splash(%d) \n", cmd_cfg_cont_splash);	//ASUS_BSP: Louis +++
+
 	rc = mdss_dsi_panel_init(dsi_pan_node, ctrl_pdata, cmd_cfg_cont_splash);
 	if (rc) {
 		pr_err("%s: dsi panel init failed\n", __func__);
@@ -1582,7 +1817,16 @@ int dsi_panel_device_register(struct device_node *pan_node,
 
 	if (pinfo->cont_splash_enabled) {
 		pinfo->panel_power_on = 1;
-		rc = mdss_dsi_panel_power_on(&(ctrl_pdata->panel_data), 1);
+		
+        //ASUS_BSP: Louis for display miniporting ++
+		//rc = mdss_dsi_panel_power_on(&(ctrl_pdata->panel_data), 1);
+//#ifdef ASUS_A91_PROJECT
+        rc = a90_mdss_dsi_panel_power_on(&(ctrl_pdata->panel_data), 1);
+//#elif defined ASUS_ME771KL_PROJECT
+//        rc = me771_mdss_dsi_panel_power_on(&(ctrl_pdata->panel_data), 1);
+//#endif
+    	//ASUS_BSP: Louis for display miniporting --
+
 		if (rc) {
 			pr_err("%s: Panel power on failed\n", __func__);
 			return rc;
@@ -1611,7 +1855,8 @@ int dsi_panel_device_register(struct device_node *pan_node,
 		ctrl_pdata->ndx = 1;
 	}
 
-	pr_debug("%s: Panel data initialized\n", __func__);
+	pr_info("%s: Panal data initialized\n", __func__);	//ASUS_BSP: Louis +++
+
 	return 0;
 }
 

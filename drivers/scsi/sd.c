@@ -66,6 +66,9 @@
 
 #include "sd.h"
 #include "scsi_logging.h"
+//ASUS_BSP+++ BennyCheng "add card reader hotplug support"
+#include <linux/kthread.h>
+//ASUS_BSP--- BennyCheng "add card reader hotplug support"
 
 MODULE_AUTHOR("Eric Youngdale");
 MODULE_DESCRIPTION("SCSI disk (sd) driver");
@@ -128,6 +131,131 @@ static const char *sd_cache_types[] = {
 	"write through", "none", "write back",
 	"write back, no read (daft)"
 };
+
+//ASUS_BSP+++ BennyCheng "add card reader hotplug support"
+static unsigned int sd_check_events(struct gendisk *disk, unsigned int clearing);
+static void sd_media_dynamic_add(struct scsi_disk *sdkp)
+{
+	struct block_device *bdev;
+	struct gendisk *gd = sdkp->disk;
+	struct device *ddev = disk_to_dev(gd);
+	struct disk_part_iter piter;
+	struct hd_struct *part;
+
+	/* delay uevents, until we scanned partition table */
+	dev_set_uevent_suppress(ddev, 1);
+
+	/* No minors to use for partitions */
+	if (!disk_part_scan_enabled(gd))
+		goto exit;
+
+	bdev = bdget_disk(gd, 0);
+	if (!bdev)
+		goto exit;
+
+	bdev->bd_invalidated = 1;
+	blkdev_get(bdev, FMODE_READ, NULL);
+	blkdev_put(bdev, FMODE_READ);
+
+exit:
+	/* announce disk after possible partitions are created */
+	dev_set_uevent_suppress(ddev, 0);
+	kobject_uevent(&ddev->kobj, KOBJ_ADD);
+
+	/* announce possible partitions */
+	disk_part_iter_init(&piter, gd, 0);
+	while ((part = disk_part_iter_next(&piter)))
+		kobject_uevent(&part_to_dev(part)->kobj, KOBJ_ADD);
+	disk_part_iter_exit(&piter);
+}
+
+static void sd_media_dynamic_remove(struct scsi_disk *sdkp)
+{
+	struct block_device *bdev;
+	struct gendisk *gd = sdkp->disk;
+	struct device *ddev = disk_to_dev(gd);
+	struct disk_part_iter piter;
+	struct hd_struct *part;
+
+	/* delay uevents, until we scanned partition table */
+	dev_set_uevent_suppress(ddev, 1);
+
+	/* No minors to use for partitions */
+	if (!disk_part_scan_enabled(gd))
+		goto exit;
+
+	bdev = bdget_disk(gd, 0);
+	if (!bdev)
+		goto exit;
+
+	bdev->bd_invalidated = 1;
+	blkdev_get(bdev, FMODE_READ, NULL);
+	disk_part_iter_init(&piter, gd, DISK_PITER_INCL_EMPTY);
+	while ((part = disk_part_iter_next(&piter)))
+		delete_partition(gd, part->partno);
+	disk_part_iter_exit(&piter);
+	bdev->bd_invalidated = 0;
+
+exit:
+	/* announce disk after possible partitions are created */
+	dev_set_uevent_suppress(ddev, 0);
+	kobject_uevent(&ddev->kobj, KOBJ_CHANGE);
+
+	/* announce possible partitions */
+	disk_part_iter_init(&piter, gd, 0);
+	while ((part = disk_part_iter_next(&piter)))
+		kobject_uevent(&part_to_dev(part)->kobj, KOBJ_CHANGE);
+	disk_part_iter_exit(&piter);
+}
+
+static void sd_media_dynamic_detect_work(void *data, async_cookie_t cookie)
+{
+	struct scsi_disk *sdkp = data;
+
+	/* check media_present again */
+	sd_check_events(sdkp->disk, 0);
+
+	if (sdkp->media_present != sdkp->old_media_present) {
+		sdkp->old_media_present = sdkp->media_present;
+	} else {
+		return;
+	}
+
+	if (sdkp->media_present){
+		sdev_printk(KERN_INFO, sdkp->device, "sd media dynamically add\n");
+		sd_media_dynamic_add(sdkp);
+	}
+	else{
+		sdev_printk(KERN_INFO, sdkp->device, "sd media dynamically remove\n");
+		sd_media_dynamic_remove(sdkp);
+	}
+}
+
+static int sd_media_dynamic_detect_thread(void *__sdkp)
+{
+	struct scsi_disk *sdkp = __sdkp;
+
+	while (!kthread_should_stop()) {
+		wait_event_interruptible_timeout(sdkp->sd_thread_wait_queue, sdkp->sd_thread_stop, 3*HZ);
+
+		if (sdkp->sd_thread_stop)
+			break;
+
+		sd_check_events(sdkp->disk, 0);
+
+		/* for first time init */
+		if (sdkp->old_media_present < 0)
+			sdkp->old_media_present = sdkp->media_present ;
+
+		if (sdkp->media_present != sdkp->old_media_present) {
+			async_schedule(sd_media_dynamic_detect_work, sdkp);
+		}
+	}
+
+	sdev_printk(KERN_INFO, sdkp->device, "sd dynamic detect thread exit\n");
+	complete_and_exit(&sdkp->sd_thread_done, 0);
+}
+//ASUS_BSP--- BennyCheng "add card reader hotplug support"
 
 static ssize_t
 sd_store_cache_type(struct device *dev, struct device_attribute *attr,
@@ -2476,6 +2604,9 @@ static int sd_revalidate_disk(struct gendisk *disk)
 		sd_read_write_protect_flag(sdkp, buffer);
 		sd_read_cache_type(sdkp, buffer);
 		sd_read_app_tag_own(sdkp, buffer);
+		//ASUS_BSP+++ BennyCheng "add delay after read/write disk properties to increase compatibility"
+		msleep(100);
+		//ASUS_BSP--- BennyCheng "add delay after read/write disk properties to increase compatibility"
 	}
 
 	sdkp->first_scan = 0;
@@ -2625,6 +2756,10 @@ static void sd_probe_async(void *data, async_cookie_t cookie)
 		  sdp->removable ? "removable " : "");
 	scsi_autopm_put_device(sdp);
 	put_device(&sdkp->dev);
+
+	//ASUS_BSP+++ BennyCheng "add card reader hotplug support"
+	wake_up_process(sdkp->sd_thread);
+	//ASUS_BSP--- BennyCheng "add card reader hotplug support"
 }
 
 /**
@@ -2714,6 +2849,19 @@ static int sd_probe(struct device *dev)
 	get_device(dev);
 	dev_set_drvdata(dev, sdkp);
 
+	//ASUS_BSP+++ BennyCheng "add card reader hotplug support"
+	sdkp->sd_thread_stop = 0;
+	sdkp->old_media_present = -1;
+	init_waitqueue_head(&sdkp->sd_thread_wait_queue);
+	init_completion(&sdkp->sd_thread_done);
+
+	sdkp->sd_thread = kthread_create(sd_media_dynamic_detect_thread, sdkp, "sd_thread");
+	if (IS_ERR(sdkp->sd_thread)) {
+		sdev_printk(KERN_ERR, sdp, "fail to create sd thread!\n");
+		complete(&sdkp->sd_thread_done);
+	}
+	//ASUS_BSP--- BennyCheng "add card reader hotplug support"
+
 	get_device(&sdkp->dev);	/* prevent release before async_schedule */
 	async_schedule(sd_probe_async, sdkp);
 
@@ -2748,6 +2896,13 @@ static int sd_remove(struct device *dev)
 
 	sdkp = dev_get_drvdata(dev);
 	scsi_autopm_get_device(sdkp->device);
+
+	//ASUS_BSP+++ BennyCheng "add card reader hotplug support"
+	sdkp->sd_thread_stop = 1;
+	wake_up_interruptible(&sdkp->sd_thread_wait_queue);
+	wait_for_completion(&sdkp->sd_thread_done);
+	sd_printk(KERN_INFO, sdkp, "sd remove and thread exit done\n");
+	//ASUS_BSP--- BennyCheng "add card reader hotplug support"
 
 	async_synchronize_full();
 	blk_queue_prep_rq(sdkp->device->request_queue, scsi_prep_fn);

@@ -1,0 +1,31 @@
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+//+++ ASUS_BSP : modify from msm8974pro-ab-pm8941.dtsi
+///include/ "msm8974pro-pm8941.dtsi"
+/include/ "msm8974pro-pm8941-asus-pf500kl-er2_2.dtsi"
+//--- ASUS_BSP : modify from msm8974pro-ab-pm8941.dtsi
+
+/ {
+	qcom,msm-id = <218 0x10000>;		//ASUS_BSP : add for ASUS DT ID
+};
+
+&pm8941_gpios {
+	gpio@df00 {
+		/* NFC clk request */
+		qcom,mode = <0>;                /* QPNP_PIN_MODE_DIG_IN */
+		qcom,pull = <5>;                /* QPNP_PIN_PULL_NO */
+		qcom,vin-sel = <2>;             /* QPNP_PIN_VIN2 */
+		qcom,src-sel = <2>;             /* QPNP_PIN_SEL_FUNC_1 */
+		qcom,master-en = <1>;
+	};
+};

@@ -21,6 +21,13 @@
 
 #include <linux/qpnp/vibrator.h>
 #include "../../staging/android/timed_output.h"
+//ASUS_BSP +++ freddy "[A91][vib][NA][Spec] added to vibrator after phone inserted into pad"
+#include <linux/microp_notify.h>
+#include <linux/microp_notifier_controller.h>
+
+#include <linux/microp_api.h>
+#include <linux/microp_pin_def.h>
+//ASUS_BSP --- freddy "[A91][vib][NA][Spec] added to vibrator after phone inserted into pad"
 
 #define QPNP_VIB_VTG_CTL(base)		(base + 0x41)
 #define QPNP_VIB_EN_CTL(base)		(base + 0x46)
@@ -34,6 +41,9 @@
 #define QPNP_VIB_EN			BIT(7)
 #define QPNP_VIB_VTG_SET_MASK		0x1F
 #define QPNP_VIB_LOGIC_SHIFT		4
+static int g_vib_stop_val =0;
+
+extern int g_LC898301_probe_ok;
 
 struct qpnp_vib {
 	struct spmi_device *spmi;
@@ -141,6 +151,19 @@ static int qpnp_vib_set(struct qpnp_vib *vib, int on)
 		val = vib->reg_en_ctl;
 		val |= QPNP_VIB_EN;
 		rc = qpnp_vib_write_u8(vib, &val, QPNP_VIB_EN_CTL(vib->base));
+		//ASUS BSP freddy++ add Turn on vibrator and start Timer debug msg
+			//[A91][vib][Fix][NA] add for fix sometimes no vibration when pad inserted.
+	#if 0
+		if (g_vib_stop_val > 100)
+		{
+			printk("[vibrator] Turn on vibrator, timer= %d ms\n",g_vib_stop_val);
+		}
+	#endif
+		printk("[vibrator] Turn on vibrator, timer= %d ms\n",g_vib_stop_val);
+		hrtimer_start(&vib->vib_timer,
+			      ktime_set(g_vib_stop_val / 1000, (g_vib_stop_val % 1000) * 1000000),
+			      HRTIMER_MODE_REL);
+		//ASUS BSP freddy-- Turn on vibrator and start Timer
 		if (rc < 0)
 			return rc;
 		vib->reg_en_ctl = val;
@@ -148,6 +171,7 @@ static int qpnp_vib_set(struct qpnp_vib *vib, int on)
 		val = vib->reg_en_ctl;
 		val &= ~QPNP_VIB_EN;
 		rc = qpnp_vib_write_u8(vib, &val, QPNP_VIB_EN_CTL(vib->base));
+		printk("[vibrator] Turn off vibrator !\n");
 		if (rc < 0)
 			return rc;
 		vib->reg_en_ctl = val;
@@ -170,9 +194,14 @@ static void qpnp_vib_enable(struct timed_output_dev *dev, int value)
 		value = (value > vib->timeout ?
 				 vib->timeout : value);
 		vib->state = 1;
+//ASUS BSP freddy++ "[A91][vib][Fix][NA] add for fix sometimes no vibration when pad inserted."
+		g_vib_stop_val = value;
+		/*
 		hrtimer_start(&vib->vib_timer,
 			      ktime_set(value / 1000, (value % 1000) * 1000000),
 			      HRTIMER_MODE_REL);
+		*/
+//ASUS BSP freddy-- "[A91][vib][Fix][NA] add for fix sometimes no vibration when pad inserted."
 	}
 	mutex_unlock(&vib->lock);
 	schedule_work(&vib->work);
@@ -204,7 +233,7 @@ static enum hrtimer_restart qpnp_vib_timer_func(struct hrtimer *timer)
 
 	vib->state = 0;
 	schedule_work(&vib->work);
-
+	printk("[vibrator] schedule_work to turn off\n");
 	return HRTIMER_NORESTART;
 }
 
@@ -216,6 +245,7 @@ static int qpnp_vibrator_suspend(struct device *dev)
 	hrtimer_cancel(&vib->vib_timer);
 	cancel_work_sync(&vib->work);
 	/* turn-off vibrator */
+	printk("[vibrator] %s\n",__func__);
 	qpnp_vib_set(vib, 0);
 
 	return 0;
@@ -232,6 +262,7 @@ static int __devinit qpnp_vibrator_probe(struct spmi_device *spmi)
 	u8 val;
 	u32 temp_val;
 
+	printk("[qpnp_vibrator] %s +++\n",__FUNCTION__);
 	vib = devm_kzalloc(&spmi->dev, sizeof(*vib), GFP_KERNEL);
 	if (!vib)
 		return -ENOMEM;
@@ -295,9 +326,39 @@ static int __devinit qpnp_vibrator_probe(struct spmi_device *spmi)
 		return rc;
 
 	vib_dev = vib;
-
+	printk("[qpnp_vibrator] %s ---\n",__FUNCTION__);
 	return rc;
 }
+//ASUS_BSP +++ freddy "[A91][vib][NA][Spec] added to vibrator after phone inserted into pad"
+static int mp_event_report(struct notifier_block *this, unsigned long event, void *ptr)
+{
+
+        switch (event)
+	{
+		case P01_ADD:
+		{
+			printk("[vibrator] PAD ADD vibrator enable!!\n");
+			qpnp_vib_enable(&vib_dev->timed_dev,500);
+
+			return NOTIFY_DONE;
+		}
+		case P01_REMOVE:
+		{
+			printk("[vibrator] PAD REMOVE vibrator !!\n");
+			qpnp_vib_enable(&vib_dev->timed_dev,0);
+
+		}
+		default:
+
+			return NOTIFY_DONE;
+        }
+}
+
+static struct notifier_block mp_notifier = {
+        .notifier_call = mp_event_report,
+        .priority = VIBRATOR_MP_NOTIFY,
+};
+//ASUS_BSP --- freddy "[A91][vib][NA][Spec] added to vibrator after phone inserted into pad"
 
 static int  __devexit qpnp_vibrator_remove(struct spmi_device *spmi)
 {
@@ -327,14 +388,48 @@ static struct spmi_driver qpnp_vibrator_driver = {
 	.remove		= __devexit_p(qpnp_vibrator_remove),
 };
 
+/*
+qpnp-vibrator works on
+A90_FF,
+A91_SR1 ~ A91_SR4,
+after A91_ER(second source)depend on g_LC898301_probe_ok == 0
+*/
 static int __init qpnp_vibrator_init(void)
 {
+	printk("[qpnp_vibrator] init:  +++\n");
+// ASUS BSP freddy+++ [A91][vib][spec][Others] "Turn off qpnp-vibrator after A91_SR5 "
+	if (g_ASUS_hwID == A91_SR5)
+	{
+		printk("[qpnp_vibrator] dont support A91_SR5");
+		return 0;
+	}
+// ASUS BSP freddy--- [A91][vib][spec][Others] "Turn off qpnp-vibrator after A91_SR5 "
+
+
+//ASUS_BSP +++ freddy"[A91][vib][NA][Spec]  for vibrator second source after A91_ER"
+	if (g_LC898301_probe_ok)
+	{
+		printk("[qpnp_vibrator] g_LC898301_probe_ok, abort qpnp_vibrator_init\n");
+		return 0;
+	}
+//ASUS_BSP --- freddy"[A91][vib][NA][Spec]  for vibrator second source after A91_ER"
+
+//ASUS_BSP +++ freddy "[A91][vib][NA][Spec] added to vibrator after phone inserted into pad"
+	register_microp_notifier(&mp_notifier);
+	notify_register_microp_notifier(&mp_notifier, "qpnp_vibrator");
+//ASUS_BSP --- freddy "[A91][vib][NA][Spec] added to vibrator after phone inserted into pad"
 	return spmi_driver_register(&qpnp_vibrator_driver);
 }
-module_init(qpnp_vibrator_init);
+//ASUS_BSP +++ freddy"[A91][vib][NA][Spec] delay init for vibrator second source after A91_ER"
+late_initcall(qpnp_vibrator_init);
+//ASUS_BSP --- freddy"[A91][vib][NA][Spec] delay init for vibrator second source after A91_ER"
 
 static void __exit qpnp_vibrator_exit(void)
 {
+//ASUS_BSP +++ freddy "[A91][vib][NA][Spec] added to vibrator after phone inserted into pad"
+	unregister_microp_notifier(&mp_notifier);
+	notify_unregister_microp_notifier(&mp_notifier, "qpnp_vibrator");
+//ASUS_BSP --- freddy "[A91][vib][NA][Spec] added to vibrator after phone inserted into pad"
 	return spmi_driver_unregister(&qpnp_vibrator_driver);
 }
 module_exit(qpnp_vibrator_exit);

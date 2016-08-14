@@ -1991,6 +1991,13 @@ retry_open:
 		goto retry_open;
 	}
 	tty_unlock();
+	
+// ASUS_BSP +++ [thomas] Fix can't enter control+C from debug board
+// Tks for Wenli's help.
+	#define ASUS_DEBUG_HSL "ttyHSL0"
+	if  (!strncmp(tty->name, ASUS_DEBUG_HSL, strlen(ASUS_DEBUG_HSL)))
+		noctty = 0;
+// ASUS_BSP --- [thomas] Fix can't enter control+C from debug board
 
 
 	mutex_lock(&tty_mutex);

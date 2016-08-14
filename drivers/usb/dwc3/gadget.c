@@ -2414,12 +2414,20 @@ static void dwc3_gadget_usb2_phy_suspend(struct dwc3 *dwc, int suspend)
 	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
 }
 
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+extern void asus_dwc3_reset_notify(void);
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
+
 static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
 {
 	u32			reg;
 	struct dwc3_otg		*dotg = dwc->dotg;
 
 	dev_vdbg(dwc->dev, "%s\n", __func__);
+
+//ASUS_BSP+++ "[USB][NA][Spec] add ASUS Charger support"
+	asus_dwc3_reset_notify();
+//ASUS_BSP--- "[USB][NA][Spec] add ASUS Charger support"
 
 	/*
 	 * WORKAROUND: DWC3 revisions <1.88a have an issue which

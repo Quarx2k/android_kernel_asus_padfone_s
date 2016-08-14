@@ -580,7 +580,11 @@ static long msm_private_ioctl(struct file *file, void *fh,
 	case MSM_CAM_V4L2_IOCTL_CMD_ACK: {
 		struct msm_command_ack *cmd_ack;
 		struct msm_command *ret_cmd;
-
+//ASUS_BSP +++ YM
+		struct msm_video_device *pvdev = video_drvdata(file);
+		if (atomic_read(&pvdev->opened) == 0) {
+			pr_err("[YM]%s: MSM_CAM_V4L2_IOCTL_CMD_ACK but camera closed\n",__func__);
+		} else {
 		ret_cmd = kzalloc(sizeof(*ret_cmd), GFP_KERNEL);
 		if (!ret_cmd) {
 			rc = -ENOMEM;
@@ -604,6 +608,8 @@ static long msm_private_ioctl(struct file *file, void *fh,
 		complete(&cmd_ack->wait_complete);
 		spin_unlock_irqrestore(&(session->command_ack_q.lock),
 		   spin_flags);
+        		}			
+//ASUS_BSP --- YM
 	}
 		break;
 
@@ -724,6 +730,9 @@ int msm_post_event(struct v4l2_event *event, int timeout)
 		if (!rc) {
 			pr_err("%s: Timed out\n", __func__);
 			rc = -ETIMEDOUT;
+			//ASUS BSP Ryan +++ fix open camera error in boot for cts flashlighttest
+			mutex_unlock(&session->lock);
+			return -ETIMEDOUT;
 		} else {
 			pr_err("%s: Error: No timeout but list empty!",
 					__func__);

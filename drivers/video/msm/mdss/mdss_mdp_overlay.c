@@ -47,6 +47,12 @@
 #define PP_CLK_CFG_ON 1
 
 #define OVERLAY_MAX 10
+//ASUS_BSP: Louis +++
+#include <linux/of_gpio.h>
+#include "video/msm_hdmi_modes.h"
+extern int MdpBoostUp;
+extern void asus_mdss_mdp_ctl_perf_update_bus(struct mdss_mdp_ctl *ctl);
+//ASUS_BSP: Louis ---
 
 static atomic_t ov_active_panels = ATOMIC_INIT(0);
 static int mdss_mdp_overlay_free_fb_pipe(struct msm_fb_data_type *mfd);
@@ -1112,6 +1118,11 @@ static void mdss_mdp_overlay_update_pm(struct mdss_overlay_private *mdp5_data)
 	if (!mdp5_data->cpu_pm_hdl)
 		return;
 
+    //Mickey+++, double check if mdp5_data->ctl is null
+    if (mdp5_data->ctl == NULL)
+        return;
+    //Mickey---
+
 	if (mdss_mdp_display_wakeup_time(mdp5_data->ctl, &wakeup_time))
 		return;
 
@@ -1341,6 +1352,17 @@ commit_fail:
 		mutex_unlock(ctl->shared_lock);
 	}
 	ATRACE_END(__func__);
+	
+	//ASUS_BSP: Louis +++
+    if (MdpBoostUp > 0) {
+        MdpBoostUp--;
+        if (MdpBoostUp == 0) {
+            mdss_set_mdp_max_clk(0);
+			asus_mdss_mdp_ctl_perf_update_bus(ctl);
+        }
+    }
+    //ASUS_BSP: Louis ---
+	
 	return ret;
 }
 
@@ -2900,13 +2922,28 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 		mdp5_data->ctl = ctl;
 	}
 
-	if (!mfd->panel_info->cont_splash_enabled &&
-		(mfd->panel_info->type != DTV_PANEL)) {
+	if ((!mfd->panel_info->cont_splash_enabled &&
+		(mfd->panel_info->type != DTV_PANEL)) 
+//  ASUS_BSP: Louis +++
+#ifdef CONFIG_ASUS_HDMI 
+    /* start mdp overlay when receivce pad mode uevent and try to open fb1   */
+        || ((gpio_get_value(75) == 1) && (mfd->panel_info->type == DTV_PANEL)) //ASUS_BSP: joe1_++: prevent Android restart when connecting WFD on Pad mode
+#endif
+//  ASUS_BSP: Louis ---
+        ) {
 		rc = mdss_mdp_overlay_start(mfd);
 		if (!IS_ERR_VALUE(rc) &&
-			(mfd->panel_info->type != WRITEBACK_PANEL)) {
-			atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);
-			rc = mdss_mdp_overlay_kickoff(mfd, NULL);
+			(mfd->panel_info->type != WRITEBACK_PANEL)
+//  ASUS_BSP: Louis +++
+#ifdef CONFIG_ASUS_HDMI 
+    /*  don't turn on hdmi pwr here    */
+            && !(gpio_get_value(75) == 1 && mfd->fbi->node == 1)
+#endif
+//  ASUS_BSP: Louis ---
+            ) {
+				atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);
+				printk("%s: kickoff fb%d\n", __func__, mfd->fbi->node);
+				rc = mdss_mdp_overlay_kickoff(mfd, NULL);
 		}
 	} else {
 		rc = mdss_mdp_ctl_setup(mdp5_data->ctl);

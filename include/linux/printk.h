@@ -329,4 +329,32 @@ static inline void print_hex_dump_bytes(const char *prefix_str, int prefix_type,
 
 #endif
 
+//[CR]
+#define asus_debug_mask(NAME) \
+int _debug_mask_##NAME = 0x7; \
+module_param_named( \
+	asus_debug_mask, _debug_mask_##NAME, int, S_IRUGO | S_IWUSR | S_IWGRP \
+); 
+
+#define extern_asus_debug_mask(NAME) \
+extern int _debug_mask_##NAME;
+
+enum {
+	ASUS_DEBUG_CRIT_ERR = BIT(0),
+	ASUS_DEBUG_WARNING = BIT(1),
+	ASUS_DEBUG_SYSTEM = BIT(2),
+	ASUS_DEBUG_INFO1 = BIT(3),
+	ASUS_DEBUG_INFO2 = BIT(4),
+	ASUS_DEBUG_INFO3 = BIT(5),
+	ASUS_DEBUG_INFO4 = BIT(6),
+	ASUS_DEBUG_INFO5 = BIT(7),
+	ASUS_DEBUG_INFO6 = BIT(8),
+};
+
+#define asus_printk(NAME, mask, message, ...) \
+do { \
+	if((mask & _debug_mask_##NAME)) \
+		printk(message, ##__VA_ARGS__); \
+} while(0)
+
 #endif

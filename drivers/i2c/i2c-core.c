@@ -43,6 +43,70 @@
 
 #include "i2c-core.h"
 
+/* ASUS BSP Peter_Lu for i2c debug +++
+ * Debug levels
+ */
+#define NO_DEBUG				0
+#define DEBUG_ERROR			1
+#define DEBUG_INFO			2
+#define DEBUG_VERBOSE		5
+#define DEBUG_RAW			8
+#define DEBUG_TRACE			10
+
+static int I2C_debug_level			 = NO_DEBUG;
+static int I2C_debug_bus_number	 = NO_DEBUG;
+
+MODULE_PARM_DESC(I2C_debug_level, "Activate i2c debug output");
+
+#define i2c_debug(level, nr, fmt, ...) \
+	switch (nr) { \
+	case 0: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	case 1: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	case 2: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	case 3: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	case 4: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	case 5: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	case 6: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	case 7: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	case 8: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	case 10: \
+		if (DEBUG_ERROR == level  || I2C_debug_bus_number == nr) \
+			printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__); \
+		break; \
+	default: \
+		break; \
+	} \
+/*
+*ASUS BSP ---
+*/
+
 
 /* core_lock protects i2c_adapter_idr, and guarantees
    that device detection, deletion of detected devices, and attach_adapter
@@ -280,6 +344,226 @@ show_modalias(struct device *dev, struct device_attribute *attr, char *buf)
 	return sprintf(buf, "%s%s\n", I2C_MODULE_PREFIX, client->name);
 }
 
+/*
+* ASUS BSP Peter_Lu for i2c stress test +++
+*/
+#ifdef CONFIG_I2C_STRESS_TEST
+
+#include <linux/ctype.h>
+#include "i2c-streestest-external-command.h"
+
+static ssize_t show_test(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return i2c_stresstest_print_status(buf);
+}
+
+static ssize_t store_test(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	/*ssize_t ret = -EINVAL, size;
+	int contrast;
+	char *endp;
+
+	contrast = simple_strtol(buf, &endp, 0);
+	size = endp - buf;
+
+	if (*endp && isspace(*endp))
+		size++;
+
+	if (size != count)
+		return ret;
+
+	printk("ID = %d\n",contrast);
+
+	ret = count;
+	*/
+	return i2c_stresstest_command_parser(buf, count);
+}
+static DEVICE_ATTR(test, 0755 , show_test, store_test);
+#endif
+
+static ssize_t show_debug(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "[I2C debug] bus : %d ,level : %d\n", I2C_debug_bus_number, I2C_debug_level);
+}
+
+static ssize_t store_debug(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	char debugStr[12];
+
+	memset(debugStr, 0, 12);
+	strncpy(debugStr, buf, count);
+
+	switch (debugStr[0])	{
+	case 'h':
+		goto I2CDEBUG_USAGE;
+		break;
+	}
+
+	/* Get I2C debug bus number */
+	I2C_debug_bus_number = simple_strtoul(&debugStr[0], NULL, 10);
+	if (I2C_debug_bus_number < 0)	{
+		printk(KERN_INFO "[I2C debug] Get I2C debug bus number error !(%d)\n", I2C_debug_bus_number);
+		goto I2CDEBUG_USAGE;
+	}
+	printk(KERN_INFO "[I2C debug] Get I2C debug bus number : %d \n", I2C_debug_bus_number);
+
+	/* Get I2C debug level */
+	I2C_debug_level = simple_strtoul(&debugStr[2], NULL, 10);
+
+	if (I2C_debug_level > DEBUG_TRACE || I2C_debug_level < 0)	{
+		printk(KERN_INFO "[I2C debug] Get I2C debug level error !(%d)\n", I2C_debug_level);
+		I2C_debug_level = NO_DEBUG;
+		goto I2CDEBUG_USAGE;
+	}
+	printk(KERN_INFO "[I2C debug] Get I2C bus debug level  : %d \n", I2C_debug_level);
+
+	return count;
+
+I2CDEBUG_USAGE:
+	printk(KERN_INFO "\n");
+	printk(KERN_INFO "[I2C debug] I2C bus debug setting			: echo I2C bus number | debug level \n");
+	printk(KERN_INFO "[I2C debug] I2C bus debug level			: 0~10 \n");
+	printk(KERN_INFO "[I2C debug] I2C bus debug bus number		: 0~5 ( Intel clovertrail cpu )\n");
+	printk(KERN_INFO "\n");
+	return count;
+}
+static DEVICE_ATTR(i2c_bus_debug, 0755 , show_debug, store_debug);
+
+static int i2cutil_read_from_chip
+	(struct i2c_client *client, u8 reg, int len, char *data)
+{
+	int err = 0;
+
+	struct i2c_msg msg[2] = {
+		{
+			.addr = client->addr,
+			.flags = I2C_M_NOSTART,
+			.len = 1,
+			.buf = &reg,
+		},
+		{
+			.addr = client->addr,
+			.flags = I2C_M_RD,
+			.len = len,
+			.buf = data,
+		}
+	};
+
+	if (!client->adapter)
+		return -ENODEV;
+
+	memset(data, 0, sizeof(*data)*len);
+
+	err = i2c_transfer(client->adapter, msg, ARRAY_SIZE(msg));
+
+	if (err != ARRAY_SIZE(msg))
+		pr_err("%s: err %d\n", __func__, err);
+
+	return err;
+}
+
+static int i2cutil_write_to_chip
+	(struct i2c_client *client, u8 reg, int data, int len)
+{
+	int err = 0;
+	uint8_t buf[len+1];
+
+	static struct i2c_msg msg;
+
+	if (!client->adapter)
+		return -ENODEV;
+
+	msg.addr = client->addr;
+	msg.flags = 0;
+	msg.len = len+1;
+	msg.buf = buf;
+
+	buf[0] = reg;
+	memcpy(buf + 1, &data, sizeof(data));
+
+	err = i2c_transfer(client->adapter, &msg, len);
+
+	if (err < 0)
+		pr_err("%s: reg=0x%x, data_=%d, err = 0x%x\n",
+			__func__, reg, data, err);
+
+	return err;
+}
+
+static int i2cutil_reg_addr, i2cutil_reg_read_len;
+
+static ssize_t i2cutil_i2c_read_reg_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	char *i2cutil_reg_value;
+	int len;
+	char *outtmp, *outtmp2;
+
+	if (i2cutil_reg_read_len == 0)
+		return 0;
+	outtmp = kzalloc(sizeof(char)*1000, GFP_KERNEL);
+	outtmp2 = kzalloc(sizeof(char)*20, GFP_KERNEL);
+
+	i2cutil_reg_value = kzalloc(sizeof(char)*i2cutil_reg_read_len,
+					GFP_KERNEL);
+
+	i2cutil_read_from_chip(to_i2c_client(dev),
+		i2cutil_reg_addr, i2cutil_reg_read_len, i2cutil_reg_value);
+
+	sprintf(outtmp, "0x%X:", i2cutil_reg_addr);
+	for (len = 0; len < i2cutil_reg_read_len; len++) {
+		sprintf(outtmp2, "%4X", (int)i2cutil_reg_value[len]);
+		strcat(outtmp, outtmp2);
+	}
+	strcat(outtmp, "\n");
+	strcat(outtmp, "Dec :");
+	for (len = 0; len < i2cutil_reg_read_len; len++) {
+		sprintf(outtmp2, "%4d", (int)i2cutil_reg_value[len]);
+		strcat(outtmp, outtmp2);
+	}
+	strcat(outtmp, "\n");
+	strcat(outtmp, "ASCII:");
+	for (len = 0; len < i2cutil_reg_read_len; len++) {
+		if (!isalnum(i2cutil_reg_value[len]))
+			i2cutil_reg_value[len] = '.';
+	}
+	strcat(outtmp, i2cutil_reg_value);
+	strcat(outtmp, "\n");
+	strcpy(buf, outtmp);
+
+	kfree(outtmp);
+	kfree(outtmp2);
+
+	return strlen(buf);
+}
+
+static ssize_t i2cutil_i2c_read_reg_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	sscanf(buf, "%x %d", &i2cutil_reg_addr, &i2cutil_reg_read_len);
+
+	return size;
+}
+
+static ssize_t i2cutil_i2c_write_reg_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	int i2cutil_reg_addr = 0, i2cutil_reg_value = 0;
+
+	sscanf(buf, "%x %x", &i2cutil_reg_addr, &i2cutil_reg_value);
+	i2cutil_write_to_chip(to_i2c_client(dev), i2cutil_reg_addr,
+				i2cutil_reg_value, 1);
+
+	return size;
+}
+static DEVICE_ATTR(i2c_read_reg, S_IWUSR | S_IRUGO, i2cutil_i2c_read_reg_show,
+		i2cutil_i2c_read_reg_store);
+static DEVICE_ATTR(i2c_write_reg, S_IWUSR | S_IRUGO, NULL,
+		i2cutil_i2c_write_reg_store);
+/*
+* ASUS_BSP +++
+*/
+
 static DEVICE_ATTR(name, S_IRUGO, show_name, NULL);
 static DEVICE_ATTR(modalias, S_IRUGO, show_modalias, NULL);
 
@@ -287,6 +571,18 @@ static struct attribute *i2c_dev_attrs[] = {
 	&dev_attr_name.attr,
 	/* modalias helps coldplug:  modprobe $(cat .../modalias) */
 	&dev_attr_modalias.attr,
+/*
+*ASUS BSP Peter_Lu for i2c stress test +++
+*/
+	&dev_attr_i2c_read_reg.attr,
+	&dev_attr_i2c_write_reg.attr,
+	&dev_attr_i2c_bus_debug.attr,
+#ifdef CONFIG_I2C_STRESS_TEST
+	&dev_attr_test.attr,
+#endif
+/*
+* ASUS_BSP ---
+*/
 	NULL
 };
 
@@ -1309,7 +1605,7 @@ module_exit(i2c_exit);
 int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 {
 	unsigned long orig_jiffies;
-	int ret, try;
+	int ret, try, n;
 
 	/* REVISIT the fault reporting model here is weak:
 	 *
@@ -1338,6 +1634,30 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		}
 #endif
 
+/*
+*ASUS BSP Peter_Lu for i2c debug +++
+*/
+		if (I2C_debug_level > 0)	{
+			for (ret = 0; ret < num; ret++) {
+				i2c_debug(DEBUG_INFO, adap->nr,
+				"[I2C transfer][bus=%d] +++I2C : R/W=%c, addr=0x%02x, reg=0x%02x, len=%d\n",
+				adap->nr, (msgs[ret].flags & I2C_M_RD) ? 'R' : 'W', msgs[ret].addr,
+				(msgs[ret].buf) ? msgs[ret].buf[0] : 0, msgs[ret].len);
+			}
+			if (msgs[0].flags == 0 && msgs[0].len > 1)	{
+				i2c_debug(DEBUG_INFO, adap->nr,
+				"[I2C transfer][bus=%d] Write data : ", adap->nr);
+				for (ret = 1; ret < msgs[0].len; ret++) {
+					i2c_debug(DEBUG_INFO, adap->nr,
+					"0x%02x, ", msgs[0].buf[ret]);
+				}
+			}
+			i2c_debug(DEBUG_INFO, adap->nr, "**********************************\n");
+		}
+/*
+*ASUS BSP ---
+*/
+
 		if (in_atomic() || irqs_disabled()) {
 			ret = i2c_trylock_adapter(adap);
 			if (!ret)
@@ -1357,6 +1677,28 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 				break;
 		}
 		i2c_unlock_adapter(adap);
+
+/*
+*ASUS BSP Peter_Lu for i2c debug +++
+*/
+		if (ret < 0)	{
+			i2c_debug(DEBUG_ERROR, adap->nr,
+				"[I2C transfer][bus=%d] [i2c Error] ret=%d\n", adap->nr, ret);
+			for (n = 0; n < num; n++) {
+				i2c_debug(DEBUG_ERROR, adap->nr,
+					"[I2C transfer][bus=%d] [i2c Error] i2c_transfer (%c) addr=0x%02x, reg=0x%02x, len=%d\n",
+					adap->nr, (msgs[n].flags & I2C_M_RD) ? 'R' : 'W', msgs[n].addr,
+					(msgs[n].buf) ? msgs[n].buf[0] : 0, msgs[n].len);
+			}
+		} else	{
+			if (I2C_debug_level > DEBUG_RAW)
+				i2c_debug(DEBUG_TRACE , adap->nr,
+					"[I2C transfer][bus=%d] ---I2C : R/W=%c I2C mutex_unlock addr=0x%02x, ret=%d\n",
+					adap->nr, (msgs[0].flags & I2C_M_RD) ? 'R' : 'W', msgs[0].addr, ret);
+		}
+/*
+*ASUS BSP ---
+*/
 
 		return ret;
 	} else {

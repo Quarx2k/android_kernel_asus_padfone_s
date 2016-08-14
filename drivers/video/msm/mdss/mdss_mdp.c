@@ -573,6 +573,76 @@ static inline struct clk *mdss_mdp_get_clk(u32 clk_idx)
 	return NULL;
 }
 
+//ASUS_BSP: Louis +++
+static struct work_struct mdp_clk_work;
+//static DEFINE_SPINLOCK(mdp_max_clk_lock);
+static bool g_max_clk_rate = 0;
+unsigned long g_mdp_clk_rate = MDP_CLK_DEFAULT_RATE;
+int MdpBoostUp = 0;
+
+void mdss_set_mdp_max_clk(bool boostup)
+{
+    if (boostup) {
+        if (MdpBoostUp) {
+            if (!g_max_clk_rate) {
+                g_max_clk_rate = 1;
+                schedule_work(&mdp_clk_work);
+            }
+        }
+    }
+    else {
+        if (g_max_clk_rate) {
+            g_max_clk_rate = 0;
+            schedule_work(&mdp_clk_work);
+        }
+    }
+
+    return;
+}
+
+static void clk_ctrl_work(struct work_struct *work)
+{
+    struct mdss_data_type *mdata = mdss_res;
+    struct clk *clk = mdss_mdp_get_clk(MDSS_CLK_MDP_SRC);
+    unsigned long clk_rate;
+
+    if (mdata == NULL)
+        return;
+
+    mutex_lock(&mdp_clk_lock);
+
+    if (clk) {
+        if (g_max_clk_rate) {
+            if (MdpBoostUp) {
+                printk("[Display] Start Mdp_Clk boost\n");
+                clk_rate = mdata->max_mdp_clk_rate;
+                if (clk_rate != clk_get_rate(clk)) {
+                    if (IS_ERR_VALUE(clk_set_rate(clk, clk_rate)))
+                        pr_err("clk_set_rate failed\n");
+                }
+            }
+        } else {
+            if (!MdpBoostUp) {
+                printk("[Display] Stop Mdp_Clk boost\n");
+                clk_rate = g_mdp_clk_rate;
+                clk_rate = clk_round_rate(clk, clk_rate);
+                if (IS_ERR_VALUE(clk_rate)) {
+                    pr_err("unable to round rate err=%ld\n", clk_rate);
+                }
+                else if (clk_rate != clk_get_rate(clk)) {
+                    if (IS_ERR_VALUE(clk_set_rate(clk, clk_rate)))
+                        pr_err("clk_set_rate failed\n");
+                }
+            }
+        }
+    } else {
+        pr_err("mdp src clk not setup properly\n");
+    }
+
+    mutex_unlock(&mdp_clk_lock);
+}
+//ASUS_BSP: Louis ---
+
 static int mdss_mdp_clk_update(u32 clk_idx, u32 enable)
 {
 	int ret = -ENODEV;
@@ -620,6 +690,12 @@ void mdss_mdp_set_clk_rate(unsigned long rate)
 			clk_rate = clk_round_rate(clk, min_clk_rate);
 		else
 			clk_rate = mdata->max_mdp_clk_rate;
+        //ASUS_BSP: Louis +++
+        g_mdp_clk_rate = clk_rate;
+        if (g_max_clk_rate) {
+            clk_rate = mdata->max_mdp_clk_rate;
+        }
+        //ASUS_BSP: Louis ---
 		if (IS_ERR_VALUE(clk_rate)) {
 			pr_err("unable to round rate err=%ld\n", clk_rate);
 		} else if (clk_rate != clk_get_rate(clk)) {
@@ -1333,6 +1409,8 @@ probe_done:
 		mdss_res = NULL;
 	}
 
+    INIT_WORK(&mdp_clk_work, clk_ctrl_work);    //ASUS_BSP: Louis +++
+
 	return rc;
 }
 
@@ -1502,7 +1580,9 @@ static int mdss_mdp_parse_bootarg(struct platform_device *pdev)
 	intf_type = &pan_cfg->pan_intf;
 
 	/* reads from dt by default */
+    //Louis +++
 	pan_cfg->lk_cfg = true;
+    //Louis ---
 
 	chosen_node = of_find_node_by_name(NULL, "chosen");
 	if (!chosen_node) {
@@ -1569,6 +1649,7 @@ static int mdss_mdp_parse_bootarg(struct platform_device *pdev)
 	}
 
 get_dt_pan:
+	printk("[Deeo] go to DT\n");
 	rc = mdss_mdp_parse_dt_pan_intf(pdev);
 	/* if pref pan intf is not present */
 	if (rc)

@@ -65,3 +65,18 @@ obj-$(CONFIG_QPNP_CHARGER)	+= qpnp-charger.o
 obj-$(CONFIG_LTC4088_CHARGER)	+= ltc4088-charger.o
 obj-$(CONFIG_CHARGER_SMB347)	+= smb347-charger.o
 obj-$(CONFIG_BATTERY_BCL)	+= battery_current_limit.o
+# ASUS_BSP +++ Josh_Liao "add asus battery driver"
+obj-$(CONFIG_BATTERY_ASUS)	+= asus_bat.o
+# ASUS_BSP --- Josh_Liao "add asus battery driver"
+# ASUS_BSP +++ Josh_Liao "add asus swgauge"
+obj-$(CONFIG_BATTERY_ASUS) += charger/
+# ASUS_BSP --- Josh_Liao "add asus swgauge"
+	
+#ASUS_BSP +++ Eason_Chang "Battery gauge porting"
+#obj-$(CONFIG_BATTERY_ASUS) += asus_battery.o
+obj-$(CONFIG_BATTERY_ASUS) += gauge/
+obj-$(CONFIG_BATTERY_ASUS) += capfilter/
+obj-$(CONFIG_CHARGER_ASUS_FSM) += fsm/
+obj-$(CONFIG_ASUS_POWER_UTIL) += util/
+obj-$(CONFIG_BATTERY_ASUS_SERVICE) += service/
+#ASUS_BSP --- Eason_Chang "Battery gauge porting"

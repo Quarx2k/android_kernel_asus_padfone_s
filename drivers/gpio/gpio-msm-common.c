@@ -32,6 +32,9 @@
 #include <mach/gpiomux.h>
 #include <mach/mpm.h>
 #include "gpio-msm-common.h"
+//[+++][Power]Add for wakeup debug
+int gpio_irq_cnt, gpio_resume_irq[8];
+//[---][Power]Add for wakeup debug
 
 #ifdef CONFIG_GPIO_MSM_V3
 enum msm_tlmm_register {
@@ -364,8 +367,14 @@ static int msm_gpio_suspend(void)
 void msm_gpio_show_resume_irq(void)
 {
 	unsigned long irq_flags;
-	int i, irq, intstat;
+	int i, j, irq, intstat;
+	int gpiopin;
 	int ngpio = msm_gpio.gpio_chip.ngpio;
+	//[+++]Add GPIO wakeup information
+	for(j = 0; j < 8; j++)
+		gpio_resume_irq[j] = 0;
+	gpio_irq_cnt=0;
+	//[---]Add GPIO wakeup information
 
 	if (!msm_show_resume_irq_mask)
 		return;
@@ -375,11 +384,20 @@ void msm_gpio_show_resume_irq(void)
 		intstat = __msm_gpio_get_intr_status(i);
 		if (intstat) {
 			irq = msm_gpio_to_irq(&msm_gpio.gpio_chip, i);
-			pr_warning("%s: %d triggered\n",
-				__func__, irq);
+			gpiopin = msm_irq_to_gpio(&msm_gpio.gpio_chip, irq);
+			pr_warning("[PM]GPIO: %d resume triggered\n", gpiopin);
+			//[+++]Add GPIO wakeup information
+			if(gpio_irq_cnt < 8)
+				gpio_resume_irq[gpio_irq_cnt]=gpiopin;
+			gpio_irq_cnt++;
+			//[---]Add GPIO wakeup information
 		}
 	}
 	spin_unlock_irqrestore(&tlmm_lock, irq_flags);
+	//[+++]Add GPIO wakeup information
+	if(gpio_irq_cnt >= 8)
+		gpio_irq_cnt = 7;
+	//[---]Add GPIO wakeup information
 }
 
 static void msm_gpio_resume(void)

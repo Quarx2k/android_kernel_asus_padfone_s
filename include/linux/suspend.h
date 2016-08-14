@@ -37,6 +37,9 @@ typedef int __bitwise suspend_state_t;
 #define PM_SUSPEND_STANDBY	((__force suspend_state_t) 1)
 #define PM_SUSPEND_MEM		((__force suspend_state_t) 3)
 #define PM_SUSPEND_MAX		((__force suspend_state_t) 4)
+//[+++]Debug for active wakelock before entering suspend
+#define PM_UNATTENDED_TIMEOUT   1000*60*10		//10min
+//[---]Debug for active wakelock before entering suspend
 
 enum suspend_stat_step {
 	SUSPEND_FREEZE = 1,

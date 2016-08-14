@@ -50,6 +50,22 @@ struct apr_reset_work {
 	struct work_struct work;
 };
 
+//ASUS_BSP Johnny +++ return listen_port when modem restart 
+struct port_link
+{
+        int port;
+        int read;
+        int deleting;
+        struct port_link* next;
+};
+extern struct port_link syn_firewall_port_link_head;
+extern int lp_modem_restart;
+extern struct completion listen_event;
+extern spinlock_t listen_port_lock;
+struct port_link *p=&syn_firewall_port_link_head;
+struct port_link *prev;
+//ASUS_BSP ---
+
 struct apr_svc_table {
 	char name[64];
 	int idx;
@@ -693,6 +709,38 @@ static struct notifier_block lnb = {
 	.notifier_call = lpass_notifier_cb,
 };
 
+//ASUS_BSP Johnny +++ return listen_port when modem restart
+static int listen_port_notifier_cb(struct notifier_block *this,
+                                        unsigned long code, void *_cmd)
+{
+switch (code) {
+        case SUBSYS_BEFORE_SHUTDOWN:
+
+          spin_lock_bh(&listen_port_lock);
+          prev=p;
+          while(prev->next!=NULL)
+              {
+
+              printk("[SYN] start set read to 0\n");
+
+              prev=prev->next;
+              if(1==prev->read)
+                    prev->read=0;
+              }
+
+          printk("[SYN] lp_modem_restart=1\n");
+          lp_modem_restart=1;
+          spin_unlock_bh(&listen_port_lock);
+          complete(&listen_event);
+
+        break;
+}
+        return NOTIFY_DONE;
+}
+static struct notifier_block lp_nb = {
+        .notifier_call = listen_port_notifier_cb,
+};
+//ASUS_BSP ---
 
 static int __init apr_init(void)
 {
@@ -723,6 +771,7 @@ static int __init apr_late_init(void)
 	init_waitqueue_head(&modem_wait);
 	subsys_notif_register_notifier("modem", &mnb);
 	subsys_notif_register_notifier(apr_get_lpass_subsys_name(), &lnb);
+        subsys_notif_register_notifier("modem", &lp_nb);//ASUS_BSP Johnny +++ return listen_port when modem restart
 	return ret;
 }
 late_initcall(apr_late_init);

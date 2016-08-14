@@ -122,11 +122,409 @@ extern void softirq_init(void);
 char __initdata boot_command_line[COMMAND_LINE_SIZE];
 /* Untouched saved command line (eg. for /proc) */
 char *saved_command_line;
+char bootimage_command_line[1024];			//+++ ASUS_BSP : Add for parse cmdline info to proc/bootinfo
 /* Command line for parameter parsing */
 static char *static_command_line;
 
 static char *execute_command;
 static char *ramdisk_execute_command;
+
+//+++ ASUS_BSP : miniporting
+
+//+++ ASUS_BSP : Add for bootinfo
+char SB_info[32]="SB : N";
+
+static int set_SB_info(char *str)
+{
+	strcpy(SB_info,"SB : ");
+	strcat(SB_info,str);
+	//printk("%s\n", SB_info);
+
+	return 0;
+}
+__setup("SB=", set_SB_info);
+//--- ASUS_BSP : Add for bootinfo
+
+enum DEVICE_HWID g_ASUS_hwID=A90_UNKNOWN;
+char hwid_info[32]={0};
+
+EXPORT_SYMBOL(g_ASUS_hwID);
+
+ static int set_hardware_id(char *str)
+ {
+	strcpy(hwid_info,"HW ID : ");
+ 	if ( strcmp("A90_EVB0", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_EVB0;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_EVB0\n");
+ 		printk("Kernel HW ID = %d\n",g_ASUS_hwID);
+ 	}
+ 	else if ( strcmp("A90_EVB", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_EVB;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_EVB\n");
+ 	}
+	else if ( strcmp("A90_SR1", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_SR1;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_SR1\n");
+ 	}
+ 	else if ( strcmp("A90_SR2", str) == 0 )
+ 	{
+		g_ASUS_hwID = A90_SR2;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_SR2\n");
+ 	}
+ 	else if ( strcmp("A90_SR3", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_SR3;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_SR3\n");
+ 	}		
+ 	else if ( strcmp("A90_ER1", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_ER1;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_ER1\n");
+ 	}
+	else if ( strcmp("A90_PR", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_PR;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_PR\n");
+ 	}
+	else if ( strcmp("A90_MP", str) == 0 )
+ 	{
+ 		g_ASUS_hwID = A90_MP;
+		strcat(hwid_info,str);
+ 		printk("Kernel HW ID = A90_MP\n");
+ 	}
+	else if ( strcmp("A91_SR1", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR1;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR1\n");
+	}
+	else if ( strcmp("A91_SR2", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR2\n");
+	}
+	else if ( strcmp("A91_SR3", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR3;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR3\n");
+	}
+	else if ( strcmp("A91_SR4", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR4;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR4\n");
+	}
+	else if ( strcmp("A91_SR5", str) == 0 )
+	{
+		g_ASUS_hwID = A91_SR5;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_SR5\n");
+	}	
+	else if ( strcmp("A91_ER1", str) == 0 )
+	{
+		g_ASUS_hwID = A91_ER1;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_ER1\n");
+	}		
+	else if ( strcmp("A91_ER2", str) == 0 )
+	{
+		g_ASUS_hwID = A91_ER2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_ER2\n");
+	}
+	else if ( strcmp("A91_PR", str) == 0 )
+	{
+		g_ASUS_hwID = A91_PR;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_PR\n");
+	}
+	else if ( strcmp("A91_MP", str) == 0 )
+	{
+		g_ASUS_hwID = A91_MP;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A91_MP\n");
+	}
+	else if ( strcmp("PF500KL_ER1", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_ER1;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_ER1\n");
+	}
+	else if ( strcmp("PF500KL_ER2", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_ER2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_ER2\n");
+	}
+	else if ( strcmp("PF500KL_ER2_2", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_ER2_2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_ER2_2\n");
+	}
+	else if ( strcmp("PF500KL_PR", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_PR;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_PR\n");
+	}
+	else if ( strcmp("PF500KL_MP", str) == 0 )
+	{
+		g_ASUS_hwID = PF500KL_MP;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = PF500KL_MP\n");
+	}
+ 	else
+ 	{
+ 		g_ASUS_hwID = A91_ER1;
+		strcat(hwid_info,"Unknown");
+ 		printk("Kernel HW ID = UNKNOWN HW_ID (FORCE to A91_ER1)\n");
+ 	}
+ 
+	printk("g_Asus_hwID = %d\n", g_ASUS_hwID);
+ 	return 0;
+ }
+ __setup("HW_ID=", set_hardware_id);
+ 
+ //--- ASUS_BSP : miniporting
+ 
+//Austin+++, determine panel is connected or not
+bool g_panel_connect = true;
+EXPORT_SYMBOL(g_panel_connect);
+static int set_panel_status(char *str)
+{
+    if ( strcmp("N", str) == 0 )
+         g_panel_connect = false;
+    else
+         g_panel_connect = true;
+
+    printk("g_panel_connect = %d\n",g_panel_connect);
+    return 0;
+}
+__setup("PANEL=", set_panel_status);
+//Austin---
+
+//Mickey+++, wait for boot complete if we don't boot in pad
+bool g_Pad_Bootup = false;
+bool g_Android_Boot_Complete = false;
+EXPORT_SYMBOL(g_Pad_Bootup);
+EXPORT_SYMBOL(g_Android_Boot_Complete);
+
+static int set_bootup_mode(char *str)
+{
+    if ( strcmp("PAD", str) == 0 )
+        g_Pad_Bootup = true;
+    else
+        g_Pad_Bootup = false;
+
+    printk("g_Pad_Bootup = %d\n", g_Pad_Bootup);
+    return 0;
+}
+__setup("BOOT_UP=", set_bootup_mode);
+//Mickey---
+
+//+++ ASUS_BSP : Add for bootinfo
+int  g_A90_cpuID=0;
+char cpurv_info[64]={0};
+
+EXPORT_SYMBOL(g_A90_cpuID);
+
+static int set_cpu_id(char *str)
+{
+	strcpy(cpurv_info,"CPU RV : ");
+	if ( memcmp("7b00e1", (str+2) , 6) == 0 )
+	{
+		g_A90_cpuID = 0x7b0;	//MSM8974
+		printk("CPUID = %x\n",g_A90_cpuID);
+		strcat(cpurv_info,str);
+	}
+	else if ( memcmp("7b10e1", (str+2) , 6) == 0 )
+	{
+		g_A90_cpuID = 0x7b1;	//MSM8974
+		printk("CPUID = %x\n",g_A90_cpuID);
+		strcat(cpurv_info,str);
+	}
+	else if ( memcmp("7b80e1", (str+2) , 6) == 0 )
+	{
+		g_A90_cpuID = 0x7b8;	//MSM8974AB
+		printk("CPUID = %x\n",g_A90_cpuID);
+		strcat(cpurv_info,str);
+	}
+	else if ( memcmp("7bc0e1", (str+2) , 6) == 0 )
+	{
+		g_A90_cpuID = 0x7bc;	//MSM8974AB
+		printk("CPUID = %x\n",g_A90_cpuID);
+		strcat(cpurv_info,str);
+	}	
+	else
+	{
+		g_A90_cpuID = -1;
+		printk("CPUID = UNKNOW!!\n");
+		strcat(cpurv_info,"Unknow");
+	}
+	printk("g_A90_cpuID = %d \n",g_A90_cpuID);
+	//printk("%s \n",cpurv_info);
+	return 0;
+}
+ 
+__setup("CPU_RV=", set_cpu_id);
+//--- ASUS_BSP : Add for bootinfo
+//ASUS_BSP Deeo : add for kernel charger mode. +++
+bool g_Charger_mode = false;
+
+static int set_charger_mode(char *str)
+{
+    if ( strcmp("charger", str) == 0 )
+        g_Charger_mode = true;
+    else
+        g_Charger_mode = false;
+
+    printk("g_Charger_mode = %d\n", g_Charger_mode);
+    return 0;
+}
+__setup("androidboot.mode=", set_charger_mode);
+EXPORT_SYMBOL(g_Charger_mode);
+//ASUS_BSP Deeo : add for kernel charger mode. ---
+
+//+++ ASUS_BSP : miniporting : Add for audio dbg mode
+int g_user_dbg_mode = 1;
+EXPORT_SYMBOL(g_user_dbg_mode);
+
+static int set_user_dbg_mode(char *str)
+{
+    if ( strcmp("y", str) == 0 )
+    {
+        g_user_dbg_mode = 1;
+    }
+    else
+    {
+        g_user_dbg_mode = 0;
+    }
+    g_user_dbg_mode = 1;
+    printk("Kernel dbg mode = %d\n", g_user_dbg_mode);
+    return 0;
+}
+__setup("dbg=", set_user_dbg_mode);
+//--- ASUS_BSP : miniporting : Add for audio dbg mode
+
+//+++ ASUS_BSP : Add for bootinfo
+char sbl_info[64]={0};
+
+static int set_sbl_info(char *str)
+{
+	strcpy(sbl_info,"SBL Ver. : ");
+	strcat(sbl_info,str);
+	printk("\n%s\n", sbl_info);
+
+	return 0;
+}
+__setup("SBL_INFO=", set_sbl_info);
+//--- ASUS_BSP : Add for bootinfo
+
+//+++ ASUS_BSP : Add for bootinfo
+char rpm_info[64]={0};
+
+static int set_rpm_info(char *str)
+{
+	strcpy(rpm_info,"RPM Ver. : ");
+	strcat(rpm_info,str);
+	//printk("%s\n", rpm_info);
+
+	return 0;
+}
+__setup("RPM_INFO=", set_rpm_info);
+//--- ASUS_BSP : Add for bootinfo
+
+//+++ ASUS_BSP : Add for bootinfo
+/*	// no use in A86
+char ram_info[64]={0};
+
+static int set_ram_info(char *str)
+{
+	strcpy(ram_info,"RAM INFO : ");
+	strcat(ram_info,str);
+	//printk("%s\n", ram_info);
+
+	return 0;
+}
+__setup("RAM=", set_ram_info);
+*/
+//--- ASUS_BSP : Add for bootinfo
+
+//+++ ASUS_BSP : Add for parse cmdline info to proc/bootinfo
+char aboot_info[64]={0};
+
+static int set_aboot_info(char *str)
+{
+	/*	// PVS register different!!! open this will boot hang!!!
+	unsigned long pte_efuse, pvs;
+	char ACPU[16]={0};
+	
+	pte_efuse = readl_relaxed(0xfa7000c0);
+	pvs = (pte_efuse >> 10) & 0x7;
+	if (pvs == 0x7)
+		pvs = (pte_efuse >> 13) & 0x7;
+
+	printk("pvs : %d\n",(int)pvs);
+
+	sprintf(ACPU,"PVS : %d",(int)pvs);
+	*/
+	
+	strcpy(aboot_info,"Aboot Ver. : ");
+	strcat(aboot_info,str);
+	//printk("%s\n", aboot_info);
+
+	return 0;
+}
+__setup("ABOOT_INFO=", set_aboot_info);
+//--- ASUS_BSP : Add for parse cmdline info to proc/bootinfo
+
+//+++ ASUS_BSP : Add for bootinfo
+char emmc_info[64]={0};
+
+static int set_emmc_info(char *str)
+{
+	strcpy(emmc_info,"eMMC : ");
+	strcat(emmc_info,str);
+	//printk("%s\n", emmc_info);
+	
+	strcpy(bootimage_command_line,sbl_info);
+	strcat(bootimage_command_line,"\n");
+	strcat(bootimage_command_line,rpm_info);
+	strcat(bootimage_command_line,"\n");
+	strcat(bootimage_command_line,cpurv_info);
+	strcat(bootimage_command_line,"\n");
+	strcat(bootimage_command_line,hwid_info);
+	strcat(bootimage_command_line,"\n");
+	//strcat(bootimage_command_line,ram_info);
+	//strcat(bootimage_command_line,"\n");		
+	strcat(bootimage_command_line,aboot_info);
+	strcat(bootimage_command_line,"\n");	
+	strcat(bootimage_command_line,emmc_info);
+	strcat(bootimage_command_line,"\n");
+	//strcat(bootimage_command_line,ACPU);
+	//strcat(bootimage_command_line,"\n");
+	strcat(bootimage_command_line,SB_info);
+	strcat(bootimage_command_line,"\n");
+	
+	printk("[BSP] %s\n", bootimage_command_line);
+
+	return 0;
+}
+__setup("eMMC=", set_emmc_info);
+//--- ASUS_BSP : Add for bootinfo
 
 /*
  * If set, this is an indication to the drivers that reset the underlying
@@ -662,14 +1060,23 @@ static int __init_or_module do_one_initcall_debug(initcall_t fn)
 	unsigned long long duration;
 	int ret;
 
-	printk(KERN_DEBUG "calling  %pF @ %i\n", fn, task_pid_nr(current));
+	if (initcall_debug)
+		printk(KERN_DEBUG "calling  %pF @ %i\n", fn, task_pid_nr(current));
 	calltime = ktime_get();
 	ret = fn();
 	rettime = ktime_get();
 	delta = ktime_sub(rettime, calltime);
 	duration = (unsigned long long) ktime_to_ns(delta) >> 10;
-	printk(KERN_DEBUG "initcall %pF returned %d after %lld usecs\n", fn,
-		ret, duration);
+	if (initcall_debug)
+		printk(KERN_DEBUG "initcall %pF returned %d after %lld usecs\n", fn,
+			ret, duration);
+
+	if (initcall_debug == false) {
+		if (duration > 100000)
+			printk(KERN_WARNING 
+				"[debuginit] initcall %pF returned %d after %lld usecs\n", fn,
+				ret, duration);
+	}
 
 	return ret;
 }
@@ -679,10 +1086,7 @@ int __init_or_module do_one_initcall(initcall_t fn)
 	int count = preempt_count();
 	int ret;
 
-	if (initcall_debug)
-		ret = do_one_initcall_debug(fn);
-	else
-		ret = fn();
+	ret = do_one_initcall_debug(fn);
 
 	msgbuf[0] = 0;
 

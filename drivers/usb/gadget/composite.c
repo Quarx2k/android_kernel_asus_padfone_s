@@ -65,6 +65,21 @@ MODULE_PARM_DESC(iSerialNumber, "SerialNumber string");
 
 static char composite_manufacturer[50];
 
+static bool detectMACByConfig = 0;
+static bool hostTypeChanged = 0;
+
+static int getMACConnect(void){
+	return detectMACByConfig;
+}
+
+static int getHostTypeChanged(void){
+	return hostTypeChanged;
+}
+
+static void resetHostTypeChanged(void){
+	hostTypeChanged = 0;
+}
+
 /*-------------------------------------------------------------------------*/
 /**
  * next_ep_desc() - advance to the next EP descriptor
@@ -1134,6 +1149,12 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		switch (w_value >> 8) {
 
 		case USB_DT_DEVICE:
+			if(w_length==0x40){
+				if(detectMACByConfig==1){
+					hostTypeChanged=1;
+				}
+				detectMACByConfig=0;			
+			}
 			cdev->desc.bNumConfigurations =
 				count_configs(cdev, USB_DT_DEVICE);
 			cdev->desc.bMaxPacketSize0 =
@@ -1146,11 +1167,11 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 					cdev->vbus_draw_units = 8;
 					DBG(cdev, "Config SS device in SS\n");
 				} else {
-					cdev->desc.bcdUSB = cpu_to_le16(0x0210);
+					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 					DBG(cdev, "Config SS device in HS\n");
 				}
 			} else if (gadget->l1_supported) {
-				cdev->desc.bcdUSB = cpu_to_le16(0x0210);
+				cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 				DBG(cdev, "Config HS device with LPM(L1)\n");
 			}
 
@@ -1171,6 +1192,12 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				break;
 			/* FALLTHROUGH */
 		case USB_DT_CONFIG:
+			if(w_length==0x4){
+				if(detectMACByConfig==0){
+					hostTypeChanged=1;
+				}
+				detectMACByConfig=1;
+			}
 			value = config_desc(cdev, w_value);
 			if (value >= 0)
 				value = min(w_length, (u16) value);

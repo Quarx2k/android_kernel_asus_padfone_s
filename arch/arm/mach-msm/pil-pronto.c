@@ -297,6 +297,7 @@ static void log_wcnss_sfr(void)
 	} else {
 		pr_err("wcnss subsystem failure reason: %.81s\n",
 				smem_reset_reason);
+		subsys_save_reason("wcnss", smem_reset_reason);/*ASUS-BBSP Save SSR reason+*/
 		memset(smem_reset_reason, 0, smem_reset_size);
 		wmb();
 	}

@@ -40,6 +40,14 @@ static inline u64 apply_fudge_factor(u64 val,
 		return fudge_factor(val, factor->numer, factor->denom);
 }
 
+//ASUS_BSP: Louis +++
+#ifdef CONFIG_ASUS_HDMI
+extern struct mdss_mdp_bus_client_quota mdp_bus_quota;
+extern int g_boost_bus_bw;
+#endif
+extern int MdpBoostUp;
+//ASUS_BSP: Louis ---
+
 static DEFINE_MUTEX(mdss_mdp_ctl_lock);
 
 static int mdss_mdp_mixer_free(struct mdss_mdp_mixer *mixer);
@@ -881,10 +889,64 @@ static inline void mdss_mdp_ctl_perf_update_bus(struct mdss_mdp_ctl *ctl)
 		&mdss_res->ab_factor);
 	trace_mdp_perf_update_bus(bus_ab_quota, bus_ib_quota);
 	ATRACE_INT("bus_quota", bus_ib_quota);
+
+	//ASUS_BSP: Louis +++
+#ifdef CONFIG_ASUS_HDMI
+	mdp_bus_quota.bus_ib_quota = bus_ib_quota;
+	mdp_bus_quota.bus_ab_quota = bus_ab_quota;
+	if (g_boost_bus_bw) {
+		bus_ab_quota = 6000000000UL;  //bus_ab_quota * 3 / 2;
+		bus_ib_quota = 6000000000UL;  //bus_ib_quota * 3 / 2;
+	}
+#endif
+	if (MdpBoostUp > 0) {
+		bus_ab_quota = 6000000000UL;
+		bus_ib_quota = 6000000000UL;
+	}
+
+	pr_debug("update bus_ab_quota(%llu), bus_ib_quota(%llu)\n", bus_ab_quota, bus_ib_quota);
+	//ASUS_BSP: Louis ---
+	
 	mdss_bus_scale_set_quota(MDSS_HW_MDP, bus_ab_quota, bus_ib_quota);
 	pr_debug("ab=%llu ib=%llu\n", bus_ab_quota, bus_ib_quota);
 	ATRACE_END(__func__);
 }
+
+//ASUS_BSP: Louis +++
+void asus_mdss_mdp_ctl_perf_update_bus(struct mdss_mdp_ctl *ctl)
+{
+	u64 bw_sum_of_intfs = 0;
+	u64 bus_ab_quota, bus_ib_quota;
+	struct mdss_data_type *mdata;
+	int i;
+
+	if (!ctl || !ctl->mdata)
+		return;
+	ATRACE_BEGIN(__func__);
+	mdata = ctl->mdata;
+	for (i = 0; i < mdata->nctl; i++) {
+		struct mdss_mdp_ctl *ctl;
+		ctl = mdata->ctl_off + i;
+		if (ctl->power_on) {
+			bw_sum_of_intfs += ctl->cur_perf.bw_ctl;
+			pr_debug("c=%d bw=%llu\n", ctl->num,
+				ctl->cur_perf.bw_ctl);
+		}
+	}
+	bus_ib_quota = bw_sum_of_intfs;
+	bus_ab_quota = apply_fudge_factor(bw_sum_of_intfs,
+		&mdss_res->ab_factor);
+	trace_mdp_perf_update_bus(bus_ab_quota, bus_ib_quota);
+	ATRACE_INT("bus_quota", bus_ib_quota);
+
+	printk("[Display] update bus_ab_quota(%llu), bus_ib_quota(%llu)\n", bus_ab_quota, bus_ib_quota);
+
+	mdss_bus_scale_set_quota(MDSS_HW_MDP, bus_ab_quota, bus_ib_quota);
+	pr_debug("ab=%llu ib=%llu\n", bus_ab_quota, bus_ib_quota);
+	ATRACE_END(__func__);
+}
+EXPORT_SYMBOL(asus_mdss_mdp_ctl_perf_update_bus);
+//ASUS_BSP: Louis ---
 
 /**
  * @mdss_mdp_ctl_perf_release_bw() - request zero bandwidth
@@ -1943,12 +2005,21 @@ void mdss_mdp_set_roi(struct mdss_mdp_ctl *ctl,
 	 * 1) dual DSI panels
 	 * 2) non-cmd mode panels
 	*/
-	if (!temp_roi.w || !temp_roi.h || ctl->mixer_right ||
-			(ctl->panel_data->panel_info.type != MIPI_CMD_PANEL) ||
-			!ctl->panel_data->panel_info.partial_update_enabled) {
-		temp_roi = (struct mdss_mdp_img_rect)
-				{0, 0, ctl->mixer_left->width,
-					ctl->mixer_left->height};
+	//Mickey+++, double check if panel data is null while system shuting-down
+	if (ctl->panel_data != NULL) {
+        if (!temp_roi.w || !temp_roi.h || ctl->mixer_right ||
+                (ctl->panel_data->panel_info.type != MIPI_CMD_PANEL) ||
+                !ctl->panel_data->panel_info.partial_update_enabled) {
+            temp_roi = (struct mdss_mdp_img_rect)
+                    {0, 0, ctl->mixer_left->width,
+                        ctl->mixer_left->height};
+        }
+	} else {
+	    if (!temp_roi.w || !temp_roi.h || ctl->mixer_right) {
+            temp_roi = (struct mdss_mdp_img_rect)
+                    {0, 0, ctl->mixer_left->width,
+                        ctl->mixer_left->height};
+	    }
 	}
 
 	ctl->roi_changed = 0;

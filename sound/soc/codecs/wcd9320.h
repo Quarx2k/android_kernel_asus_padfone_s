@@ -19,6 +19,7 @@
 #include "wcd9xxx-mbhc.h"
 #include "wcd9xxx-resmgr.h"
 #include "wcd9xxx-common.h"
+#include <linux/switch.h> // ASUS_BSP Paul +++
 
 #define TAIKO_NUM_REGISTERS 0x400
 #define TAIKO_MAX_REGISTER (TAIKO_NUM_REGISTERS-1)
@@ -39,6 +40,28 @@ struct taiko_codec_dai_data {
 	u32 ch_act;
 	u32 ch_tot;
 };
+
+// ASUS_BSP Paul +++
+struct gpio_switch_data {
+	struct switch_dev sdev;
+	unsigned gpio;
+	const char *name_on;
+	const char *name_off;
+	const char *state_on;
+	const char *state_off;
+	int irq;
+	struct work_struct work;
+};
+
+struct wcd9320_hs_struct {
+	int hs_path_en;
+	int hsmic_bias;
+	int button_gpio;
+	int jack_gpio;
+	int button_irq;
+	int jack_irq;
+};
+// ASUS_BSP Paul ---
 
 enum taiko_pid_current {
 	TAIKO_PID_MIC_2P5_UA,
@@ -154,5 +177,9 @@ extern void taiko_event_register(
 	int (*machine_event_cb)(struct snd_soc_codec *codec,
 				enum wcd9xxx_codec_event),
 	struct snd_soc_codec *codec);
+
+extern void ApplyA68SPKGain(void);  //Bruno++
+extern void ApplyHeadsetGain(void);  // ASUS_BSP Paul +++
+extern void Dump_wcd9320_reg(void);  //Bruno++
 
 #endif

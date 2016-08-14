@@ -346,7 +346,10 @@ struct mdss_panel_info {
 	u32 partial_update_enabled;
 	struct ion_handle *splash_ihdl;
 	u32 panel_power_on;
-
+    //ASUS_BSP: Louis+++
+	bool disable_pad_splash;
+    bool panel_sleep_mode;
+    //ASUS_BSP: Louis---
 	uint32_t panel_dead;
 	bool dynamic_switch_pending;
 	bool is_lpm_mode;

@@ -380,6 +380,17 @@ bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type);
 int mdss_dsi_panel_init(struct device_node *node,
 		struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 		bool cmd_cfg_cont_splash);
+		
+//ASUS_BSP: Louis +++
+#define LCD_ID_DETECT 26
+enum {
+    SHARP_DISP = 0,
+    INNOLUX_DISP,
+};
+
+int asus_set_brightness(struct mdss_dsi_ctrl_pdata *ctrl, int value);
+//ASUS_BSP: Louis ---
+
 int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
 				char *dst_format);
 
@@ -428,4 +439,5 @@ static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_ctrl_by_index(int ndx)
 
 	return ctrl_list[ndx];
 }
+
 #endif /* MDSS_DSI_H */

@@ -28,6 +28,9 @@
 #include <mach/scm.h>
 #include <mach/msm_memory_dump.h>
 
+#include <linux/asus_global.h>
+extern struct _asus_global asus_global;
+
 #define MODULE_NAME "msm_watchdog"
 #define WDT0_ACCSCSSNBARK_INT 0
 #define TCSR_WDT_CFG	0x30
@@ -42,6 +45,9 @@
 #define SCM_SVC_SEC_WDOG_DIS	0x7
 
 static struct workqueue_struct *wdog_wq;
+//ASUS  BSP Eason_Chang +++
+static struct msm_watchdog_data *wdog_dd_asus = NULL;
+//ASUS  BSP Eason_Chang ---
 
 struct msm_watchdog_data {
 	unsigned int __iomem phys_base;
@@ -273,7 +279,7 @@ static void ping_other_cpus(struct msm_watchdog_data *wdog_dd)
 	for_each_cpu(cpu, cpu_online_mask)
 		smp_call_function_single(cpu, keep_alive_response, wdog_dd, 1);
 }
-
+extern int watchdog_test; 
 static void pet_watchdog_work(struct work_struct *work)
 {
 	unsigned long delay_time;
@@ -281,6 +287,15 @@ static void pet_watchdog_work(struct work_struct *work)
 	struct msm_watchdog_data *wdog_dd = container_of(delayed_work,
 						struct msm_watchdog_data,
 							dogwork_struct);
+	if (watchdog_test){
+		printk("test watchdog function...\r\n");
+		printk("Wdog - STS: 0x%x, CTL: 0x%x, BARK TIME: 0x%x, BITE TIME: 0x%x",
+		__raw_readl(wdog_dd->base + WDT0_STS),
+		__raw_readl(wdog_dd->base + WDT0_EN),
+		__raw_readl(wdog_dd->base + WDT0_BARK_TIME),
+		__raw_readl(wdog_dd->base + WDT0_BITE_TIME));
+		return;
+	} 
 	delay_time = msecs_to_jiffies(wdog_dd->pet_time);
 	if (enable) {
 		if (wdog_dd->do_ipi_ping)
@@ -369,6 +384,8 @@ static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 	if (wdog_dd->scm_regsave) {
 		cmd_buf.addr = virt_to_phys(wdog_dd->scm_regsave);
 		cmd_buf.len  = PAGE_SIZE;
+		printk("scm_regsave = 0x%x,cmd_buf.addr = 0x%x\r\n",(unsigned int)wdog_dd->scm_regsave,(unsigned int)cmd_buf.addr);
+		asus_global.phycpucontextadd = cmd_buf.addr;
 		ret = scm_call(SCM_SVC_UTIL, SCM_SET_REGSAVE_CMD,
 					&cmd_buf, sizeof(cmd_buf), NULL, 0);
 		if (ret)
@@ -521,6 +538,15 @@ static int __devinit msm_wdog_dt_to_pdata(struct platform_device *pdev,
 	return 0;
 }
 
+//ASUS  BSP Eason_Chang +++
+void ASUS_pet_watchdog_v2(void)
+{
+	if (wdog_dd_asus->do_ipi_ping)
+		ping_other_cpus(wdog_dd_asus);
+	pet_watchdog(wdog_dd_asus);
+	printk("[WatchDogV2]\n");
+}
+//ASUS  BSP Eason_Chang ---
 static int __devinit msm_watchdog_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -535,6 +561,9 @@ static int __devinit msm_watchdog_probe(struct platform_device *pdev)
 	if (!pdev->dev.of_node || !enable)
 		return -ENODEV;
 	wdog_dd = kzalloc(sizeof(struct msm_watchdog_data), GFP_KERNEL);
+	//ASUS  BSP Eason_Chang +++
+	wdog_dd_asus = wdog_dd;
+	//ASUS  BSP Eason_Chang ---
 	if (!wdog_dd)
 		return -EIO;
 	ret = msm_wdog_dt_to_pdata(pdev, wdog_dd);

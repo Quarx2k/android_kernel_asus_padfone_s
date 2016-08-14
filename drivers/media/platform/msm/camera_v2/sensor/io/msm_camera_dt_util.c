@@ -16,7 +16,8 @@
 #include "msm_camera_i2c_mux.h"
 #include "msm_cci.h"
 
-/*#define CONFIG_MSM_CAMERA_DT_DEBUG*/
+//#define CONFIG_MSM_CAMERA_DT_DEBUG
+
 #undef CDBG
 #ifdef CONFIG_MSM_CAMERA_DT_DEBUG
 #define CDBG(fmt, args...) pr_err(fmt, ##args)
@@ -277,7 +278,9 @@ int msm_sensor_get_dt_actuator_data(struct device_node *of_node,
 	int rc = 0;
 	uint32_t val = 0;
 	struct msm_actuator_info *actuator_info;
-
+	printk("[Asus] msm_sensor_get_dt_actuator_data directly return here");
+	return rc; //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"  
+	
 	rc = of_property_read_u32(of_node, "qcom,actuator-cam-name", &val);
 	CDBG("%s qcom,actuator-cam-name %d, rc %d\n", __func__, val, rc);
 	if (rc < 0)
@@ -750,7 +753,8 @@ int msm_camera_init_gpio_pin_tbl(struct device_node *of_node,
 		CDBG("%s qcom,gpio-reset %d\n", __func__,
 			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_VDIG]);
 	}
-
+//ASUS_BSP +++ LiJen "[A86][Camera][NA][Others]Camera mini porting"
+#if 0 //LiJen: remove qualcomm defaul gpio pin
 	if (of_property_read_bool(of_node, "qcom,gpio-reset") == true) {
 		rc = of_property_read_u32(of_node, "qcom,gpio-reset", &val);
 		if (rc < 0) {
@@ -786,7 +790,140 @@ int msm_camera_init_gpio_pin_tbl(struct device_node *of_node,
 		CDBG("%s qcom,gpio-reset %d\n", __func__,
 			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_STANDBY]);
 	}
+#endif
+       // isp_1p2_en
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_1p2_en") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_1p2_en", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_1p2_en failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_1p2_en invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_1P2] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[SENSOR_GPIO_ISP_1P2] = 1;
+		CDBG("%s qcom,gpio-isp_1p2_en %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_1P2]);
+	}
+    
+       //isp_1p8_en
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_1p8_en") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_1p8_en", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_1p8_en failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_1p8_en invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_1P8] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[SENSOR_GPIO_ISP_1P8] = 1;
+		CDBG("%s qcom,gpio-isp_1p8_en %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_1P8]);
+	}
+    
+       //isp_int
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_int") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_int", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_int failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_int invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_INT] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[SENSOR_GPIO_ISP_INT] = 1;
+		CDBG("%s qcom,gpio-isp_int %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_INT]);
+	}
 
+       //isp_suspend
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_suspend") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_suspend", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_suspend failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_suspend invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_SUSPEND] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[SENSOR_GPIO_ISP_SUSPEND] = 1;
+		CDBG("%s qcom,gpio-isp_suspend %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_SUSPEND]);
+	}
+
+       //vga_mclk_en
+	if (of_property_read_bool(of_node, "qcom,gpio-vga_mclk_en") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-vga_mclk_en", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-reset failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-vga_mclk_en invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_VGA_MCLK] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[SENSOR_GPIO_VGA_MCLK] = 1;
+		CDBG("%s qcom,gpio-vga_mclk_en %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_VGA_MCLK]);
+	}
+
+       //fled_driver_ent
+	if (of_property_read_bool(of_node, "qcom,gpio-fled_driver_ent") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-fled_driver_ent", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-fled_driver_ent failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-fled_driver_ent invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_LED_ENT] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[SENSOR_GPIO_LED_ENT] = 1;
+		CDBG("%s qcom,gpio-fled_driver_ent %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_LED_ENT]);
+	}
+
+       //isp_reset
+	if (of_property_read_bool(of_node, "qcom,gpio-isp_reset") == true) {
+		rc = of_property_read_u32(of_node, "qcom,gpio-isp_reset", &val);
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-isp_reset failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-isp_reset invalid %d\n",
+				__func__, __LINE__, val);
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_RESET] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[SENSOR_GPIO_ISP_RESET] = 1;
+		CDBG("%s qcom,gpio-isp_reset %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[SENSOR_GPIO_ISP_RESET]);
+	}    
+//ASUS_BSP --- LiJen "[A86][Camera][NA][Others]Camera mini porting"
 	if (of_property_read_bool(of_node, "qcom,gpio-flash-en") == true) {
 		rc = of_property_read_u32(of_node, "qcom,gpio-flash-en", &val);
 		if (rc < 0) {

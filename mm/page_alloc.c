@@ -788,6 +788,7 @@ bool is_cma_pageblock(struct page *page)
 {
 	return get_pageblock_migratetype(page) == MIGRATE_CMA;
 }
+EXPORT_SYMBOL(is_cma_pageblock); //ASUS_BSP Deeo : add for SD Texura module +++
 
 /* Free whole pageblock and set it's migration type to MIGRATE_CMA. */
 void __init init_cma_reserved_pageblock(struct page *page)
@@ -5194,7 +5195,7 @@ static void setup_per_zone_lowmem_reserve(void)
 	/* update totalreserve_pages */
 	calculate_totalreserve_pages();
 }
-
+int first_boot = 0;
 static void __setup_per_zone_wmarks(void)
 {
 	unsigned long pages_min = min_free_kbytes >> (PAGE_SHIFT - 10);
@@ -5231,23 +5232,34 @@ static void __setup_per_zone_wmarks(void)
 			int min_pages;
 
 			min_pages = zone->present_pages / 1024;
+			printk("min_pages = %d,SWAP_CLUSTER_MAX = %d\r\n",min_pages,SWAP_CLUSTER_MAX);	
 			if (min_pages < SWAP_CLUSTER_MAX)
 				min_pages = SWAP_CLUSTER_MAX;
+
 			if (min_pages > 128)
 				min_pages = 128;
 			zone->watermark[WMARK_MIN] = min_pages;
+			printk("zone->watermark[WMARK_MIN]1 = %d\r\n",(unsigned int)zone->watermark[WMARK_MIN]);
 		} else {
 			/*
 			 * If it's a lowmem zone, reserve a number of pages
 			 * proportionate to the zone's size.
 			 */
-			zone->watermark[WMARK_MIN] = min;
+
+			if(first_boot == 0)
+			{
+				zone->watermark[WMARK_MIN] = min;
+				first_boot = 1;
+			}
+			printk("zone->watermark[WMARK_MIN]2 = %d\r\n",(unsigned int)zone->watermark[WMARK_MIN]);
 		}
 
 		zone->watermark[WMARK_LOW] = min_wmark_pages(zone) +
                                         low + (min >> 2);
-                zone->watermark[WMARK_HIGH] = min_wmark_pages(zone) +
+		zone->watermark[WMARK_HIGH] = min_wmark_pages(zone) +
                                         low + (min >> 1);
+ 		printk("zone->watermark[WMARK_LOW] = %d\r\n",(unsigned int)zone->watermark[WMARK_LOW]);
+		printk("zone->watermark[WMARK_HIGH] = %d\r\n",(unsigned int)zone->watermark[WMARK_HIGH]);
 
 		setup_zone_migrate_reserve(zone);
 		spin_unlock_irqrestore(&zone->lock, flags);

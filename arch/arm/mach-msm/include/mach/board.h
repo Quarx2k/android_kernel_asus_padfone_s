@@ -187,11 +187,12 @@ struct msm_gpio_set_tbl {
 	unsigned long flags;
 	uint32_t delay;
 };
-
+//ASUS_BSP: Darrency_lin ++ camera mini porting
 struct msm_camera_gpio_num_info {
-	uint16_t gpio_num[10];
-	uint8_t valid[10];
+	uint16_t gpio_num[20];
+	uint8_t valid[20];
 };
+//ASUS_BSP: Darrency_lin -- camera mini porting
 
 struct msm_camera_gpio_conf {
 	void *cam_gpiomux_conf_tbl;

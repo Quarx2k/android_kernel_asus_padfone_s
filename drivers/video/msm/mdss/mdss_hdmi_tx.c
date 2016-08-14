@@ -22,7 +22,10 @@
 #include <linux/types.h>
 #include <linux/msm_hdmi.h>
 #include <mach/msm_hdmi_audio_codec.h>
-
+//ASUS bsp wei +++
+#include <linux/wakelock.h>  
+#include <linux/timer.h>
+//ASUS bsp wei ---
 #define REG_DUMP 0
 
 #include "mdss_debug.h"
@@ -34,11 +37,13 @@
 #include "mdss.h"
 #include "mdss_panel.h"
 #include "mdss_hdmi_mhl.h"
-
+//ASUS BSP wei +++
+#include <linux/of_irq.h>
+//ASUS BSP wei ---
 #define DRV_NAME "hdmi-tx"
 #define COMPATIBLE_NAME "qcom,hdmi-tx"
 
-#define DEFAULT_VIDEO_RESOLUTION HDMI_VFRMT_640x480p60_4_3
+#define DEFAULT_VIDEO_RESOLUTION HDMI_VFRMT_1920x1200p60_16_10 //HDMI_VFRMT_640x480p60_4_3 //ASUS_BSP:joe1_++change 1920x1200 as default resolution
 
 /* HDMI PHY/PLL bit field macros */
 #define SW_RESET BIT(2)
@@ -129,6 +134,12 @@ static inline void hdmi_tx_set_audio_switch_node(struct hdmi_tx_ctrl *hdmi_ctrl,
 	int val, bool force);
 static int hdmi_tx_audio_setup(struct hdmi_tx_ctrl *hdmi_ctrl);
 static void hdmi_tx_en_encryption(struct hdmi_tx_ctrl *hdmi_ctrl, u32 on);
+
+//ASUS_BSP: Louis +++
+#define MAX_FBI_LIST 32
+extern struct fb_info *asus_fbi_list[MAX_FBI_LIST];
+extern void mdss_mdp_pp_argc_setup(struct msm_fb_data_type *mfd, bool bOn);
+//ASUS_BSP: Louis ---
 
 struct mdss_hw hdmi_tx_hw = {
 	.hw_ndx = MDSS_HW_HDMI,
@@ -232,6 +243,138 @@ static const struct hdmi_tx_audio_acr_arry hdmi_tx_audio_acr_lut[] = {
 		{9408, 247500}, {10240, 247500}, {18816, 247500},
 		{20480, 247500} } },
 };
+//Mickey+++, wait for boot complete if we don't boot in pad
+#ifdef CONFIG_ASUS_HDMI
+extern bool g_Android_Boot_Complete;
+struct completion android_boot_completion;
+spinlock_t boot_complete_lock;
+
+bool wait_for_android_boot_complete(void)
+{
+    bool needWait = false;
+
+    spin_lock(&boot_complete_lock);
+    if (!g_Android_Boot_Complete) {
+        needWait = true;
+        INIT_COMPLETION(android_boot_completion);
+    }
+    spin_unlock(&boot_complete_lock);
+
+    if (needWait)
+        wait_for_completion_interruptible_timeout(
+				&android_boot_completion, 60*HZ);
+    return needWait;
+}
+EXPORT_SYMBOL(wait_for_android_boot_complete);
+#endif
+//Mickey---
+
+//ASUS_BSP: Louis ++
+#include "mdss_mdp.h"
+static struct work_struct mdp_bus_ctl_work;
+struct timer_list mdp_bus_ctl_timer;
+struct mdss_mdp_bus_client_quota mdp_bus_quota;
+int g_boost_bus_bw = 0;
+
+int display_commit_cnt = 0;
+#ifdef CONFIG_ASUS_HDMI
+extern int g_padfone_state;
+#endif
+//ASUS_BSP: Louis --
+
+//ASUS_BSP: joe1_++: for Pad detection
+#ifdef CONFIG_EEPROM_NUVOTON
+extern void notify_microp_hdmi_insert(void);
+extern void notify_microp_hdmi_remove(int virtual);
+extern int AX_IsPadUsing_MHL_H(void);
+#endif
+int g_p06State = ASUS_P06_NONE;
+bool g_p06Exist = false;
+static int gPadstate = 0; //Rice
+
+//ASUS_BSP: joe1_++
+#define DEBOUNCE_TIME_MS 3 //ms
+bool g_bIsPadDetectDebounce = false;
+struct timer_list pad_detect_debounce_timer;
+int g_pad_detect_val_debounce = 0;
+int padIRQ = 0;
+
+static void pad_detect_debounce(unsigned long data)
+{
+	printk("[joe1] %s: ++\n", __func__);
+
+	del_timer(&pad_detect_debounce_timer);
+
+	enable_irq(padIRQ);
+
+	g_bIsPadDetectDebounce = false;
+	
+	printk("[joe1] %s: --g_bIsPadDetectDebounce=%d; enable_irq(padIRQ);\n", __func__, g_bIsPadDetectDebounce);
+}
+//ASUS_BSP: joe1_--
+
+bool asus_padstation_exist(void) {return g_p06Exist;}
+EXPORT_SYMBOL(asus_padstation_exist);
+bool asus_padstation_exist_realtime(void)
+{
+	if ( g_bIsPadDetectDebounce )
+	{
+		g_p06Exist = g_pad_detect_val_debounce;
+	}
+	else
+	{
+		g_p06Exist = gpio_get_value(ASUS_P06_STATUS_GPIO); //gpio_get_value_cansleep(ASUS_P06_STATUS_GPIO);
+	}
+
+//	printk("[joe1] %s: --g_p06Exist=%d; g_bIsPadDetectDebounce=%d\n", __func__, g_p06Exist, g_bIsPadDetectDebounce);
+
+	return g_p06Exist;
+}
+EXPORT_SYMBOL(asus_padstation_exist_realtime);
+//ASUS_BSP: joe1_--: for Pad detection
+
+//ASUS_BSP: joe1_++: for hpd re-check
+struct hdmi_tx_ctrl *g_hdmi_ctrl = NULL;
+
+void hdmi_hpd_state_recheck(void)
+{
+	struct dss_io_data *io = NULL;
+
+	io = &g_hdmi_ctrl->pdata.io[HDMI_TX_CORE_IO];
+	if (!io->base) {
+		DEV_WARN("%s: core io not initialized, ISR ignored\n", __func__);
+		return ;
+	}
+
+	if(g_hdmi_ctrl->hpd_feature_on){
+		printk("%s:HDMI_HPD_INT_STATUS = 0x%x\n", __func__, (int)(DSS_REG_R(io, HDMI_HPD_INT_STATUS)));
+//	printk("%s:HDMI_HPD_INT_STATUS_bit 0 = %d\n", __func__, (int)(DSS_REG_R(io, HDMI_HPD_INT_STATUS) & BIT(0)));
+//	printk("%s:HDMI_HPD_INT_STATUS_bit 1 = %d\n", __func__, (int)(DSS_REG_R(io, HDMI_HPD_INT_STATUS) & BIT(1)) >> 1);
+		printk("%s:HDMI_HPD_INT_CTRL = 0x%x\n", __func__, (int)(DSS_REG_R(io, HDMI_HPD_INT_CTRL)));
+		printk("%s:HDMI_HPD_CTRL = 0x%x\n", __func__, (int)(DSS_REG_R(io, HDMI_HPD_CTRL)));
+		if (DSS_REG_R(io, HDMI_HPD_INT_STATUS) & BIT(0)) {
+			g_hdmi_ctrl->hpd_state =	(DSS_REG_R(io, HDMI_HPD_INT_STATUS) & BIT(1)) >> 1;
+
+			/*
+			 * Ack the current hpd interrupt and stop listening to
+			 * new hpd interrupt.
+			 */
+			DSS_REG_W(io, HDMI_HPD_INT_CTRL, BIT(0));
+			queue_work(g_hdmi_ctrl->workq, &g_hdmi_ctrl->hpd_int_work);
+			printk("%s: hpd INT is triggered.\n", __func__);
+		}
+		else
+		{
+		printk("%s: hpd INT is not detected.\n", __func__);
+		}
+	}
+
+}
+EXPORT_SYMBOL(hdmi_hpd_state_recheck);
+//ASUS_BSP: joe1_--: for hpd re-check
+
+static int hdmi_tx_power_on(struct mdss_panel_data *panel_data);
+static int hdmi_tx_power_off(struct mdss_panel_data *panel_data);
 
 int register_hdmi_cable_notification(struct hdmi_cable_notify *handler)
 {
@@ -281,7 +424,7 @@ int unregister_hdmi_cable_notification(struct hdmi_cable_notify *handler)
 
 	return 0;
 } /* unregister_hdmi_cable_notification */
-
+#if 0
 static void hdmi_tx_cable_notify_work(struct work_struct *work)
 {
 	struct hdmi_tx_ctrl *hdmi_ctrl = NULL;
@@ -303,7 +446,7 @@ static void hdmi_tx_cable_notify_work(struct work_struct *work)
 	}
 	mutex_unlock(&hdmi_ctrl->cable_notify_mutex);
 } /* hdmi_tx_cable_notify_work */
-
+#endif
 static bool hdmi_tx_is_cea_format(int mode)
 {
 	bool cea_fmt;
@@ -316,6 +459,53 @@ static bool hdmi_tx_is_cea_format(int mode)
 	DEV_DBG("%s: %s\n", __func__, cea_fmt ? "Yes" : "No");
 
 	return cea_fmt;
+}
+
+//ASUS BSP Wei +++
+struct timer_list hpd_timer;
+ktime_t  plugin_starttime;
+int measure_pad_plugin_time=0;
+int pad_insert=0;
+//ASUS BSP Wei ---
+extern int hdcp_fail_count;
+irqreturn_t pad_detect_isr(int irq, void *data)
+{
+//ASUS_BSP: joe1_++
+	g_pad_detect_val_debounce = gpio_get_value(ASUS_P06_STATUS_GPIO);
+
+//	disable_irq(padIRQ);
+	if(!g_bIsPadDetectDebounce){
+		printk("%s:======Disable PadIRQ ======\n",__func__);
+		disable_irq_nosync(padIRQ);
+	}
+//ASUS_BSP: joe1_--
+
+    //if (g_p03State != ASUS_P03_NONE)
+      wake_lock_timeout(&g_hdmi_ctrl->hpd_wake_lock,msecs_to_jiffies(5000));
+	printk("HDMI: hpd_wake_lock, 5*HZ  P05_GPIO_vaule:%d; %d\n",gpio_get_value(ASUS_P06_STATUS_GPIO), g_pad_detect_val_debounce);
+	if(hdcp_fail_count > 3)
+			hdcp_feature_on=false;
+//ASUS BSP Wei +++
+	if( g_pad_detect_val_debounce ){ //ASUS_BSP: joe1_++
+		plugin_starttime = ktime_get();
+		measure_pad_plugin_time=1;
+		pad_insert=1;
+	}else{
+		pad_insert=0;
+	}
+//ASUS BSP Wei ---
+
+	queue_work(g_hdmi_ctrl->workq, &g_hdmi_ctrl->hpd_recheck_work);
+
+//ASUS_BSP: joe1_++
+	g_bIsPadDetectDebounce = true;
+
+	mod_timer(&pad_detect_debounce_timer, jiffies + (DEBOUNCE_TIME_MS * (HZ/100)) );
+
+	printk("[joe1] %s: --DEBOUNCE_TIME_MS=%d; g_bIsPadDetectDebounce=%d\n", __func__, DEBOUNCE_TIME_MS, g_bIsPadDetectDebounce);
+//ASUS_BSP: joe1_--
+
+    return IRQ_HANDLED;
 }
 
 const char *hdmi_tx_pm_name(enum hdmi_tx_power_module_type module)
@@ -411,7 +601,7 @@ static inline void hdmi_tx_send_cable_notification(
 		switch_set_state(&hdmi_ctrl->sdev, val);
 
 	/* Notify all registered modules of cable connection status */
-	schedule_work(&hdmi_ctrl->cable_notify_work);
+	/*schedule_work(&hdmi_ctrl->cable_notify_work);*/
 } /* hdmi_tx_send_cable_notification */
 
 static inline u32 hdmi_tx_is_dvi_mode(struct hdmi_tx_ctrl *hdmi_ctrl)
@@ -584,7 +774,7 @@ static ssize_t hdmi_tx_sysfs_wta_hpd(struct device *dev,
 			hdmi_ctrl->hpd_disabled = true;
 
 		if (!hdmi_ctrl->hpd_feature_on) {
-			DEV_DBG("%s: HPD is already off\n", __func__);
+			DEV_INFO("%s: HPD is already off\n", __func__);
 			return ret;
 		}
 
@@ -600,7 +790,7 @@ static ssize_t hdmi_tx_sysfs_wta_hpd(struct device *dev,
 		}
 
 		hdmi_tx_send_cable_notification(hdmi_ctrl, 0);
-		DEV_DBG("%s: Hdmi state switch to %d\n", __func__,
+		DEV_INFO("%s: Hdmi state switch to %d\n", __func__,
 			hdmi_ctrl->sdev.state);
 		break;
 	case HPD_ON:
@@ -617,7 +807,7 @@ static ssize_t hdmi_tx_sysfs_wta_hpd(struct device *dev,
 		}
 
 		if (hdmi_ctrl->hpd_feature_on) {
-			DEV_DBG("%s: HPD is already on\n", __func__);
+			DEV_INFO("%s: HPD is already on\n", __func__);
 			return ret;
 		}
 
@@ -637,7 +827,7 @@ static ssize_t hdmi_tx_sysfs_wta_hpd(struct device *dev,
 		}
 
 		if (hdmi_ctrl->hpd_feature_on) {
-			DEV_DBG("%s: HPD is already on\n", __func__);
+			DEV_INFO("%s: HPD is already on\n", __func__);
 			return ret;
 		}
 
@@ -656,7 +846,7 @@ static ssize_t hdmi_tx_sysfs_wta_hpd(struct device *dev,
 	if (!rc) {
 		hdmi_ctrl->hpd_feature_on =
 			(~hdmi_ctrl->hpd_feature_on) & BIT(0);
-		DEV_DBG("%s: '%d'\n", __func__, hdmi_ctrl->hpd_feature_on);
+		DEV_INFO("%s: '%d'\n", __func__, hdmi_ctrl->hpd_feature_on);
 	} else {
 		DEV_ERR("%s: failed to '%s' hpd. rc = %d\n", __func__,
 			hpd ? "enable" : "disable", rc);
@@ -783,6 +973,194 @@ static ssize_t hdmi_tx_sysfs_rda_product_description(struct device *dev,
 	return ret;
 } /* hdmi_tx_sysfs_rda_product_description */
 
+
+//ASUS_BSP: joe1_++: simulate pad plug in/out
+//static int hdmi_tx_read_sink_info(struct hdmi_tx_ctrl *hdmi_ctrl);
+//static inline void hdmi_tx_send_cable_notification(struct hdmi_tx_ctrl *hdmi_ctrl, int val);
+
+#include <linux/rtc.h>
+
+static mm_segment_t oldfs;
+
+static void initKernelEnv(void)
+{
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+}
+
+static void deinitKernelEnv(void)
+{
+    set_fs(oldfs);
+}
+
+static void padstation_switch(bool connect)
+{
+	if (connect)
+	{
+#ifdef CONFIG_EEPROM_NUVOTON
+		notify_microp_hdmi_insert();
+#endif
+
+//		hdmi_tx_read_sink_info(hdmi_ctrl);
+//		hdmi_tx_send_cable_notification(hdmi_ctrl, 1);
+//		DEV_INFO("%s: sense cable CONNECTED: state switch to %d\n", __func__, hdmi_ctrl->sdev.state);
+		DEV_INFO("%s: CONNECTED\n", __func__);
+	}
+	else
+	{
+#ifdef CONFIG_EEPROM_NUVOTON
+		notify_microp_hdmi_remove(0);
+#endif
+
+//		hdmi_tx_send_cable_notification(hdmi_ctrl, 0);
+//		DEV_INFO("%s: sense cable DISCONNECTED: state switch to %d\n", __func__, hdmi_ctrl->sdev.state);
+		DEV_INFO("%s: DISCONNECTED\n", __func__);
+	}
+}
+
+static ssize_t hdmi_tx_sysfs_wta_padswitch(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int connect, rc = 0;
+	ssize_t ret = strnlen(buf, PAGE_SIZE);
+	struct hdmi_tx_ctrl *hdmi_ctrl = NULL;
+
+	DEV_DBG("%s:\n", __func__);
+	hdmi_ctrl = hdmi_tx_get_drvdata_from_sysfs_dev(dev);
+
+	if (!hdmi_ctrl)
+	{
+		DEV_ERR("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	rc = kstrtoint(buf, 10, &connect);
+	if (rc)
+	{
+		DEV_ERR("%s: kstrtoint failed. rc=%d\n", __func__, rc);
+		return rc;
+	}
+
+	initKernelEnv();
+
+	if (connect == 1)
+		padstation_switch(true);
+	else if (connect == 0)
+		padstation_switch(false);
+
+	deinitKernelEnv();
+
+	return ret;
+}
+//ASUS_BSP: joe1_--: simulate pad plug in/out
+
+
+//ASUS_BSP: joe1_++: hdmi power on/off
+static ssize_t hdmi_tx_sysfs_wta_hdmipower(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int connect, rc = 0;
+	ssize_t ret = strnlen(buf, PAGE_SIZE);
+	struct hdmi_tx_ctrl *hdmi_ctrl = NULL;
+
+	DEV_DBG("%s:\n", __func__);
+	hdmi_ctrl = hdmi_tx_get_drvdata_from_sysfs_dev(dev);
+
+	if (!hdmi_ctrl)
+	{
+		DEV_ERR("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	rc = kstrtoint(buf, 10, &connect);
+	if (rc)
+	{
+		DEV_ERR("%s: kstrtoint failed. rc=%d\n", __func__, rc);
+		return rc;
+	}
+
+	initKernelEnv();
+
+	if (connect == 1)
+		hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_DDC_PM, 1);
+	//	hdmi_tx_power_on( &(hdmi_ctrl->panel_data) );
+	else if (connect == 0)
+		hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_DDC_PM, 0);
+	//		hdmi_tx_power_off( &(hdmi_ctrl->panel_data) );
+
+	deinitKernelEnv();
+
+	return ret;
+}
+//ASUS_BSP: joe1_--: hdmi power on/off
+
+//ASUS BSP Wei +++
+
+void ASUS_HDMI_power_on(struct platform_device *pdev,int enable){
+	
+	struct hdmi_tx_ctrl *hdmi_ctrl = platform_get_drvdata(pdev);
+	printk("%s:++++++++++++++++ %d\n",__func__,enable);
+	if(enable==0)
+		hdmi_tx_power_off(&(hdmi_ctrl->panel_data));
+	else {
+		int rc=0;
+		mutex_lock(&hdmi_ctrl->asus_power_mutex);
+        if (hdmi_ctrl->hdcp_feature_on && hdmi_ctrl->present_hdcp) {
+            printk("[Display] %s: Turning off HDCP\n", __func__);
+            hdmi_hdcp_off(
+                hdmi_ctrl->feature_data[HDMI_TX_FEAT_HDCP]);
+        }
+		if(!(hdmi_ctrl->panel_power_on)){
+			printk("%s:++++++++++++++++\n",__func__);
+			if(hdcp_fail_count > 3){
+				hdcp_feature_on=false;
+				printk("%s: HDMI HDCP fail over 3 time disable HDCP\n",__func__);
+			}
+			if (hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_DDC_PM, true))
+				DEV_WARN("%s: Failed to disable ddc power\n", __func__);
+			hdmi_tx_power_on( &(hdmi_ctrl->panel_data) );
+			
+			if(hdcp_fail_count <= 3){
+			rc = hdmi_hdcp_authenticate(
+					hdmi_ctrl->feature_data[HDMI_TX_FEAT_HDCP]);
+			if (rc)
+				DEV_ERR("%s: hdcp auth failed. rc=%d\n",
+					__func__, rc);
+			}
+		}
+		mutex_unlock(&hdmi_ctrl->asus_power_mutex);
+	}
+}
+//ASUS BSP Wei ---
+
+//ASUS_BSP: joe1_++: distinguish TV or Pad mode
+static ssize_t hdmi_tx_sysfs_rda_type(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	int hdmiType = 0;
+
+	DEV_DBG("%s: g_p06State= '%d'\n", __func__, g_p06State);
+
+	if ( g_p06State == ASUS_P06_HIGH )
+	{
+		hdmiType = HDMI_TYPE_PAD;
+	}
+	else
+	{
+		hdmiType = HDMI_TYPE_TV;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", hdmiType);
+
+	DEV_DBG("%s: hdmiType= '%d'\n", __func__, hdmiType);
+
+	return ret;
+}
+
+static DEVICE_ATTR(type, S_IRUGO, hdmi_tx_sysfs_rda_type, NULL);
+//ASUS_BSP: joe1_--: distinguish TV or Pad mode
+static DEVICE_ATTR(padswitch, S_IRUGO | S_IWUSR, NULL, hdmi_tx_sysfs_wta_padswitch); //ASUS_BSP: joe1_++: simulate pad plug in/out
+static DEVICE_ATTR(hdmipower, S_IRUGO | S_IWUSR, NULL, hdmi_tx_sysfs_wta_hdmipower); //ASUS_BSP: joe1_++: hdmi power on/off
+
+
 static ssize_t hdmi_tx_sysfs_wta_avi_itc(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -880,6 +1258,9 @@ static struct attribute *hdmi_tx_fs_attrs[] = {
 	&dev_attr_product_description.attr,
 	&dev_attr_avi_itc.attr,
 	&dev_attr_avi_cn0_1.attr,
+	&dev_attr_type.attr, //ASUS_BSP: joe1_++: distinguish TV or Pad mode
+	&dev_attr_padswitch.attr, //ASUS_BSP: joe1_++: simulate pad plug in/out
+	&dev_attr_hdmipower.attr, //ASUS_BSP: joe1_++: hdmi power on/off
 	NULL,
 };
 static struct attribute_group hdmi_tx_fs_attrs_group = {
@@ -929,11 +1310,49 @@ static inline void hdmi_tx_set_audio_switch_node(struct hdmi_tx_ctrl *hdmi_ctrl,
 
 	if (!hdmi_tx_is_dvi_mode(hdmi_ctrl) &&
 		(force || (hdmi_ctrl->audio_sdev.state != val))) {
-		switch_set_state(&hdmi_ctrl->audio_sdev, val);
+        if (gPadstate == 2) {
+            switch_set_state(&hdmi_ctrl->audio_sdev, 2);
+        } else {
+		    switch_set_state(&hdmi_ctrl->audio_sdev, val);
+        }
 		DEV_INFO("%s: hdmi_audio state switched to %d\n", __func__,
 			hdmi_ctrl->audio_sdev.state);
 	}
 } /* hdmi_tx_set_audio_switch_node */
+
+bool g_bUnattendedUnplug = false; //ASUS_BSP: joe1_++: fix: HPD cannot work anymore while removing device from PAD and it's just at resuming status.
+
+static void recheck_HPD_state(unsigned long i){
+	printk("HDMI: insert recheck HPD state\n");
+	if (g_p06State != ASUS_P06_NONE) {
+			    if (gpio_get_value(34)==0) {
+			        g_hdmi_ctrl->hpd_state = 0;
+
+                             g_bUnattendedUnplug = true; //ASUS_BSP: joe1_++: fix: HPD cannot work anymore while removing device from PAD and it's just at resuming status.
+
+			        printk("hdmi disconnect during unattended mode\n");
+			        queue_work(g_hdmi_ctrl->workq, &g_hdmi_ctrl->hpd_int_work);
+                    		//gPadstate = 0;
+			     //   hdmi_tx_set_audio_switch_node(g_hdmi_ctrl, 0, true);//Mickey+++
+		}
+	}
+}
+
+//ASUS_BSP: Louis +++
+static void restore_mdp_bus_bw(unsigned long i) {
+    g_boost_bus_bw = 0;
+    schedule_work(&mdp_bus_ctl_work);
+}
+
+static void mdss_mdp_bw_adj_work(struct work_struct *work)
+{
+    if (!g_boost_bus_bw) {
+        printk("MDP: Stop boost bus BW\n");
+        mdss_mdp_bus_scale_set_quota(mdp_bus_quota.bus_ab_quota, mdp_bus_quota.bus_ib_quota);
+    }
+}
+//ASUS_BSP: Louis ---
+
 
 static int hdmi_tx_config_avmute(struct hdmi_tx_ctrl *hdmi_ctrl, int set)
 {
@@ -987,18 +1406,27 @@ void hdmi_tx_hdcp_cb(void *ptr, enum hdmi_hdcp_state status)
 			else
 				/* Clear AV Mute */
 				rc = hdmi_tx_config_avmute(hdmi_ctrl, 0);
+				if (rc)
+				DEV_ERR("%s: Failed to clear av mute. rc=%d\n",
+					__func__, rc);
 			hdmi_tx_set_audio_switch_node(hdmi_ctrl, 1, false);
 		}
 		break;
 	case HDCP_STATE_AUTH_FAIL:
-		hdmi_tx_set_audio_switch_node(hdmi_ctrl, 0, false);
-
+		  if (gPadstate == 2) 
+			hdmi_tx_set_audio_switch_node(hdmi_ctrl, 2, false);
+		  else 
+			hdmi_tx_set_audio_switch_node(hdmi_ctrl, 0, false);
+		  
 		if (hdmi_ctrl->hpd_state) {
 			if (hdmi_ctrl->pdata.primary)
 				hdmi_tx_en_encryption(hdmi_ctrl, false);
 			else
 				/* Set AV Mute */
 				rc = hdmi_tx_config_avmute(hdmi_ctrl, 1);
+				if (rc)
+				DEV_ERR("%s: Failed to set av mute. rc=%d\n",
+					__func__, rc);
 
 			DEV_DBG("%s: Reauthenticating\n", __func__);
 			rc = hdmi_hdcp_reauthenticate(
@@ -1178,20 +1606,119 @@ error:
 	return status;
 } /* hdmi_tx_read_sink_info */
 
+static u32 previous_state = false; //ASUS_BSP: joe1_++: filter the hpd state
+static bool skipStateCheck = false; //Mickey+++, we force to handle HPD int while HPD state changed
+#ifdef CONFIG_SLIMPORT_ANX7808
+extern int resume_trigger;
+extern int Is_HDMI_power_off;
+#endif
+
+static void hdmi_tx_hpd_recheck_work(struct work_struct * work){
+
+	if(gpio_get_value(ASUS_P06_STATUS_GPIO)==0){
+		printk("HDMI: add hpd check timer\n");
+#ifdef CONFIG_SLIMPORT_ANX7808
+		resume_trigger=0;
+		Is_HDMI_power_off=0;
+#endif
+		mod_timer(&hpd_timer,jiffies + HZ);
+	}else if(gpio_get_value(ASUS_P06_STATUS_GPIO)==1){
+		printk("HDMI: del hpd check timer\n");
+		del_timer(&hpd_timer);
+	}
+
+}
+
+//+++ ASUS BSP Bernard, check for VGA & DP cable
+#ifdef CONFIG_SLIMPORT_ANX7808
+enum RX_CBL_TYPE {
+	RX_HDMI = 0x01,
+	RX_DP = 0x02,
+	RX_VGA = 0x03,
+	RX_NULL = 0x00
+};
+bool myDP_VGA_Cable = false;
+extern int myDP_cable_type(void);
+#endif
+//--- ASUS BSP Bernard, check for VGA & DP cable
+
+//ASUS BSP Wei +++
+/*extern void qpnp_led_close_pad_led(void);*/
+static void hdmi_tx_microp_insert_work(struct work_struct * work){
+#ifdef CONFIG_EEPROM_NUVOTON
+         notify_microp_hdmi_insert();
+#endif
+#ifdef CONFIG_ASUS_HDMI
+	 if (g_Pad_Bootup && !g_Android_Boot_Complete){ 
+	   	 wait_for_android_boot_complete();
+		 /*qpnp_led_close_pad_led();*/
+	 }
+#endif
+}
+//ASUS BSP Wei ---
+
 static void hdmi_tx_hpd_int_work(struct work_struct *work)
 {
 	struct hdmi_tx_ctrl *hdmi_ctrl = NULL;
 	struct dss_io_data *io;
+	//ASUS_BSP: Louis ++
+	struct msm_fb_data_type *mfd = NULL;
+	struct fb_info *fbi;
+	//ASUS_BSP: Louis --
 
 	hdmi_ctrl = container_of(work, struct hdmi_tx_ctrl, hpd_int_work);
 	if (!hdmi_ctrl || !hdmi_ctrl->hpd_initialized) {
-		DEV_DBG("%s: invalid input\n", __func__);
+		DEV_INFO("%s: invalid input\n", __func__);
 		return;
 	}
 	io = &hdmi_ctrl->pdata.io[HDMI_TX_CORE_IO];
-	DEV_DBG("%s: Got HPD interrupt\n", __func__);
+	DEV_INFO("%s: Got HPD interrupt  hpd_state: %d\n", __func__,hdmi_ctrl->hpd_state);//Mickey+++
+
+	//Mickey+++, wait for boot complete if we don't boot in pad
+#ifdef CONFIG_ASUS_HDMI
+	if (!g_Pad_Bootup && !g_Android_Boot_Complete) {
+        wait_for_android_boot_complete();
+        printk("[HDMI] Didn't boot up from PAD and android boot completed\n");
+	}
+#endif
+	//Mickey---
 
 	if (hdmi_ctrl->hpd_state) {
+        //ASUS_BSP: Louis ++
+        g_boost_bus_bw = 0;
+        del_timer(&mdp_bus_ctl_timer);
+        //ASUS_BSP: Louis --
+
+//+++ ASUS BSP Bernard, check for VGA cable
+#ifdef CONFIG_SLIMPORT_ANX7808
+      if (myDP_cable_type() == RX_VGA)
+      	{
+      		myDP_VGA_Cable = true;
+      	}
+	else
+	{
+      		myDP_VGA_Cable = false;	
+	}
+#endif
+//--- ASUS BSP Bernard, check for VGA cable
+
+//ASUS_BSP: joe1_++: for Pad detection
+		if (asus_padstation_exist_realtime()) {
+			g_p06State = ASUS_P06_HIGH;
+		    gPadstate = 2;//DEVICE_OUT_DGTL_DOCK_HEADSET
+#ifdef CONFIG_ASUS_HDMI
+            g_padfone_state = HDMI_TYPE_PAD;    //Louis
+ #endif
+		} else {
+			g_p06State = ASUS_P06_NONE;
+		    gPadstate = 1; //DEVICE_OUT_AUX_DIGITAL
+#ifdef CONFIG_ASUS_HDMI
+            g_padfone_state = HDMI_TYPE_TV;     //Louis
+ #endif
+		}
+
+
+//ASUS_BSP: joe1_--: for Pad detection
 		if (hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_DDC_PM, true)) {
 			DEV_ERR("%s: Failed to enable ddc power\n", __func__);
 			return;
@@ -1201,10 +1728,69 @@ static void hdmi_tx_hpd_int_work(struct work_struct *work)
 			DSS_REG_R(io, HDMI_DDC_ARBITRATION) & ~(BIT(4)));
 
 		hdmi_tx_read_sink_info(hdmi_ctrl);
-		hdmi_tx_send_cable_notification(hdmi_ctrl, 1);
-		DEV_INFO("%s: sense cable CONNECTED: state switch to %d\n",
-			__func__, hdmi_ctrl->sdev.state);
+//ASUS_BSP: joe1_++: filter the hpd state
+#if 1
+		if (hdmi_ctrl->hpd_state == previous_state && !skipStateCheck){
+	        //Mickey+++, enable HPD interrupt to avoid missing HPD
+       		 struct dss_io_data *io = NULL;
+		        io = &hdmi_ctrl->pdata.io[HDMI_TX_CORE_IO];
+		        if (!io->base) {
+		            DEV_WARN("%s: core io not initialized, ISR ignored\n",
+		                __func__);
+		            return;
+		        }
+		        DSS_REG_W(io, HDMI_HPD_INT_CTRL, BIT(2));
+		        if (!completion_done(&hdmi_ctrl->hpd_int_done))
+		            complete_all(&hdmi_ctrl->hpd_int_done);
+		        //Mickey---
+				printk("%s: previous_state=%d, hdmi_ctrl->hpd_state=%d\n", __func__, previous_state, hdmi_ctrl->hpd_state);
+				//return;
+			}else {
+				if (g_p06State == ASUS_P06_HIGH)
+				{
+					queue_work(hdmi_ctrl->micropWorkq, &hdmi_ctrl->microp_hdmi_work);
+				}
+				hdmi_tx_send_cable_notification(hdmi_ctrl, 1);
+				DEV_INFO("%s: sense cable CONNECTED: state switch to %d\n",
+					__func__, hdmi_ctrl->sdev.state);
+				skipStateCheck = false; //Mickey+++, reset skipStateCheck flag
+			}
+#endif
+	
+//ASUS_BSP: joe1_--: filter the hpd state
+
 	} else {
+		//Louis, Disable argc in fb1 while plug out pad for fixing black screen issue +++
+		fbi = asus_fbi_list[1];
+		mfd = (struct msm_fb_data_type *)fbi->par;
+		mdss_mdp_pp_argc_setup(mfd, 0);
+		//Louis ---
+
+	    //Louis +++
+        printk("MDP: Increase bus BW\n");
+        g_boost_bus_bw = 1;
+        mdp_bus_quota.bus_ab_quota = 6000000000UL;    //mdp_bus_quota.bus_ab_quota * 3 / 2;
+        mdp_bus_quota.bus_ib_quota = 6000000000UL;    //mdp_bus_quota.bus_ib_quota * 3 / 2;
+        mdss_mdp_bus_scale_set_quota(mdp_bus_quota.bus_ab_quota, mdp_bus_quota.bus_ib_quota);
+        mod_timer(&mdp_bus_ctl_timer, jiffies + 6 * HZ);
+
+#ifdef CONFIG_ASUS_HDMI
+	    g_padfone_state = 0; 
+#endif
+        g_p06Exist = false;
+	    //Louis ---
+
+        gPadstate = 0;  //Rice
+//ASUS_BSP: joe1_++: for Pad detection
+		if (g_p06State == ASUS_P06_HIGH)
+		{
+#ifdef CONFIG_EEPROM_NUVOTON
+			notify_microp_hdmi_remove(0);
+#endif
+		}
+
+		g_p06State = ASUS_P06_NONE;
+//ASUS_BSP: joe1_++: for Pad detection
 		hdmi_tx_set_audio_switch_node(hdmi_ctrl, 0, false);
 		hdmi_tx_wait_for_audio_engine(hdmi_ctrl);
 
@@ -1218,10 +1804,21 @@ static void hdmi_tx_hpd_int_work(struct work_struct *work)
 		hdmi_tx_send_cable_notification(hdmi_ctrl, 0);
 		DEV_INFO("%s: sense cable DISCONNECTED: state switch to %d\n",
 			__func__, hdmi_ctrl->sdev.state);
+//ASUS_BSP: joe1_++: fix: HPD cannot work anymore while removing device from PAD and it's just at resuming status.
+		if (g_bUnattendedUnplug)
+		{
+			DSS_REG_W(io, HDMI_HPD_INT_CTRL, BIT(2) | BIT(1) );
+
+			printk("%s: UnattendedUnplug: listen = connect\n", __func__);
+			g_bUnattendedUnplug = false;
+		}
+//ASUS_BSP: joe1_--: fix: HPD cannot work anymore while removing device from PAD and it's just at resuming status.
 	}
 
+	previous_state = hdmi_ctrl->hpd_state;
 	if (!completion_done(&hdmi_ctrl->hpd_int_done))
 		complete_all(&hdmi_ctrl->hpd_int_done);
+    display_commit_cnt = 15;	//ASUS_BSP: Louis +++
 } /* hdmi_tx_hpd_int_work */
 
 static int hdmi_tx_check_capability(struct hdmi_tx_ctrl *hdmi_ctrl)
@@ -1457,6 +2054,11 @@ static void hdmi_tx_set_avi_infoframe(struct hdmi_tx_ctrl *hdmi_ctrl)
 	case HDMI_VFRMT_4096x2160p24_16_9:
 		mode = 19;
 		break;
+//ASUS_BSP: joe1_++: support resolution 1920X1200
+	case HDMI_VFRMT_1920x1200p60_16_10:
+		mode = 6;
+		break;
+//ASUS_BSP: joe1_--: support resolution 1920X1200
 	default:
 		DEV_INFO("%s: mode %d not supported\n", __func__,
 			hdmi_ctrl->video_resolution);
@@ -1850,6 +2452,14 @@ static int hdmi_tx_enable_power(struct hdmi_tx_ctrl *hdmi_ctrl,
 		goto error;
 	}
 
+	 if(module == HDMI_TX_DDC_PM){
+		   if(hdmi_ctrl->ddc_power == enable){
+		      DEV_INFO("HDMI DDC power is already %s\n",enable?"enable":"disable");
+		      return rc;
+		   }else
+	   		hdmi_ctrl->ddc_power = enable;
+	 }
+
 	if (enable) {
 		rc = msm_dss_enable_vreg(power_data->vreg_config,
 			power_data->num_vreg, 1);
@@ -1908,7 +2518,7 @@ static void hdmi_tx_core_off(struct hdmi_tx_ctrl *hdmi_ctrl)
 		return;
 	}
 
-	hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_CEC_PM, 0);
+//	hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_CEC_PM, 0); //+++ASUS BSP Bernard
 	hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_CORE_PM, 0);
 } /* hdmi_tx_core_off */
 
@@ -1927,6 +2537,8 @@ static int hdmi_tx_core_on(struct hdmi_tx_ctrl *hdmi_ctrl)
 			__func__, rc);
 		return rc;
 	}
+//+++ASUS BSP Bernard
+#if 0 
 	rc = hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_CEC_PM, 1);
 	if (rc) {
 		DEV_ERR("%s: cec hdmi_msm_enable_power failed rc = %d\n",
@@ -1937,6 +2549,8 @@ static int hdmi_tx_core_on(struct hdmi_tx_ctrl *hdmi_ctrl)
 	return rc;
 disable_core_power:
 	hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_CORE_PM, 0);
+#endif
+//+++ASUS BSP Bernard
 	return rc;
 } /* hdmi_tx_core_on */
 
@@ -2612,6 +3226,12 @@ static void hdmi_tx_hpd_polarity_setup(struct hdmi_tx_ctrl *hdmi_ctrl,
 		/* Toggle HPD circuit to trigger HPD sense */
 		DSS_REG_W(io, HDMI_HPD_CTRL, reg_val & ~BIT(28));
 		DSS_REG_W(io, HDMI_HPD_CTRL, reg_val | BIT(28));
+			//ASUS BSP wei +++
+		if(cable_sense==0){		
+			hdmi_ctrl->hpd_state=0;
+            queue_work(hdmi_ctrl->workq, &hdmi_ctrl->hpd_int_work);
+		}
+			//ASUS BSP wei ---
 	}
 } /* hdmi_tx_hpd_polarity_setup */
 
@@ -2646,7 +3266,7 @@ static int hdmi_tx_power_off(struct mdss_panel_data *panel_data)
 
 	hdmi_tx_powerdown_phy(hdmi_ctrl);
 
-	hdmi_cec_deconfig(hdmi_ctrl->feature_data[HDMI_TX_FEAT_CEC]);
+	//hdmi_cec_deconfig(hdmi_ctrl->feature_data[HDMI_TX_FEAT_CEC]);   //ASUS BSP wei +++ A91 disable CEC
 
 	hdmi_tx_core_off(hdmi_ctrl);
 
@@ -2717,10 +3337,10 @@ static int hdmi_tx_power_on(struct mdss_panel_data *panel_data)
 	hdmi_ctrl->panel_power_on = true;
 	mutex_unlock(&hdmi_ctrl->power_mutex);
 
-	hdmi_cec_config(hdmi_ctrl->feature_data[HDMI_TX_FEAT_CEC]);
+	/*hdmi_cec_config(hdmi_ctrl->feature_data[HDMI_TX_FEAT_CEC]);*/		//ASUS BSP wei +++ 
 
 	if (hdmi_ctrl->hpd_state) {
-		DEV_DBG("%s: Turning HDMI on\n", __func__);
+		DEV_INFO("%s: Turning HDMI on\n", __func__);
 		rc = hdmi_tx_start(hdmi_ctrl);
 		if (rc) {
 			DEV_ERR("%s: hdmi_tx_start failed. rc=%d\n",
@@ -2756,7 +3376,7 @@ static void hdmi_tx_hpd_off(struct hdmi_tx_ctrl *hdmi_ctrl)
 	}
 
 	if (!hdmi_ctrl->hpd_initialized) {
-		DEV_DBG("%s: HPD is already OFF, returning\n", __func__);
+		DEV_INFO("%s: HPD is already OFF, returning\n", __func__);
 		return;
 	}
 
@@ -2818,7 +3438,7 @@ static int hdmi_tx_hpd_on(struct hdmi_tx_ctrl *hdmi_ctrl)
 	}
 
 	if (hdmi_ctrl->hpd_initialized) {
-		DEV_DBG("%s: HPD is already ON\n", __func__);
+		DEV_INFO("%s: HPD is already ON\n", __func__);
 	} else {
 		rc = hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_HPD_PM, true);
 		if (rc) {
@@ -2892,7 +3512,7 @@ static int hdmi_tx_sysfs_enable_hpd(struct hdmi_tx_ctrl *hdmi_ctrl, int on)
 			hdmi_ctrl->hpd_off_pending = true;
 		}
 	}
-
+	skipStateCheck = true; //Mickey+++, we force to handle HPD int while HPD state changed
 	return rc;
 } /* hdmi_tx_sysfs_enable_hpd */
 
@@ -2916,7 +3536,7 @@ static int hdmi_tx_set_mhl_hpd(struct platform_device *pdev, uint8_t on)
 	} else if (on && !hdmi_ctrl->hpd_feature_on) {
 		rc = hdmi_tx_sysfs_enable_hpd(hdmi_ctrl, true);
 	} else {
-		DEV_DBG("%s: hpd is already '%s'. return\n", __func__,
+		DEV_INFO("%s: hpd is already '%s'. return\n", __func__,
 			hdmi_ctrl->hpd_feature_on ? "enabled" : "disabled");
 		return rc;
 	}
@@ -2924,7 +3544,7 @@ static int hdmi_tx_set_mhl_hpd(struct platform_device *pdev, uint8_t on)
 	if (!rc) {
 		hdmi_ctrl->hpd_feature_on =
 			(~hdmi_ctrl->hpd_feature_on) & BIT(0);
-		DEV_DBG("%s: '%d'\n", __func__, hdmi_ctrl->hpd_feature_on);
+		DEV_INFO("%s: '%d'\n", __func__, hdmi_ctrl->hpd_feature_on);
 	} else {
 		DEV_ERR("%s: failed to '%s' hpd. rc = %d\n", __func__,
 			on ? "enable" : "disable", rc);
@@ -2933,7 +3553,7 @@ static int hdmi_tx_set_mhl_hpd(struct platform_device *pdev, uint8_t on)
 	return rc;
 
 }
-
+extern int hdcp_part1_failed_count;  //ASUS BSP wei +++
 static irqreturn_t hdmi_tx_isr(int irq, void *data)
 {
 	struct dss_io_data *io = NULL;
@@ -2962,8 +3582,9 @@ static irqreturn_t hdmi_tx_isr(int irq, void *data)
 		 * Ack the current hpd interrupt and stop listening to
 		 * new hpd interrupt.
 		 */
+		 hdcp_part1_failed_count=0;  //ASUS BSP wei +++
 		DSS_REG_W(io, HDMI_HPD_INT_CTRL, BIT(0));
-
+		DEV_INFO("%s: got hdmi_hpd_isr , hpd_state= %d\n", __func__,hdmi_ctrl->hpd_state);//Mickey+++
 		/*
 		 * If suspend has already triggered, don't start the hpd work
 		 * to avoid a possible deadlock during suspend where hpd off
@@ -2987,6 +3608,44 @@ static irqreturn_t hdmi_tx_isr(int irq, void *data)
 
 	return IRQ_HANDLED;
 } /* hdmi_tx_isr */
+
+//Mickey+++, wait for boot complete if we don't boot in pad
+
+#include <linux/proc_fs.h>
+#define ANDROID_BOOT_COMPLETE_PROC_FILE  "driver/android_boot_complete"
+static struct proc_dir_entry *boot_complete_proc_file;
+static ssize_t boot_complete_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+#ifdef CONFIG_ASUS_HDMI
+    spin_lock(&boot_complete_lock);
+    g_Android_Boot_Complete = true;
+    spin_unlock(&boot_complete_lock);
+    complete_all(&android_boot_completion);
+    printk("Mickey:: boot complete\n");
+#endif
+	return len;
+}
+
+const struct file_operations boot_complete_fops = {
+	.write = boot_complete_write,
+};
+
+static void create_android_boot_complete_file(void)
+{
+    boot_complete_proc_file = create_proc_entry(ANDROID_BOOT_COMPLETE_PROC_FILE, 0666, NULL);
+    if (boot_complete_proc_file) {
+        boot_complete_proc_file->proc_fops = &boot_complete_fops;
+    }
+}
+
+static void remove_android_boot_complete_file(void)
+{
+    if (boot_complete_proc_file) {
+        remove_proc_entry(ANDROID_BOOT_COMPLETE_PROC_FILE,NULL);
+    }
+}
+
+//Mickey---
 
 static void hdmi_tx_dev_deinit(struct hdmi_tx_ctrl *hdmi_ctrl)
 {
@@ -3014,12 +3673,17 @@ static void hdmi_tx_dev_deinit(struct hdmi_tx_ctrl *hdmi_ctrl)
 	switch_dev_unregister(&hdmi_ctrl->sdev);
 	if (hdmi_ctrl->workq)
 		destroy_workqueue(hdmi_ctrl->workq);
+	if (hdmi_ctrl->micropWorkq)
+		destroy_workqueue(hdmi_ctrl->micropWorkq);
 	mutex_destroy(&hdmi_ctrl->lut_lock);
 	mutex_destroy(&hdmi_ctrl->power_mutex);
 	mutex_destroy(&hdmi_ctrl->cable_notify_mutex);
 	mutex_destroy(&hdmi_ctrl->mutex);
 
 	hdmi_tx_hw.ptr = NULL;
+
+	remove_android_boot_complete_file();//Mickey+++, wait for boot complete if we don't boot in pad
+
 } /* hdmi_tx_dev_deinit */
 
 static int hdmi_tx_dev_init(struct hdmi_tx_ctrl *hdmi_ctrl)
@@ -3046,14 +3710,22 @@ static int hdmi_tx_dev_init(struct hdmi_tx_ctrl *hdmi_ctrl)
 	hdmi_setup_video_mode_lut();
 	mutex_init(&hdmi_ctrl->mutex);
 	mutex_init(&hdmi_ctrl->lut_lock);
+	mutex_init(&hdmi_ctrl->asus_power_mutex); //ASUS BSP Wei +++
 	mutex_init(&hdmi_ctrl->cable_notify_mutex);
 	mutex_init(&hdmi_ctrl->power_mutex);
 
 	INIT_LIST_HEAD(&hdmi_ctrl->cable_notify_handlers);
 
 	hdmi_ctrl->workq = create_workqueue("hdmi_tx_workq");
+	hdmi_ctrl->micropWorkq = create_workqueue("hdmi_tx_micropWorkq");
 	if (!hdmi_ctrl->workq) {
 		DEV_ERR("%s: hdmi_tx_workq creation failed.\n", __func__);
+		rc = -EPERM;
+		goto fail_create_workq;
+	}
+
+	if (!hdmi_ctrl->micropWorkq) {
+		DEV_ERR("%s: micropWorkq creation failed.\n", __func__);
 		rc = -EPERM;
 		goto fail_create_workq;
 	}
@@ -3068,13 +3740,15 @@ static int hdmi_tx_dev_init(struct hdmi_tx_ctrl *hdmi_ctrl)
 	hdmi_ctrl->hpd_initialized = false;
 	hdmi_ctrl->hpd_off_pending = false;
 	init_completion(&hdmi_ctrl->hpd_int_done);
-	init_completion(&hdmi_ctrl->hpd_off_done);
+    init_completion(&hdmi_ctrl->hpd_off_done);
 
 	INIT_WORK(&hdmi_ctrl->hpd_int_work, hdmi_tx_hpd_int_work);
-	INIT_WORK(&hdmi_ctrl->cable_notify_work, hdmi_tx_cable_notify_work);
+	//INIT_WORK(&hdmi_ctrl->cable_notify_work, hdmi_tx_cable_notify_work);
 
 	spin_lock_init(&hdmi_ctrl->hpd_state_lock);
-
+    INIT_WORK(&mdp_bus_ctl_work, mdss_mdp_bw_adj_work);    //ASUS_BSP: Louis +++
+	INIT_WORK(&hdmi_ctrl->hpd_recheck_work, hdmi_tx_hpd_recheck_work); //ASUS BSP wei +++
+	INIT_WORK(&hdmi_ctrl->microp_hdmi_work, hdmi_tx_microp_insert_work); //ASUS BSP wei +++
 	hdmi_ctrl->audio_data.sample_rate = AUDIO_SAMPLE_RATE_48KHZ;
 	hdmi_ctrl->audio_data.channel_num = MSM_HDMI_AUDIO_CHANNEL_2;
 
@@ -3093,6 +3767,15 @@ static int hdmi_tx_dev_init(struct hdmi_tx_ctrl *hdmi_ctrl)
 		goto fail_audio_switch_dev;
 	}
 
+    //Mickey+++, wait for boot complete if we don't boot in pad
+
+    create_android_boot_complete_file();
+#ifdef CONFIG_ASUS_HDMI
+    init_completion(&android_boot_completion);
+    spin_lock_init(&boot_complete_lock);
+#endif
+    //Mickey---
+
 	return 0;
 
 fail_audio_switch_dev:
@@ -3100,8 +3783,11 @@ fail_audio_switch_dev:
 fail_create_workq:
 	if (hdmi_ctrl->workq)
 		destroy_workqueue(hdmi_ctrl->workq);
+	if (hdmi_ctrl->micropWorkq)
+		destroy_workqueue(hdmi_ctrl->micropWorkq);
 	mutex_destroy(&hdmi_ctrl->lut_lock);
 	mutex_destroy(&hdmi_ctrl->mutex);
+	mutex_destroy(&hdmi_ctrl->asus_power_mutex); //ASUS BSP Wei +++
 fail_no_hdmi:
 	return rc;
 } /* hdmi_tx_dev_init */
@@ -3176,13 +3862,25 @@ static int hdmi_tx_panel_event_handler(struct mdss_panel_data *panel_data,
 			INIT_COMPLETION(hdmi_ctrl->hpd_int_done);
 
 			rc = hdmi_tx_hpd_on(hdmi_ctrl);
-			if (rc)
+			//Mickey+++, recheck HPD status after turning on HPD in pad mode
+			if (rc) {
 				DEV_ERR("%s: hdmi_tx_hpd_on failed. rc=%d\n",
 					__func__, rc);
+			} else if (g_p06State != ASUS_P06_NONE) {
+			    if (gpio_get_value(34)==0) {
+			        hdmi_ctrl->hpd_state = 0;
+			        printk("hdmi disconnect during suspend\n");
+			        queue_work(hdmi_ctrl->workq, &hdmi_ctrl->hpd_int_work);
+                    gPadstate = 0;
+			        hdmi_tx_set_audio_switch_node(hdmi_ctrl, 0, true);//Mickey+++
+			    }
+			}
+			//Mickey---
 		}
 		break;
 
 	case MDSS_EVENT_RESET:
+		return rc;//Mickey+++, we don't need to reset since we double check HPD after turning on
 		if (hdmi_ctrl->panel_suspend) {
 			u32 timeout;
 			hdmi_ctrl->panel_suspend = false;
@@ -3192,29 +3890,48 @@ static int hdmi_tx_panel_event_handler(struct mdss_panel_data *panel_data,
 			if (!timeout && !hdmi_ctrl->hpd_state) {
 				DEV_INFO("%s: cable removed during suspend\n",
 					__func__);
+                gPadstate = 0;
+                hdmi_tx_set_audio_switch_node(hdmi_ctrl, 0, true);
 				hdmi_tx_send_cable_notification(hdmi_ctrl, 0);
+
+//ASUS_BSP: joe1_++: reset the pad status
+				previous_state = false;
+				g_p06State = ASUS_P06_NONE;
+//ASUS_BSP: joe1_--: reset the pad status
+
 				rc = -EPERM;
 			} else {
-				DEV_DBG("%s: cable present after resume\n",
+				DEV_INFO("%s: cable present after resume\n",
 					__func__);
 			}
 		}
 		break;
 
 	case MDSS_EVENT_UNBLANK:
-		rc = hdmi_tx_power_on(panel_data);
+		mutex_lock(&hdmi_ctrl->asus_power_mutex); //ASUS BSP Wei +++
+		if(hdcp_fail_count > 3){
+				hdcp_feature_on=false;
+				printk("%s: HDMI HDCP fail over 3 time disable HDCP\n",__func__);
+		}
+		if(!(hdmi_ctrl->panel_power_on))
+			rc = hdmi_tx_power_on(panel_data);
+		mutex_unlock(&hdmi_ctrl->asus_power_mutex);//ASUS BSP Wei +++
 		if (rc)
 			DEV_ERR("%s: hdmi_tx_power_on failed. rc=%d\n",
 				__func__, rc);
 		break;
 
 	case MDSS_EVENT_PANEL_ON:
+		DEV_INFO("HDMI Panel ON hdcp_feature: %d, present_hdcp:%d\n",hdmi_ctrl->hdcp_feature_on,hdmi_ctrl->present_hdcp);
 		if (hdmi_ctrl->hdcp_feature_on && hdmi_ctrl->present_hdcp) {
 			/* Set AV Mute before starting authentication */
 			if (hdmi_ctrl->pdata.primary)
 				hdmi_tx_en_encryption(hdmi_ctrl, false);
 			else
 				rc = hdmi_tx_config_avmute(hdmi_ctrl, 1);
+				if (rc)
+				DEV_ERR("%s: Failed to set av mute. rc=%d\n",
+					__func__, rc);
 
 			DEV_DBG("%s: Starting HDCP authentication\n", __func__);
 			rc = hdmi_hdcp_authenticate(
@@ -3233,13 +3950,13 @@ static int hdmi_tx_panel_event_handler(struct mdss_panel_data *panel_data,
 			mutex_unlock(&hdmi_ctrl->power_mutex);
 			if (hdmi_ctrl->hpd_feature_on)
 				hdmi_tx_hpd_off(hdmi_ctrl);
-
-			hdmi_ctrl->panel_suspend = false;
 		} else {
 			mutex_unlock(&hdmi_ctrl->power_mutex);
 			hdmi_ctrl->hpd_off_pending = true;
 			hdmi_ctrl->panel_suspend = true;
 		}
+		hdcp_fail_count=0;
+		hdcp_feature_on=true;
 		break;
 
 	case MDSS_EVENT_BLANK:
@@ -3925,6 +4642,55 @@ static int __devinit hdmi_tx_probe(struct platform_device *pdev)
 			hdmi_ctrl->pdata.io[HDMI_TX_CORE_IO].base,
 			hdmi_ctrl->pdata.io[HDMI_TX_CORE_IO].len))
 		DEV_WARN("%s: hdmi_tx debugfs register failed\n", __func__);
+
+	init_timer(&hpd_timer);
+	hpd_timer.function=recheck_HPD_state;
+	hpd_timer.data=(unsigned long)NULL;
+	hpd_timer.expires = 0xffffffffL;
+	hdmi_ctrl->ddc_power=0;
+
+//ASUS_BSP: joe1_++
+	init_timer(&pad_detect_debounce_timer);
+	pad_detect_debounce_timer.function = pad_detect_debounce;
+	pad_detect_debounce_timer.data=(unsigned long)NULL;
+	pad_detect_debounce_timer.expires = 0xffffffffL;
+
+//	printk("[joe1] %s: init_timer(&pad_detect_debounce_timer);\n", __func__);
+
+//ASUS_BSP: joe1_--
+
+//ASUS_BSP: joe1_++: for Pad detection
+	if (gpio_request(ASUS_P06_STATUS_GPIO, "P06_STATUS")) {
+		printk("%s request gpio 75 failed\n", __func__);
+	}else{
+			//ASUS bsp wei +++
+			padIRQ=irq_of_parse_and_map(pdev->dev.of_node, 0); //ASUS_BSP: joe1_++
+			if (padIRQ < 0) 
+				printk( "%s: could not get  IRQ resource, error=%d ", __func__, padIRQ);		
+				
+	       	 if (!request_threaded_irq(padIRQ, NULL,&pad_detect_isr,
+            			IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING,
+            			"PAD_DETECT", pdev))
+                		enable_irq_wake(padIRQ);
+
+			//ASUS bsp wei ---
+			
+		}
+//	else
+//		printk("[joe1] %s request gpio 75 success!!\n", __func__);
+//ASUS_BSP: joe1_--: for Pad detection
+	wake_lock_init(&hdmi_ctrl->hpd_wake_lock, WAKE_LOCK_SUSPEND, "hdp_wake");
+	g_hdmi_ctrl = hdmi_ctrl; //ASUS_BSP: joe1_++: for hpd re-check
+
+    //ASUS_BSP: Louis +++
+    mdp_bus_quota.bus_ab_quota = 800000000UL;
+    mdp_bus_quota.bus_ib_quota = 800000000UL;
+
+    init_timer(&mdp_bus_ctl_timer);
+    mdp_bus_ctl_timer.function = restore_mdp_bus_bw;
+    mdp_bus_ctl_timer.data = (unsigned long)NULL;
+    mdp_bus_ctl_timer.expires = 0xffffffffL;
+    //ASUS_BSP: Louis ---
 
 	return rc;
 

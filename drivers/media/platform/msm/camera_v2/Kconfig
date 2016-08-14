@@ -222,3 +222,8 @@ config MSM_GEMINI
 	depends on MSMB_CAMERA && (ARCH_MSM7X30 || ARCH_MSM8X60 || ARCH_MSM8960)
 	---help---
 	  Enables support for the Gemini JPEG encoder engine for 8x60.
+
+config ASUS_CAMERA_STS
+	tristate "ASUS Camera get_camera_status support"
+	---help---
+	  Enable support get_camera_status function for display.	

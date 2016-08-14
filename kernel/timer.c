@@ -84,6 +84,8 @@ struct tvec_base {
 	struct tvec tv5;
 } ____cacheline_aligned;
 
+spinlock_t add_list_lock;
+
 struct tvec_base boot_tvec_bases;
 EXPORT_SYMBOL(boot_tvec_bases);
 static DEFINE_PER_CPU(struct tvec_base *, tvec_bases) = &boot_tvec_bases;
@@ -369,7 +371,12 @@ static void internal_add_timer(struct tvec_base *base, struct timer_list *timer)
 	/*
 	 * Timers are FIFO:
 	 */
-	list_add_tail(&timer->entry, vec);
+	{
+		unsigned long flags;
+		spin_lock_irqsave(&add_list_lock,flags);
+		list_add_tail(&timer->entry, vec);
+		spin_unlock_irqrestore(&add_list_lock,flags);
+	}
 }
 
 #ifdef CONFIG_TIMER_STATS
@@ -1791,7 +1798,7 @@ void __init init_timers(void)
 				(void *)(long)smp_processor_id());
 
 	init_timer_stats();
-
+	spin_lock_init(&add_list_lock);
 	BUG_ON(err != NOTIFY_OK);
 	register_cpu_notifier(&timers_nb);
 	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);

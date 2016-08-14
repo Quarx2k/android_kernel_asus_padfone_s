@@ -13,29 +13,7 @@
 /include/ "msm8974pro-pm8941.dtsi"
 
 / {
-	qcom,msm-id = <208 0x10000>,
-		      <209 0x10000>,
-		      <211 0x10000>,
-		      <212 0x10000>,
-		      <214 0x10000>,
-		      <215 0x10000>,
-		      <217 0x10000>,
-		      <218 0x10000>;
-};
-
-&soc {
-	i2c@f9928000 { /* BLSP1 QUP6 */
-		nfc-nci@e {
-			compatible = "qcom,nfc-nci";
-			reg = <0x0e>;
-			qcom,irq-gpio = <&msmgpio 57 0x00>;
-			qcom,dis-gpio = <&msmgpio 13 0x00>;
-			qcom,clk-src = "BBCLK2";
-			interrupt-parent = <&msmgpio>;
-			interrupts = <57 0>;
-			qcom,clk-gpio = <&pm8941_gpios 32 0>;
-		};
-	};
+	qcom,msm-id = <218 0x10000>;		//ASUS_BSP : add for ASUS DT ID
 };
 
 &pm8941_gpios {

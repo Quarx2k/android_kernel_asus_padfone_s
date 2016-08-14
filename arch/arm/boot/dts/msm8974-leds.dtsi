@@ -16,39 +16,107 @@
 		status = "okay";
 		qcom,rgb_0 {
 			label = "rgb";
-			linux,name = "led:rgb_red";
+			linux,name = "red";
 			qcom,mode = "pwm";
 			qcom,pwm-channel = <6>;
 			qcom,pwm-us = <1000>;
 			qcom,max-current = <12>;
+			qcom,duty-ms = <20>;
+
+			qcom,blink-start-idx = <1>;
+			qcom,idx-len = <32>;
+			qcom,duty-pcts = [00 00 00 00 00 00 00 00 00 00
+					  00 00 00 00 00 00 00 00 00 00
+					  00 00 00 00 00 00 00 00 00 00 
+					  00 60 ];
+
+			qcom,breathe-start-idx = <1>;
+			qcom,breathe-len = <50>;
+			qcom,breathe-pcts = [00 00 00 00 01 02 03 04 05 06
+					     07 08 09 0A 0C 0E 10 12 14 18
+					     1C 20 25 2A 32 3C 32 2A 25 20
+					     1C 18 14 12 10 0E 0C 0A 09 08
+					     07 06 05 04 03 02 01 00 00 00];
+
+			qcom,lut-flags = <3>;
+			qcom,pause-lo = <0>;
+			qcom,pause-hi = <1>;
+			qcom,ramp-step-ms = <125>;
 			qcom,default-state = "off";
+			//qcom,turn-off-delay-ms = <3000>;
 			qcom,id = <3>;
-			linux,default-trigger =
-				"battery-charging";
+			linux,default-trigger =	"none";
+			qcom,use-blink;
 		};
 
 		qcom,rgb_1 {
 			label = "rgb";
-			linux,name = "led:rgb_green";
+			linux,name = "green";
 			qcom,mode = "pwm";
 			qcom,pwm-channel = <5>;
 			qcom,pwm-us = <1000>;
 			qcom,max-current = <12>;
+			qcom,duty-ms = <20>;
+
+			qcom,blink-start-idx = <32>;
+			qcom,idx-len = <20>;
+			qcom,duty-pcts = [00 00 00 00 00 00 00 00 00 00
+					  00 00 00 00 00 00 00 00 00 60];
+
+			qcom,breathe-start-idx = <1>;
+			qcom,breathe-len = <50>;
+			qcom,breathe-pcts = [00 00 00 00 01 02 03 04 05 06
+					     07 08 09 0A 0C 0E 10 12 14 18
+					     1C 20 25 2A 32 3C 32 2A 25 20
+					     1C 18 14 12 10 0E 0C 0A 09 08
+					     07 06 05 04 03 02 01 00 00 00];
+
+			qcom,lut-flags = <3>;
+			qcom,pause-lo = <0>;
+			qcom,pause-hi = <1>;
+			qcom,ramp-step-ms = <125>;
 			qcom,default-state = "off";
 			qcom,id = <4>;
-			linux,default-trigger = "battery-full";
+			linux,default-trigger = "none";
+			qcom,use-blink;
 		};
 
 		qcom,rgb_2 {
 			label = "rgb";
-			linux,name = "led:rgb_blue";
+			linux,name = "blue";
 			qcom,mode = "pwm";
 			qcom,pwm-channel = <4>;
 			qcom,pwm-us = <1000>;
 			qcom,max-current = <12>;
+			qcom,duty-ms = <20>;
+			qcom,blink-start-idx = <60>;
+			qcom,idx-len = <2>;
+			qcom,duty-pcts = [00 00];
+			qcom,breathe-start-idx = <60>;
+			qcom,breathe-len = <2>;
+			qcom,breathe-pcts = [00 00];
+			qcom,lut-flags = <3>;
+			qcom,pause-lo = <0>;
+			qcom,pause-hi = <1>;
+			qcom,ramp-step-ms = <125>;
+			qcom,default-state = "off";
 			qcom,id = <5>;
-			status = "disabled";
+			linux,default-trigger = "none";
+			qcom,use-blink;
 		};
+
+// ASUS_BSP Deeo : add for new kobject +++
+		qcom,rgb_3 {
+			label = "rgb";
+			linux,name = "mix";
+			qcom,mode = "pwm";
+			qcom,max-current = <12>;
+			qcom,id = <9>;
+			qcom,default-state = "off";
+			linux,default-trigger = "none";
+			qcom,use-blink;
+		};
+// ASUS_BSP Deeo : add for new kobject ---
 	};
 
 	qcom,leds@d100 {
@@ -125,7 +193,7 @@
 	};
 
 	qcom,leds@e200 {
-		status = "okay";
+		status = "disable"; //ASUS_BSP Deeo : disable kpbl
 
 		qcom,kpdbl1 {
 			label = "kpdbl";

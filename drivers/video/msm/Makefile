@@ -191,6 +191,10 @@ obj-$(CONFIG_FB_MSM_EBI2_EPSON_S1D_QVGA_PANEL) += ebi2_epson_s1d_qvga.o
 endif
 endif
 
+#+++ ASUS Bernard 
+obj-$(CONFIG_SLIMPORT_ANX7808) += mydp-7808/
+#--- ASUS Bernard
+
 obj-$(CONFIG_MSM_VIDC_1080P) += vidc/
 obj-$(CONFIG_MSM_VIDC_720P) += vidc/
 clean:

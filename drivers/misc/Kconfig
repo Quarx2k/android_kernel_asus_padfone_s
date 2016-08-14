@@ -671,6 +671,11 @@ config UID_CPUTIME
 	help
 	  Per UID based cpu time statistics exported to /proc/uid_cputime
 
+config MICROP_NOTIFIER_CONTROLLER
+	tristate "Enable microp notifier controller driver"
+	help
+	register/unregister microp notifier.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

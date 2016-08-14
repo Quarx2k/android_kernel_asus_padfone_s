@@ -255,6 +255,7 @@ static void msm_vfe40_init_vbif_parms(struct vfe_device *vfe_dev)
 static int msm_vfe40_init_hardware(struct vfe_device *vfe_dev)
 {
 	int rc = -1;
+	CDBG("[YM]%s E\n", __func__);	///ASUS_BSP +++ for debug only, disabled by default
 	rc = msm_isp_init_bandwidth_mgr(ISP_VFE0 + vfe_dev->pdev->id);
 	if (rc < 0) {
 		pr_err("%s: Bandwidth registration Failed!\n", __func__);
@@ -304,8 +305,13 @@ static int msm_vfe40_init_hardware(struct vfe_device *vfe_dev)
 		IRQF_TRIGGER_RISING, "vfe", vfe_dev);
 	if (rc < 0) {
 		pr_err("%s: irq request failed\n", __func__);
-		goto irq_req_failed;
+//ASUS_BSP +++ YM To avoid camera fail for ever
+		pr_err("%s: [YM] WARNING......IGNORE it\n", __func__); // Should have already requested, ignore it
+		rc = 0;  //[YM] ignore the error, because it doesnot release irq when reset vfe error last time..
+		if (rc!=0) goto irq_req_failed;
+//ASUS_BSP --- YM  To avoid camera fail for ever
 	}
+	CDBG("[YM]%s(%d) X\n", __func__, rc);	//ASUS_BSP +++ for debug only, disabled by default
 	return rc;
 irq_req_failed:
 	iounmap(vfe_dev->tcsr_base);
@@ -326,6 +332,7 @@ bus_scale_register_failed:
 
 static void msm_vfe40_release_hardware(struct vfe_device *vfe_dev)
 {
+	CDBG("[YM]%s E\n", __func__); //ASUS_BSP +++ for debug only, disabled by default
 	free_irq(vfe_dev->vfe_irq->start, vfe_dev);
 	tasklet_kill(&vfe_dev->vfe_tasklet);
 	iounmap(vfe_dev->tcsr_base);
@@ -335,6 +342,7 @@ static void msm_vfe40_release_hardware(struct vfe_device *vfe_dev)
 		vfe_dev->vfe_clk, ARRAY_SIZE(msm_vfe40_clk_info), 0);
 	regulator_disable(vfe_dev->fs_vfe);
 	msm_isp_deinit_bandwidth_mgr(ISP_VFE0 + vfe_dev->pdev->id);
+	CDBG("[YM]%s X\n", __func__); //ASUS_BSP +++ for debug only, disabled by default
 }
 
 static void msm_vfe40_init_hardware_reg(struct vfe_device *vfe_dev)
@@ -361,16 +369,19 @@ static void msm_vfe40_init_hardware_reg(struct vfe_device *vfe_dev)
 static void msm_vfe40_process_reset_irq(struct vfe_device *vfe_dev,
 	uint32_t irq_status0, uint32_t irq_status1)
 {
-	if (irq_status0 & (1 << 31))
+//ASUS_BSP +++  for debug "msm_vfe40_reset_hardware" only, disabled by default
+	if (irq_status0 & (1 << 31)) {
+              CDBG("[YM] msm_vfe40_process_reset_irq[0x%x]\n", irq_status0);
 		complete(&vfe_dev->reset_complete);
+	}
+//ASUS_BSP ---  for debug "msm_vfe40_reset_hardware" only, disabled by default
 }
 
 static void msm_vfe40_process_halt_irq(struct vfe_device *vfe_dev,
 	uint32_t irq_status0, uint32_t irq_status1)
 {
-    if (irq_status1 & (1 << 8)) {
-        msm_camera_io_w(0x0, vfe_dev->vfe_base + 0x2C0);
-    }
+	if (irq_status1 & (1 << 8))
+		complete(&vfe_dev->halt_complete);
 }
 
 static void msm_vfe40_process_camif_irq(struct vfe_device *vfe_dev,
@@ -631,6 +642,7 @@ static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev ,
 {
 	uint32_t rst_val;
 	long rc = 0;
+	long l_rc=0; //ASUS_BSP YM 50ms -> 80ms; Add retry, when reset fail
 	if (reset_type >= ISP_RST_MAX) {
 		pr_err("%s: Error Invalid parameter\n", __func__);
 		reset_type = ISP_RST_HARD;
@@ -644,6 +656,21 @@ static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev ,
 	} else {
 		msm_camera_io_w_mb(0x1EF, vfe_dev->vfe_base + 0xC);
 	}
+//ASUS_BSP +++ YM 50ms -> 80ms; Add retry, when reset fail
+       pr_info("[YM] %s E\n", __func__);
+	if (wait_for_completion_interruptible_timeout(
+		&vfe_dev->reset_complete, msecs_to_jiffies(80))<=0) {
+		pr_info("[YM] %s timeout try again\n", __func__);
+		msm_camera_io_w_mb(0x1FF, vfe_dev->vfe_base + 0xC);
+		l_rc = wait_for_completion_interruptible_timeout(
+			&vfe_dev->reset_complete, msecs_to_jiffies(80));
+	       pr_info("[YM] %s retry result(%d) X\n", __func__, (int)l_rc);
+		return l_rc;
+	} else {
+	       pr_info("[YM] %s success X\n", __func__);
+		return 1; //success
+	}
+//ASUS_BSP --- YM 50ms -> 80ms; Add retry, when reset fail
 	return rc;
 }
 
@@ -1195,27 +1222,24 @@ static long msm_vfe40_axi_halt(struct vfe_device *vfe_dev,
 	uint32_t blocking)
 {
 	long rc = 0;
-	uint32_t axi_busy_flag = true;
 	/* Keep only restart mask and halt mask*/
 	msm_camera_io_w(BIT(31), vfe_dev->vfe_base + 0x28);
-	msm_camera_io_w(BIT(8),  vfe_dev->vfe_base + 0x2C);
+	msm_camera_io_w(BIT(8), vfe_dev->vfe_base + 0x2C);
 	/* Clear IRQ Status*/
 	msm_camera_io_w(0x7FFFFFFF, vfe_dev->vfe_base + 0x30);
 	msm_camera_io_w(0xFEFFFEFF, vfe_dev->vfe_base + 0x34);
 	msm_camera_io_w(0x1, vfe_dev->vfe_base + 0x24);
 	if (blocking) {
+		init_completion(&vfe_dev->halt_complete);
 		/* Halt AXI Bus Bridge */
 		msm_camera_io_w_mb(0x1, vfe_dev->vfe_base + 0x2C0);
 		atomic_set(&vfe_dev->error_info.overflow_state, NO_OVERFLOW);
-		while (axi_busy_flag) {
-			if (msm_camera_io_r(
-				vfe_dev->vfe_base + 0x2E4) & 0x1)
-				axi_busy_flag = false;
-		}
+		rc = wait_for_completion_interruptible_timeout(
+			&vfe_dev->halt_complete, msecs_to_jiffies(500));
+	} else {
+		/* Halt AXI Bus Bridge */
+		msm_camera_io_w_mb(0x1, vfe_dev->vfe_base + 0x2C0);
 	}
-        else {
-	        msm_camera_io_w_mb(0x1, vfe_dev->vfe_base + 0x2C0);
-        }
 	return rc;
 }
 

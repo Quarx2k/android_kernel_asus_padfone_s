@@ -18,7 +18,7 @@
 / {
 	model = "Qualcomm MSM 8974v2.0/1 CDP";
 	compatible = "qcom,msm8974-cdp", "qcom,msm8974", "qcom,cdp";
-	qcom,msm-id = <126 1 0x20000>,
+	qcom,msm-id = <126 1 0x20001>,// +++ ASUS_BSP : add for msm8974 V2.1 chip soc
 		      <185 1 0x20000>,
 		      <186 1 0x20000>;
 };

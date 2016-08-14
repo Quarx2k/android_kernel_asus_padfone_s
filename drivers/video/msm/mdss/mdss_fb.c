@@ -54,6 +54,7 @@
 
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
+#include <linux/gpio.h> //+++ ASUS BSP jacob add
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -62,6 +63,25 @@
 #endif
 
 #define MAX_FBI_LIST 32
+
+//+++ ASUS_BSP: Louis
+#define COMMIT_FRAMES_COUNT 5
+
+extern void qpnp_wled_ctrl(bool enable);
+int g_padfone_state = 0;    //0:phone mode, 1:hdmi tv, 2:pad mode
+
+#ifdef CONFIG_ASUS_HDMI 
+extern int display_commit_cnt;
+#endif
+
+#ifdef CONFIG_ASUS_CAMERA_STS
+extern bool get_camera_status(void);
+#endif
+
+static int asus_fbi_list_index;
+struct fb_info *asus_fbi_list[MAX_FBI_LIST];
+//--- ASUS_BSP: Louis
+
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
 
@@ -595,7 +615,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->bl_level = 0;
 	mfd->bl_level_prev_scaled = 0;
 	mfd->bl_scale = 1024;
-	mfd->bl_min_lvl = 30;
+	mfd->bl_min_lvl = 10;  //asus bsp jacob modify
 	mfd->ad_bl_level = 0;
 	mfd->fb_imgType = MDP_RGBA_8888;
 
@@ -608,6 +628,10 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mutex_init(&mfd->bl_lock);
 
 	fbi_list[fbi_list_index++] = fbi;
+
+	//ASUS_BSP: Louis, point to each fbi_info +++
+	asus_fbi_list[asus_fbi_list_index++] = fbi;
+	//ASUS_BSP, Louis ---
 
 	platform_set_drvdata(pdev, mfd);
 
@@ -926,6 +950,15 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	} else {
 		mfd->unset_bl_level = 0;
 	}
+#ifdef CONFIG_ASUS_HDMI
+/*ASUS jacob add for do not set backlight via mdss_fb in pad mode */
+	if(g_padfone_state == 2)
+		return;
+#else
+	if (gpio_get_value_cansleep(75))
+		return;
+/*ASUS jacob add for do not set backlight via mdss_fb in pad mode */
+#endif
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
@@ -1056,6 +1089,13 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 				mdss_fb_release_fences(mfd);
 			mfd->op_enable = true;
 			complete(&mfd->power_off_comp);
+
+#ifdef CONFIG_ASUS_HDMI 
+            //ASUS_BSP: Louis ++
+            if (display_commit_cnt == 0)
+                display_commit_cnt = COMMIT_FRAMES_COUNT;
+            //ASUS_BSP: Louis --
+#endif
 		}
 		break;
 	}
@@ -2255,6 +2295,12 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 	if (!ret)
 		mdss_fb_update_backlight(mfd);
 
+    //ASUS_BSP: Louis, enable wled after overlay or pan display case ++
+    if ((g_ASUS_hwID == A90_EVB || g_ASUS_hwID >= A91_SR1) && g_padfone_state != 2) {
+        qpnp_wled_ctrl(1);
+    }
+    //ASUS_BSP: Louis --
+	
 	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed)
 		mdss_fb_signal_timeline(sync_pt_data);
 
@@ -2746,6 +2792,16 @@ static int mdss_fb_display_commit(struct fb_info *info,
 		return ret;
 	}
 	ret = mdss_fb_pan_display_ex(info, &disp_commit);
+	
+    //ASUS_BSP: Louis, for plug in/out debug +++
+	#ifdef CONFIG_ASUS_HDMI 
+    if (display_commit_cnt > 0) {
+        printk("fb%d dpc\n", info->node);
+        display_commit_cnt--;
+    }
+	#endif
+    //ASUS_BSP: Louis, for plug in/out debug ---
+	
 	return ret;
 }
 
@@ -2782,6 +2838,13 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	struct mdp_buf_sync buf_sync;
 	struct msm_sync_pt_data *sync_pt_data = NULL;
 	unsigned int dsi_mode = 0;
+	//ASUS_BSP: Louis +++
+    struct mdss_panel_data *pdata;
+    static int bl_level = 0, bl_level_old = 0;
+    #ifdef CONFIG_ASUS_CAMERA_STS
+    bool asus_camera_status = false;
+    //ASUS_BSP: Louis ---
+    #endif
 
 	if (!info || !info->par)
 		return -EINVAL;
@@ -2857,6 +2920,38 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 		ret = mdss_fb_lpm_enable(mfd, dsi_mode);
 		break;
+
+    //ASUS_BSP: Louis +++
+    case MSMFB_PADFONE_STATE:
+		ret = copy_to_user(argp, &g_padfone_state, sizeof(g_padfone_state));
+        if (ret)
+            printk("GET Padfone state failed (%d)\n", ret);
+        break;
+
+    case MSMFB_BL_CTRL:
+        ret = copy_from_user(&bl_level, argp, sizeof(bl_level));
+        if (ret) {
+            printk(KERN_ERR "%s: copy from user failed \n",
+                __func__);
+            return ret;
+        }
+        if (bl_level != bl_level_old) {
+            bl_level_old = bl_level;
+            pdata = dev_get_platdata(&mfd->pdev->dev);
+            pdata->set_backlight(pdata, bl_level);
+        }
+        break;
+
+#ifdef CONFIG_ASUS_CAMERA_STS
+    case MSMFB_CAMERA_STS:
+        asus_camera_status = get_camera_status();
+        printk("[Display] Get Camera status(%d)\n", asus_camera_status);
+        ret = copy_to_user(argp, &asus_camera_status, sizeof(asus_camera_status));
+        if (ret)
+            printk("GET Camera state failed (%d)\n", ret);
+        break;
+#endif
+	//ASUS_BSP: Louis ---
 
 	default:
 		if (mfd->mdp.ioctl_handler)
@@ -3027,6 +3122,11 @@ int mdss_fb_suspres_panel(struct device *dev, void *data)
 	mfd = dev_get_drvdata(dev);
 	if (!mfd)
 		return 0;
+
+//ASUS_BSP: joe1_++: don't send MDSS_EVENT_SUSPEND to hdmi driver when entering early suspending because of hpd issue
+	if (mfd->index == 1)
+		return 0;
+//ASUS_BSP: joe1_--: don't send MDSS_EVENT_SUSPEND to hdmi driver when entering early suspending because of hpd issue
 
 	event = *((bool *) data) ? MDSS_EVENT_RESUME : MDSS_EVENT_SUSPEND;
 
