@@ -131,6 +131,7 @@ static ssize_t led_brightness_store(struct device *dev,
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	ssize_t ret = -EINVAL;
 	char *after;
+	long newValue;
 	unsigned long state = simple_strtoul(buf, &after, 10);
 	size_t count = after - buf;
 
@@ -149,6 +150,15 @@ static ssize_t led_brightness_store(struct device *dev,
 			state = cal_bl_fading_val(g_brightness);
 	}
 	led_debug(DEBUG_VERBOSE,"[BL] (%s): user set value = %d name = %s backlight = %d  \n", __func__,(int)state,led_cdev->name,(int)g_brightness);
+
+	newValue = state;
+	if (newValue != 0) {
+		newValue = (newValue*53/3) - 300; // Wtf formula :D
+		if (newValue < 170) {
+			newValue = 170;
+		}
+	}
+	state = newValue;
 
 	if (isspace(*after))
 		count++;
